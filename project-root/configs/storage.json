@@ -1,0 +1,383 @@
+{
+  "cookies": [
+    {
+      "name": "wordpress_sec_08901f495022a8bd10b020c2c13a17c3",
+      "value": "TNMRMZ%7C1753244289%7C1hDOJzZNDkL46gTA2nA1i2ZMv6MnNfWg7KGVcROFZ7Y%7Ccce97cd780ad53520153d1bf5424d0fd5a3dd987ce18ac8dfdad3c294a087a30",
+      "domain": "www.buyandship.co.jp",
+      "path": "/contents/plugins",
+      "expires": 1753287490.441847,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "wordpress_sec_08901f495022a8bd10b020c2c13a17c3",
+      "value": "TNMRMZ%7C1753244289%7C1hDOJzZNDkL46gTA2nA1i2ZMv6MnNfWg7KGVcROFZ7Y%7Ccce97cd780ad53520153d1bf5424d0fd5a3dd987ce18ac8dfdad3c294a087a30",
+      "domain": "www.buyandship.co.jp",
+      "path": "/wp-admin",
+      "expires": 1753287490.441967,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "STEP_ID",
+      "value": "IFCIbyyY4jh1COtFI0O7QsYHYbt2fV%2Cc28VeUtAJi-uIqAL8",
+      "domain": "www.buyandship.co.jp",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "CLID",
+      "value": "ee8dfec15cc1420b9831f2a5d9ed263e.20250623.20260623",
+      "domain": "www.clarity.ms",
+      "path": "/",
+      "expires": 1782188206.622812,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_fbp",
+      "value": "fb.2.1750652207036.157469717245731954",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1758428331,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_clck",
+      "value": "akuwug%7C2%7Cfx0%7C0%7C2000",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1782188207,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "personalization_id",
+      "value": "\"v1_UI4JUqgr2bZWu6S6b7HNCA==\"",
+      "domain": ".twitter.com",
+      "path": "/",
+      "expires": 1785212207.726198,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "__cf_bm",
+      "value": "4sLEp3g.P6DOAIeJuNmlFjbNRRJgUFmDMtibTIdUMfc-1750652207-1.0.1.1-EgHbmJl01adbBdsyN6CbDnU718IItrDGh._Wpoy.aNJvTf9w69rCz75YfoTX8btEQFivHEebpQZx80OmcNUY7kieQjxCCkrCrdGDZXpIX8Q",
+      "domain": ".twitter.com",
+      "path": "/",
+      "expires": 1750654007.726328,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_gcl_au",
+      "value": "1.1.1402043962.1750652208",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1758428207,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "muc_ads",
+      "value": "17e111d2-0563-4173-89d6-5d5bc28df38a",
+      "domain": ".t.co",
+      "path": "/",
+      "expires": 1785212208.119427,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "__cf_bm",
+      "value": "BQjS0z7IvxvZV_6jlYZ1cfRe1YpUkTgS9qyVCWbHbIM-1750652207-1.0.1.1-TESPLwTemy0p07YD70GlR.JO3bLfUv.mQvDXY2LscvfeSJQ2xMN5qNNwyvr0Tc1_Z9ggbXtI2Q6FETC4Zb6jgrjcfMPHXcFrcQhOtBovujg",
+      "domain": ".t.co",
+      "path": "/",
+      "expires": 1750654008.119549,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_ga",
+      "value": "GA1.1.1023757808.1750652208",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1785212208.344863,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ttp",
+      "value": "2ytS81H4WBnWCjpOlNoa1MrKSVN",
+      "domain": ".tiktok.com",
+      "path": "/",
+      "expires": 1784348313.283553,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "_yjsu_yjad",
+      "value": "1750652216.f090bcdf-f751-4575-97ef-90b2a080ae18",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1782188216,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_tt_enable_cookie",
+      "value": "1",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1784348313,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ttp",
+      "value": "01JYDG31HHJMZQ5KWD98D9SH4P_.tt.2",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1784348313,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "MUID",
+      "value": "177841F9E7546BB935F657EDE6AE6A47",
+      "domain": ".bing.com",
+      "path": "/",
+      "expires": 1784348288.330879,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "MR",
+      "value": "0",
+      "domain": ".c.bing.com",
+      "path": "/",
+      "expires": 1751257088.331096,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "SRM_B",
+      "value": "177841F9E7546BB935F657EDE6AE6A47",
+      "domain": ".c.bing.com",
+      "path": "/",
+      "expires": 1784348288.331244,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "SM",
+      "value": "C",
+      "domain": ".c.clarity.ms",
+      "path": "/",
+      "expires": -1,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "MUID",
+      "value": "177841F9E7546BB935F657EDE6AE6A47",
+      "domain": ".clarity.ms",
+      "path": "/",
+      "expires": 1784348288.595568,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "MR",
+      "value": "0",
+      "domain": ".c.clarity.ms",
+      "path": "/",
+      "expires": 1751257088.595763,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "ANONCHK",
+      "value": "0",
+      "domain": ".c.clarity.ms",
+      "path": "/",
+      "expires": 1750652888.595943,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "intercom-id-gafcjzm4",
+      "value": "48287ae1-3cb2-468f-8c10-51ca9859e7ed",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1773982289,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "intercom-device-id-gafcjzm4",
+      "value": "f1be1572-1ffb-44dc-abaa-ec11aca50d29",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1773982319,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_bns_logged_in",
+      "value": "yes",
+      "domain": "www.buyandship.co.jp",
+      "path": "/",
+      "expires": 1782188290.441701,
+      "httpOnly": false,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "wordpress_logged_in_08901f495022a8bd10b020c2c13a17c3",
+      "value": "TNMRMZ%7C1753244289%7C1hDOJzZNDkL46gTA2nA1i2ZMv6MnNfWg7KGVcROFZ7Y%7C1c6d785cc350db4f15a92c8928abbf71813a8241f917e9707ba1be6b2a3a97f8",
+      "domain": "www.buyandship.co.jp",
+      "path": "/",
+      "expires": 1753287490.442036,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "IDE",
+      "value": "AHWqTUlAV62HxMCxKCVJZ7x3Q3_ytPY-VE_B91tRKtxTgGtGAcni85NZAD7y1yIY",
+      "domain": ".doubleclick.net",
+      "path": "/",
+      "expires": 1785212294.942326,
+      "httpOnly": true,
+      "secure": true,
+      "sameSite": "None"
+    },
+    {
+      "name": "mp_da539fe019883c7298100b527561f64b_mixpanel",
+      "value": "%7B%22distinct_id%22%3A%22%24device%3A0cb93043-27c1-4f39-a76f-ea11be590fbf%22%2C%22%24device_id%22%3A%220cb93043-27c1-4f39-a76f-ea11be590fbf%22%2C%22%24initial_referrer%22%3A%22%24direct%22%2C%22%24initial_referring_domain%22%3A%22%24direct%22%2C%22__mps%22%3A%7B%7D%2C%22__mpso%22%3A%7B%22%24initial_referrer%22%3A%22%24direct%22%2C%22%24initial_referring_domain%22%3A%22%24direct%22%7D%2C%22__mpus%22%3A%7B%7D%2C%22__mpa%22%3A%7B%7D%2C%22__mpu%22%3A%7B%7D%2C%22__mpr%22%3A%5B%5D%2C%22__mpap%22%3A%5B%5D%7D",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1782188312,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "intercom-session-gafcjzm4",
+      "value": "N290VUFTWGQxSU5BQkdTdnVGa05JOTI2Wk9OaS9ySlBpd3Fac0JtanRVclZCZERsd3NxT1NOSVBlQXBVeVBXVlJvcFdtSEoxYklNV3h5dkRFbDVvL1J1aXNPM1AxNWNqempHcnE0WVVXcUU9LS0xR1hLK1dtNW51aWo5N0VSZit5MHJ3PT0=--d045a881999effd0b1a8a834c0fba1bedb0e2577",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1751257119,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ttcsid_CTBA27BC77UATAJHFG3G",
+      "value": "1750652257857::Ie9Kl1HdRywObBiLBSqd.1.1750652332091",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1784348332,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "ttcsid",
+      "value": "1750652257859::3U9OGaN_TIuJ_0KbwcUO.1.1750652332091",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1784348332,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_clsk",
+      "value": "137d7aq%7C1750652332679%7C4%7C1%7Cz.clarity.ms%2Fcollect",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1750738732,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    },
+    {
+      "name": "_ga_K81S0X3CNB",
+      "value": "GS2.1.s1750652208$o1$g1$t1750652349$j1$l1$h1119381563",
+      "domain": ".buyandship.co.jp",
+      "path": "/",
+      "expires": 1785212349.857822,
+      "httpOnly": false,
+      "secure": false,
+      "sameSite": "Lax"
+    }
+  ],
+  "origins": [
+    {
+      "origin": "https://www.buyandship.co.jp",
+      "localStorage": [
+        {
+          "name": "lastExternalReferrerTime",
+          "value": "1750652206992"
+        },
+        {
+          "name": "topicsLastReferenceTime",
+          "value": "1750652331868"
+        },
+        {
+          "name": "firstVisitMcr_JPTNMRMZ",
+          "value": "true"
+        },
+        {
+          "name": "lastExternalReferrer",
+          "value": "empty"
+        },
+        {
+          "name": "_gcl_ls",
+          "value": "{\"schema\":\"gcl\",\"version\":1,\"gcl_ctr\":{\"value\":{\"value\":0,\"creationTimeMs\":1750652207951},\"expires\":1758428207951}}"
+        },
+        {
+          "name": "intercom.intercom-state-gafcjzm4",
+          "value": "{\"app\":{\"openConfig\":{\"layout\":\"default\",\"unifiedStyling\":true,\"openTo\":\"home\",\"spaces\":[{\"type\":\"home\",\"label\":\"ホーム\",\"navigationLabel\":\"ホーム\",\"badge\":null},{\"type\":\"messages\",\"label\":\"メッセージ\",\"navigationLabel\":\"メッセージ\",\"badge\":null},{\"type\":\"tickets\",\"label\":\"チケット\",\"navigationLabel\":\"チケット\",\"badge\":null},{\"type\":\"tasks\",\"label\":\"タスク\",\"navigationLabel\":\"タスク\",\"badge\":null}],\"userHasReceivedChecklists\":false,\"userHasLiveNewsfeed\":false,\"userHasTickets\":false},\"selfServeSuggestionsMatch\":false,\"name\":\"Buyandship Japan\",\"features\":{\"anonymousInboundMessages\":true,\"googleAnalytics\":false,\"hubspotInstalled\":false,\"inboundMessages\":true,\"marketoEnrichmentInstalled\":false,\"googleAnalytics4Integration\":true},\"helpCenterSiteUrl\":\"https://help.buyandship.co.jp/hc\",\"inboundConversationsDisabled\":false,\"isDeveloperWorkspace\":false,\"customGoogleAnalyticsTrackerId\":null},\"launcher\":{\"isLauncherEnabled\":true},\"launcherDiscoveryMode\":{\"hasDiscoveredLauncher\":true},\"launcherSettings\":{\"alignment\":\"right\",\"color\":\"#f15c21\",\"colorDark\":\"#f15c21\",\"hasRequiredFeatures\":true,\"horizontalPadding\":20,\"instantBootEnabled\":true,\"launcherLogoUrl\":null,\"launcherLogoDarkUrl\":null,\"secondaryColor\":\"#ffa900\",\"secondaryColorDark\":\"#ffa900\",\"showLauncher\":true,\"updatedAt\":1750583138,\"verticalPadding\":20,\"isLoading\":false},\"user\":{\"role\":\"user\",\"locale\":\"ja\",\"hasConversations\":true},\"message\":{},\"conversations\":{\"byId\":{}},\"openOnBoot\":{\"type\":null,\"metadata\":{},\"lastOpenAtTimestamp\":1750652335933},\"operator\":{\"lastComposerEvent\":0},\"router\":{\"isInitialized\":false,\"navigationQueue\":[]}}"
+        },
+        {
+          "name": "__mpq_da539fe019883c7298100b527561f64b_ev",
+          "value": "[]"
+        },
+        {
+          "name": "lastLoginMethod",
+          "value": "basic"
+        }
+      ]
+    }
+  ]
+}

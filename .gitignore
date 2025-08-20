@@ -1,0 +1,51 @@
+# メモ:
+# フォルダ名: atelier-kyo-manager/
+# ファイル名: .gitignore (完成版)
+# 使い方: この内容で既存のファイルを完全に上書きしてください。
+# 役割: Gitのバージョン管理から、秘密情報や不要なファイルを除外します。
+
+# --- Secrets ---
+# APIキーやパスワードなどの秘密情報。これは最重要です。
+.env
+# .envのテンプレートファイルは、必要な環境変数を周知するためにGit管理に含めることがあります。
+!.env.template
+
+# --- Virtual Environments ---
+# 仮想環境フォルダはOSや環境ごとに異なり、リポジトリに含めるべきではありません。
+.venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# --- Python Cache & Compiled Files ---
+# Pythonが自動生成するキャッシュファイル。不要であり、コンフリクトの原因になります。
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# --- IDE / Editor Settings ---
+# 個人の開発環境設定をリポジトリから除外します。
+.vscode/
+.idea/
+
+# --- Project-Specific Ignores ---
+# エージェントがエラー時に自動生成するスクリーンショットフォルダ
+error_screenshots/
+
+# ログファイルやフォルダ
+logs/
+*.log
+
+# --- Distribution / Packaging ---
+# wheelやsdistを作成する際に生成されるフォルダ（将来的な拡張のため）
+build/
+dist/
+*.egg-info/
+
+# --- Django/Flask specific ---
+# (もしあれば) 開発用のローカルデータベース
+instance/site.db
+db.sqlite3
