@@ -1,0 +1,17 @@
+buyandship:
+  US:
+    disabled: true
+  UK:
+    disabled: true
+  CA:
+    disabled: true
+  IT:
+    disabled: true
+  AU:
+    disabled: true
+  KR:
+    disabled: true
+  TH:
+    disabled: true
+  CN:
+    disabled: true

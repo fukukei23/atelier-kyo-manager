@@ -1,0 +1,18 @@
+<!-- ======================================================================
+ ファイル: templates/index.html
+ 概要   : トップページ
+====================================================================== -->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Atelier Kyo - トップ</title>
+</head>
+<body>
+    <h1>Atelier Kyo 管理ツール</h1>
+    <ul>
+        <li><a href="{{ url_for('main.form_view') }}">新規登録フォーム</a></li>
+        <li><a href="{{ url_for('main.list_view') }}">登録データ一覧</a></li>
+    </ul>
+</body>
+</html>

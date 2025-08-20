@@ -1,0 +1,8 @@
+# config.py
+import os
+
+class Config:
+    SECRET_KEY = os.environ.get('SECRET_KEY') or 'kenshin4416' # 本番環境では強力なキーに変更
+    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL') or \
+        'sqlite:///site.db' # SQLiteデータベースを使用
+    SQLALCHEMY_TRACK_MODIFICATIONS = False
