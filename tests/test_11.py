@@ -14,10 +14,10 @@ class Test11():
   def setup_method(self, method):
     self.driver = webdriver.Firefox()
     self.vars = {}
-  
+
   def teardown_method(self, method):
     self.driver.quit()
-  
+
   def test_11(self):
     self.driver.get("https://www.buyma.com/")
     self.driver.set_window_size(1215, 775)
@@ -38,4 +38,3 @@ class Test11():
     self.driver.find_element(By.LINK_TEXT, "カタログから出品する").click()
     self.driver.find_element(By.CSS_SELECTOR, ".catalogs-table__row:nth-child(5) .catalogs-table__image-item:nth-child(1) > .catalogs-table__image").click()
     self.driver.find_element(By.LINK_TEXT, "利用特約に同意し、画像を保存する").click()
-  

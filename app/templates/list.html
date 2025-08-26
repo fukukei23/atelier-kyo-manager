@@ -1,29 +1,51 @@
-<!-- ======================================================================
- ファイル: templates/list.html
- 概要   : 登録データ一覧
-====================================================================== -->
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>データ一覧</title>
-</head>
-<body>
-    <h1>登録データ一覧</h1>
-    {% if items %}
-        <ul>
-        {% for item in items %}
-            <li>
-                <strong>{{ item.name }}</strong> - {{ item.description }}
-                <form action="{{ url_for('main.delete_item', item_id=item.id) }}" method="POST" style="display:inline;">
-                    <button type="submit">削除</button>
-                </form>
-            </li>
+<!--
+ファイル名: list.html
+フォルダ: app/templates/
+用途: 登録データ一覧を表示する（シンプル版）
+注意: 不要な form.brand を削除済み
+日付: 2025-08-24
+-->
+
+{% extends "base.html" %}
+{% block content %}
+<h1 class="text-3xl font-bold mb-6 text-gray-800">登録データ一覧</h1>
+
+<div class="bg-white p-6 rounded-lg shadow-md">
+  {% if products %}
+  <div class="overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 border border-gray-300 rounded-lg">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">ID</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">商品名</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">ブランド</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">仕入価格</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">販売価格</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">利益</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200">
+        {% for product in products %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-2 text-sm text-gray-900">{{ product.id }}</td>
+          <td class="px-4 py-2 text-sm text-blue-700 underline">
+            <a href="{{ product.supplier_url }}" target="_blank">{{ product.name }}</a>
+          </td>
+          <td class="px-4 py-2 text-sm text-gray-700">{{ product.brand or '' }}</td>
+          <td class="px-4 py-2 text-sm text-gray-700">¥{{ (product.purchase_price or 0) | int }}</td>
+          <td class="px-4 py-2 text-sm text-gray-700">¥{{ (product.selling_price or 0) | int }}</td>
+          <td class="px-4 py-2 text-sm text-gray-700">¥{{ product.calculate_profit() | int }}</td>
+        </tr>
         {% endfor %}
-        </ul>
-    {% else %}
-        <p>登録データはありません。</p>
-    {% endif %}
-    <p><a href="{{ url_for('main.index') }}">戻る</a></p>
-</body>
-</html>
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-gray-600">登録データはありません。</p>
+  {% endif %}
+</div>
+
+<div class="mt-4">
+  <a href="{{ url_for('main.index') }}" class="text-blue-600 hover:underline">戻る</a>
+</div>
+{% endblock %}

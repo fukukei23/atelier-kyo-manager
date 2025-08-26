@@ -1,18 +1,57 @@
-<!-- ======================================================================
- ファイル: templates/index.html
- 概要   : トップページ
-====================================================================== -->
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <title>Atelier Kyo - トップ</title>
-</head>
-<body>
-    <h1>Atelier Kyo 管理ツール</h1>
-    <ul>
-        <li><a href="{{ url_for('main.form_view') }}">新規登録フォーム</a></li>
-        <li><a href="{{ url_for('main.list_view') }}">登録データ一覧</a></li>
-    </ul>
-</body>
-</html>
+<!--
+==============================================================================
+ファイル名 : index.html
+配置場所   : C:\Users\USER\tools\atelier-kyo-manager\app\templates\
+使い方     : 既存の index.html をこの内容で「全置換」→ 保存 → サーバー再起動
+目的       : トップページ。存在しない endpoint 参照を修正し、主要画面への導線を提供
+修正点     :
+  - url_for('main.form_view')     → url_for('main.manage_products') に変更
+  - url_for('main.list_view')     → url_for('main.product_list')    に変更
+  - Tailwindベースの簡易UIに刷新（base.html 継承）
+備考       : base.html に Tailwind 読み込みがある前提
+日付       : 2025-08-23 (JST)
+==============================================================================
+-->
+{% extends 'base.html' %}
+
+{% block content %}
+  <h1 class="text-3xl font-bold text-gray-800 mb-6">Atelier Kyo 管理ツール</h1>
+
+  <div class="grid gap-6 md:grid-cols-2">
+    <!-- 商品管理（登録/更新 + 一覧） -->
+    <a href="{{ url_for('main.manage_products') }}" class="block bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+      <h2 class="text-xl font-semibold text-gray-800">商品管理（登録/更新）</h2>
+      <p class="text-gray-600 mt-2">
+        新規登録フォームと一覧をまとめた画面です。CSVインポート/エクスポートも可能。
+      </p>
+    </a>
+
+    <!-- シンプル一覧 -->
+    <a href="{{ url_for('main.product_list') }}" class="block bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+      <h2 class="text-xl font-semibold text-gray-800">登録データ一覧（シンプル）</h2>
+      <p class="text-gray-600 mt-2">
+        登録済み商品の一覧のみを表示します。
+      </p>
+    </a>
+
+    <!-- AI 自動リサーチ -->
+    <a href="{{ url_for('main.auto_research') }}" class="block bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+      <h2 class="text-xl font-semibold text-gray-800">AI 自動リサーチ</h2>
+      <p class="text-gray-600 mt-2">
+        指定条件での自動リサーチ機能（準備中/運用環境により異なります）。
+      </p>
+    </a>
+
+    <!-- 個別リサーチ（倉庫取得UI付き） -->
+    <a href="{{ url_for('main.image_crawler') }}" class="block bg-white p-6 rounded-lg shadow hover:shadow-md transition">
+      <h2 class="text-xl font-semibold text-gray-800">個別リサーチツール</h2>
+      <p class="text-gray-600 mt-2">
+        個別URLの解析や、Buyandship 倉庫取得UI（/api/warehouses）を利用できます。
+      </p>
+    </a>
+  </div>
+
+  <div class="mt-8 text-sm text-gray-500">
+    <p>※ 以前のリンク <code>main.form_view</code> / <code>main.list_view</code> は廃止されました。上記カードをご利用ください。</p>
+  </div>
+{% endblock %}

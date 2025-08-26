@@ -1,70 +1,50 @@
 <!--
-メモ:
-ファイル名: auto_research.html
-フォルダ: atelier-kyo-manager/app/templates/
-使用方法: このファイルを新しく作成してください。
-概要:
-- ブランド名を入力して自動リサーチを開始するための新しいUIです。
-- 結果はテーブル形式で表示され、利益の出る商品が一目で分かります。
+==============================================================================
+ファイル名 : auto_research.html
+配置      : app/templates/
+目的      : /auto-research 画面（フォーム未定義エラーを解消）
+使い方    : 既存のファイルをこの内容で「全置換」→ 保存
+==============================================================================
 -->
 {% extends "base.html" %}
 
 {% block content %}
-<div class="bg-white p-6 rounded-lg shadow-md">
-    <h1 class="text-3xl font-bold mb-6 text-gray-800">AI自動リサーチ</h1>
-    
-    <form action="{{ url_for('main.auto_research') }}" method="post" novalidate>
-        {{ form.hidden_tag() }}
-        <div class="mb-4">
-            <label for="{{ form.brand.id }}" class="block text-sm font-medium text-gray-700 mb-1">
-                {{ form.brand.label }}
-            </label>
-            {{ form.brand(class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-blue-500 focus:border-blue-500", placeholder="例: GUCCI") }}
-            {% for error in form.brand.errors %}
-                <p class="text-red-500 text-xs italic mt-1">{{ error }}</p>
-            {% endfor %}
-        </div>
-        <div>
-            {{ form.submit(class="py-2 px-4 bg-purple-600 text-white font-semibold rounded-lg shadow-md hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-75 cursor-pointer") }}
-        </div>
-    </form>
-</div>
+  <h1 class="text-2xl font-bold text-gray-800 mb-4">AI 自動リサーチ</h1>
 
-{% if results %}
-    <div class="mt-8">
-        <h2 class="text-2xl font-semibold mb-4 text-gray-700">リサーチ結果</h2>
-        <div class="bg-white p-6 rounded-lg shadow-md">
-            <table class="min-w-full divide-y divide-gray-200">
-                <thead class="bg-gray-50">
-                    <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">商品名</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">BUYMA価格</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">最安仕入先</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">利益見込</th>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">アクション</th>
-                    </tr>
-                </thead>
-                <tbody class="bg-white divide-y divide-gray-200">
-                    {% for result in results %}
-                    <tr>
-                        <td class="px-6 py-4 whitespace-nowrap">{{ result.name }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">¥{{ result.buyma_price | int }}</td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <a href="{{ result.supplier_url }}" target="_blank" class="text-blue-600 hover:underline">
-                                {{ result.supplier_name }} (¥{{ result.supplier_price | int }})
-                            </a>
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap font-bold {% if result.profit > 0 %}text-green-600{% else %}text-red-600{% endif %}">
-                            ¥{{ result.profit | int }}
-                        </td>
-                        <td class="px-6 py-4 whitespace-nowrap">
-                            <button class="py-1 px-3 bg-green-500 text-white text-sm rounded hover:bg-green-600">登録</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+  <div class="bg-white p-6 rounded-lg shadow">
+    <p class="text-gray-600 mb-4">
+      条件に基づいて自動でリサーチを行う画面です（内容は環境により実装差があります）。
+    </p>
+
+    <!-- CSRF を持つ最小フォーム。brand 等のフィールドはありません -->
+    <form method="POST" class="space-y-4">
+      {{ form.hidden_tag() }}
+      {{ form.submit(class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700") }}
+    </form>
+
+    <hr class="my-6">
+
+    <div>
+      <h2 class="text-lg font-semibold mb-2">Buyandship 倉庫一覧（デモ）</h2>
+      <div class="flex gap-2 items-center">
+        <label for="country" class="text-sm text-gray-700">国コード:</label>
+        <select id="country" class="border rounded px-2 py-1">
+          <option value="HK">HK</option>
+          <option value="TW">TW</option>
+          <option value="JP">JP</option>
+        </select>
+        <button id="btnFetch" class="px-3 py-1 bg-gray-700 text-white rounded">取得</button>
+      </div>
+      <pre id="result" class="bg-gray-100 p-3 rounded mt-3 text-sm"></pre>
     </div>
-{% endif %}
+  </div>
+
+  <script>
+    document.getElementById('btnFetch')?.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const code = document.getElementById('country').value;
+      const res = await fetch(`/api/warehouses?country=${encodeURIComponent(code)}`);
+      document.getElementById('result').textContent = await res.text();
+    });
+  </script>
 {% endblock %}

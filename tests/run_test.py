@@ -27,9 +27,9 @@ app.config['OPENAI_API_KEY'] = "YOUR_OPENAI_API_KEY_HERE"
 app.config['DEEPSEEK_API_KEY'] = "YOUR_DEEPSEEK_API_KEY_HERE"
 
 # --- クローラー設定 ---
-app.config['CRAWLER_HEADLESS'] = True 
+app.config['CRAWLER_HEADLESS'] = True
 app.config['CRAWLER_DEFAULT_WAIT_TIME'] = 60
-app.config['CRAWLER_DISABLE_CLIP'] = False 
+app.config['CRAWLER_DISABLE_CLIP'] = False
 
 # --- ターゲットサイト設定 ---
 app.config['CRAWLER_TARGET_SITES'] = {
@@ -49,17 +49,17 @@ def run_test():
         try:
             print("--- テスト開始 ---")
             print(f"ターゲットURL: {TEST_TARGET_URL}")
-            
+
             service = CrawlerService()
-            
+
             result = service.get_product_info(
                 url=TEST_TARGET_URL,
                 master_image_url=TEST_MASTER_IMAGE_URL
             )
-            
+
             print("\n--- テスト結果 ---")
             pprint.pprint(result)
-            
+
         except Exception as e:
             logging.error("テスト中に予期せぬエラーが発生しました。", exc_info=True)
         finally:
