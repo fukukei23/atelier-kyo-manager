@@ -29,7 +29,7 @@ def run_crawler_test():
     print("\n" + "="*60)
     print("--- CrawlerService (Final Validation Mission) Test ---")
     print("="*60)
-    
+
     app = create_app()
     with app.app_context():
         try:
@@ -37,18 +37,18 @@ def run_crawler_test():
             # 現在Farfetchで実際に販売されている商品をターゲットとします。
             # エージェントが全ての検証をパスし、成功するのが期待される正しい動作です。
             test_url = "https://www.farfetch.com/jp/shopping/women/apc--grace-item-16960103.aspx"
-            
+
             # 上記商品の「正解」の画像URL
             master_image_url = "https://cdn-images.farfetch-contents.com/16/96/01/03/16960103_34049399_1000.jpg"
             # ---------------------------
 
             print(f"\n1. 以下の情報を基に、多段式AI検証を開始します:\n   URL: {test_url}\n   Master Image: {master_image_url}\n")
-            
+
             # withステートメントでCrawlerServiceを安全に利用
             with CrawlerService() as crawler:
                 print("   -> CrawlerServiceが正常に初期化されました。")
                 product_info = crawler.get_product_info(test_url, master_image_url=master_image_url)
-            
+
             print("\n" + "="*60)
             print("--- テスト完了 ---")
             if product_info and not product_info.get('error'):

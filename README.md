@@ -1,15 +1,42 @@
-AtelierKyo Managerセットアップ手順このプロジェクトをローカル環境でセットアップし、実行するための手順です。1. 仮想環境のセットアップまず、プロジェクト用の独立したPython環境を作成し、有効化（アクティベート）します。Windows (コマンドプロンプト or PowerShell):python -m venv .venv
+# ======================================================================
+# ファイル名: セットアップコマンド (フルコピー＆ペースト用)
+# 日付: 2025年08月22日
+# 役割: Atelier Kyo Managerの環境構築を自動化するためのコマンド集
+# 使い方: お使いのOSに合わせて、該当部分をターミナルに貼り付けてください。
+# ======================================================================
+
+# =================== Windows (コマンドプロンプト or PowerShell) 用 ===================
+# 1. 仮想環境フォルダ (.venv) を作成します
+python -m venv .venv
+
+# 2. 仮想環境を有効化します
 .\.venv\Scripts\activate
-macOS / Linux (ターミナル):python -m venv .venv
+
+# 3. 必要なライブラリをすべてインストールします
+pip install -r requirements.txt
+
+# 4. Webアプリケーションを起動します (⚠️手動作業後に再実行)
+flask run
+
+
+
+# =================== macOS / Linux (ターミナル) 用 ===================
+# 1. 仮想環境フォルダ (.venv) を作成します
+python -m venv .venv
+
+# 2. 仮想環境を有効化します
 source .venv/bin/activate
-2. 依存ライブラリのインストールrequirements.txtファイルに記載されている、プロジェクトの実行に必要なライブラリをすべてインストールします。pip install -r requirements.txt
-3. データベースの初期化次に、Flask-Migrateを使用してデータベースをセットアップします。Windows:set FLASK_APP=run.py
-flask db init
-flask db migrate -m "initial migration"
-flask db upgrade
-macOS / Linux:export FLASK_APP=run.py
-flask db init
-flask db migrate -m "initial migration"
-flask db upgrade
-注: flask db initコマンドは、プロジェクトで一番最初に一度だけ実行してください。2回目以降のデータベース更新ではflask db migrateとflask db upgradeのみを使用します。4. アプリケーションの実行以下のコマンドで開発サーバーを起動します。python run.py
-サーバーが起動したら、Webブラウザで http://127.0.0.1:5000 にアクセスすると、アプリケーションのトップページが表示されます。
+
+# 3. 必要なライブラリをすべてインストールします
+pip install -r requirements.txt
+
+# 4. Webアプリケーションを起動します (⚠️手動作業後に再実行)
+flask run
+
+
+
+# =================== ⚠️ 重要：手動で行う作業 ===================
+# 上記のコマンド実行後、Webアプリケーションを一度停止（Ctrl + C）し、
+# **`.env`ファイルの作成とAPIキーの設定**を`README.md`の手順3に従って行ってください。
+# 設定完了後、再度 `flask run` でサーバーを起動すれば、すべての準備が完了です。
+# ======================================================================

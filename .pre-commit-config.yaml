@@ -1,0 +1,57 @@
+repos:
+  # 1) 先頭インデントの NBSP/TAB 自動修正（渡されたファイルだけ処理）
+  - repo: local
+    hooks:
+      - id: fix-indent-nbsp
+        name: fix NBSP/TAB in leading indentation (auto-fix)
+        entry: python scripts/fix_indent_nbsp.py
+        language: python
+        types: [python]
+        pass_filenames: true
+        exclude: |
+          (?x)(
+            ^migrations/.* |
+            ^export/.* |
+            ^exports_atelier/.* |
+            ^\.venv/.* | ^venv/.* | ^\.venv_backup/.*
+          )
+
+  # 2) 末尾空白・EOF 統一
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+        types: [python]
+        exclude: |
+          (?x)(
+            ^migrations/.* |
+            ^export/.* |
+            ^exports_atelier/.* |
+            ^\.venv/.* | ^venv/.* | ^\.venv_backup/.*
+          )
+      - id: end-of-file-fixer
+        types: [python]
+        exclude: |
+          (?x)(
+            ^migrations/.* |
+            ^export/.* |
+            ^exports_atelier/.* |
+            ^\.venv/.* | ^venv/.* | ^\.venv_backup/.*
+          )
+
+  # 3) 最終検査（先頭インデントに NBSP/TAB が残ってないか）
+  - repo: local
+    hooks:
+      - id: forbid-nbsp-indent
+        name: forbid NBSP/TAB in indent (verify after fix)
+        entry: python scripts/check_nbsp.py
+        language: python
+        types: [python]
+        pass_filenames: true
+        exclude: |
+          (?x)(
+            ^migrations/.* |
+            ^export/.* |
+            ^exports_atelier/.* |
+            ^\.venv/.* | ^venv/.* | ^\.venv_backup/.*
+          )

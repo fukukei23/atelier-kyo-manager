@@ -8,7 +8,7 @@ def import_products_from_csv(file):
     # ファイルをUTF-8で開く
     csv_file = TextIOWrapper(file, encoding='utf-8')
     reader = csv.DictReader(csv_file)
-    
+
     # 既存のデータをクリアするか、更新するかは要検討
     # ここでは単純に追加する例
 

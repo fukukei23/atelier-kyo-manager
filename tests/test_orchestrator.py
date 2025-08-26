@@ -17,7 +17,7 @@ from app.utils.ai_research_orchestrator import ResearchOrchestrator
 def run_full_test():
     """シングルセッションで全ワークフローをテストする"""
     print("--- AI Research Orchestrator 統合テスト開始 ---")
-    
+
     app = create_app()
     with app.app_context():
         try:
@@ -32,7 +32,7 @@ def run_full_test():
 
             print("3. run()メソッドを実行し、リサーチワークフローを開始します...")
             results = orchestrator.run(brand_name=brand_to_test)
-            
+
             print("\n" + "="*50)
             print("--- テスト完了 ---")
             if results:
