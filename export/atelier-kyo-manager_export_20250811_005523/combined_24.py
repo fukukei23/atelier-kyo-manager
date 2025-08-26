@@ -2228,10 +2228,10 @@ def get_app_manifest(
     :returns: A tuple with the following items:
 
         0. **url** - Manifest location.
-        1. **errors** - 
+        1. **errors** -
         2. **data** - *(Optional)* Manifest content.
         3. **parsed** - *(Optional)* Parsed manifest properties. Deprecated, use manifest instead.
-        4. **manifest** - 
+        4. **manifest** -
     '''
     params: T_JSON_DICT = dict()
     if manifest_id is not None:
@@ -2256,7 +2256,7 @@ def get_installability_errors() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typi
 
     **EXPERIMENTAL**
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Page.getInstallabilityErrors',
@@ -2271,7 +2271,7 @@ def get_manifest_icons() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.Opti
 
     **EXPERIMENTAL**
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Page.getManifestIcons',
@@ -2769,7 +2769,7 @@ def get_permissions_policy_state(
     **EXPERIMENTAL**
 
     :param frame_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['frameId'] = frame_id.to_json()
@@ -2790,7 +2790,7 @@ def get_origin_trials(
     **EXPERIMENTAL**
 
     :param frame_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['frameId'] = frame_id.to_json()
@@ -10072,10 +10072,10 @@ def get_app_manifest(
     :returns: A tuple with the following items:
 
         0. **url** - Manifest location.
-        1. **errors** - 
+        1. **errors** -
         2. **data** - *(Optional)* Manifest content.
         3. **parsed** - *(Optional)* Parsed manifest properties. Deprecated, use manifest instead.
-        4. **manifest** - 
+        4. **manifest** -
     '''
     params: T_JSON_DICT = dict()
     if manifest_id is not None:
@@ -10100,7 +10100,7 @@ def get_installability_errors() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typi
 
     **EXPERIMENTAL**
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Page.getInstallabilityErrors',
@@ -10115,7 +10115,7 @@ def get_manifest_icons() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.Opti
 
     **EXPERIMENTAL**
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Page.getManifestIcons',
@@ -10613,7 +10613,7 @@ def get_permissions_policy_state(
     **EXPERIMENTAL**
 
     :param frame_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['frameId'] = frame_id.to_json()
@@ -10634,7 +10634,7 @@ def get_origin_trials(
     **EXPERIMENTAL**
 
     :param frame_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['frameId'] = frame_id.to_json()

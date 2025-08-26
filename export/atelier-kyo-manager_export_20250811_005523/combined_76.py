@@ -7640,7 +7640,7 @@ def get_stack_trace(
     **EXPERIMENTAL**
 
     :param stack_trace_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['stackTraceId'] = stack_trace_id.to_json()
@@ -9037,7 +9037,7 @@ def get_stack_trace(
     **EXPERIMENTAL**
 
     :param stack_trace_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['stackTraceId'] = stack_trace_id.to_json()
@@ -10434,7 +10434,7 @@ def get_stack_trace(
     **EXPERIMENTAL**
 
     :param stack_trace_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['stackTraceId'] = stack_trace_id.to_json()

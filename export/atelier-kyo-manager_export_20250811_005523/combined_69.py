@@ -9138,7 +9138,7 @@ def global_lexical_scope_names(
     Returns all let, const and class variables from global scope.
 
     :param execution_context_id: *(Optional)* Specifies in which execution context to lookup global scope variables.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if execution_context_id is not None:
@@ -9398,7 +9398,7 @@ def get_exception_details(
     **EXPERIMENTAL**
 
     :param error_object_id: The error object for which to resolve the exception details.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['errorObjectId'] = error_object_id.to_json()
@@ -10727,7 +10727,7 @@ def global_lexical_scope_names(
     Returns all let, const and class variables from global scope.
 
     :param execution_context_id: *(Optional)* Specifies in which execution context to lookup global scope variables.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if execution_context_id is not None:
@@ -10987,7 +10987,7 @@ def get_exception_details(
     **EXPERIMENTAL**
 
     :param error_object_id: The error object for which to resolve the exception details.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['errorObjectId'] = error_object_id.to_json()

@@ -3777,7 +3777,7 @@ def add_virtual_authenticator(
     Creates and adds a virtual authenticator.
 
     :param options:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['options'] = options.to_json()
@@ -3865,7 +3865,7 @@ def get_credential(
 
     :param authenticator_id:
     :param credential_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['authenticatorId'] = authenticator_id.to_json()
@@ -3885,7 +3885,7 @@ def get_credentials(
     Returns all the credentials stored in the given virtual authenticator.
 
     :param authenticator_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['authenticatorId'] = authenticator_id.to_json()
@@ -4358,7 +4358,7 @@ def add_virtual_authenticator(
     Creates and adds a virtual authenticator.
 
     :param options:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['options'] = options.to_json()
@@ -4446,7 +4446,7 @@ def get_credential(
 
     :param authenticator_id:
     :param credential_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['authenticatorId'] = authenticator_id.to_json()
@@ -4466,7 +4466,7 @@ def get_credentials(
     Returns all the credentials stored in the given virtual authenticator.
 
     :param authenticator_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['authenticatorId'] = authenticator_id.to_json()
@@ -4939,7 +4939,7 @@ def add_virtual_authenticator(
     Creates and adds a virtual authenticator.
 
     :param options:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['options'] = options.to_json()
@@ -5027,7 +5027,7 @@ def get_credential(
 
     :param authenticator_id:
     :param credential_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['authenticatorId'] = authenticator_id.to_json()
@@ -5047,7 +5047,7 @@ def get_credentials(
     Returns all the credentials stored in the given virtual authenticator.
 
     :param authenticator_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['authenticatorId'] = authenticator_id.to_json()

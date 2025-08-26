@@ -4056,8 +4056,8 @@ def get_os_app_state(
     :param manifest_id: The id from the webapp's manifest file, commonly it's the url of the site installing the webapp. See https://web.dev/learn/pwa/web-app-manifest.
     :returns: A tuple with the following items:
 
-        0. **badgeCount** - 
-        1. **fileHandlers** - 
+        0. **badgeCount** -
+        1. **fileHandlers** -
     '''
     params: T_JSON_DICT = dict()
     params['manifestId'] = manifest_id
@@ -4318,8 +4318,8 @@ def get_os_app_state(
     :param manifest_id: The id from the webapp's manifest file, commonly it's the url of the site installing the webapp. See https://web.dev/learn/pwa/web-app-manifest.
     :returns: A tuple with the following items:
 
-        0. **badgeCount** - 
-        1. **fileHandlers** - 
+        0. **badgeCount** -
+        1. **fileHandlers** -
     '''
     params: T_JSON_DICT = dict()
     params['manifestId'] = manifest_id
@@ -4580,8 +4580,8 @@ def get_os_app_state(
     :param manifest_id: The id from the webapp's manifest file, commonly it's the url of the site installing the webapp. See https://web.dev/learn/pwa/web-app-manifest.
     :returns: A tuple with the following items:
 
-        0. **badgeCount** - 
-        1. **fileHandlers** - 
+        0. **badgeCount** -
+        1. **fileHandlers** -
     '''
     params: T_JSON_DICT = dict()
     params['manifestId'] = manifest_id

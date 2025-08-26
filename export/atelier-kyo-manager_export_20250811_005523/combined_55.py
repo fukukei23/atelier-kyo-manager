@@ -1568,7 +1568,7 @@ def get_file_info(
     **EXPERIMENTAL**
 
     :param object_id: JavaScript object id of the node wrapper.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['objectId'] = object_id.to_json()
@@ -3689,7 +3689,7 @@ def get_file_info(
     **EXPERIMENTAL**
 
     :param object_id: JavaScript object id of the node wrapper.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['objectId'] = object_id.to_json()
@@ -5810,7 +5810,7 @@ def get_file_info(
     **EXPERIMENTAL**
 
     :param object_id: JavaScript object id of the node wrapper.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['objectId'] = object_id.to_json()

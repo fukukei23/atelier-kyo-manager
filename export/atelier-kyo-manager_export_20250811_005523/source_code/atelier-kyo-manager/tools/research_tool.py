@@ -34,23 +34,23 @@ PROXIES = [
 # ====================
 def setup_driver():
     chrome_options = Options()
-    
+
     # Headlessモード
     chrome_options.add_argument("--headless=new")
-    
+
     # プロキシ設定
     chrome_options.add_argument(f"--proxy-server={random.choice(PROXIES)}")
-    
+
     # ユーザーエージェントローテーション
     chrome_options.add_argument(f"--user-agent={random.choice(USER_AGENTS)}")
-    
+
     # 基本設定
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
     chrome_options.add_argument("--disable-blink-features=AutomationControlled")
     chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
     chrome_options.add_experimental_option("useAutomationExtension", False)
-    
+
     return webdriver.Chrome(options=chrome_options)
 
 # ====================
@@ -61,22 +61,22 @@ def get_product_details(driver, product_url):
     try:
         driver.get(product_url)
         time.sleep(random.uniform(*DELAY_RANGE))
-        
+
         WebDriverWait(driver, 30).until(
             EC.presence_of_element_located((By.CSS_SELECTOR, "div.product_detail"))
         )
-        
+
         soup = BeautifulSoup(driver.page_source, 'html.parser')
-        
+
         # 追加情報取得例
         description = soup.select_one('div.product_description').text.strip()[:200] + "..." if soup.select_one('div.product_description') else ""
         seller_info = soup.select_one('div.seller_profile').text.strip()[:100] + "..." if soup.select_one('div.seller_profile') else ""
-        
+
         return {
             'description': description,
             'seller_info': seller_info
         }
-        
+
     except Exception as e:
         print(f"詳細ページエラー: {str(e)}")
         return {}
@@ -87,25 +87,25 @@ def get_product_details(driver, product_url):
 def scrape_brand(driver, brand):
     csv_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'tools', f'buyma_{brand.lower()}_products.csv')
     products = []
-    
+
     for page in range(1, MAX_PAGES + 1):
         try:
             # ページアクセス
             url = BASE_URL % brand + f"?pageno={page}"
             driver.get(url)
             time.sleep(random.uniform(*DELAY_RANGE))
-            
+
             # 商品コンテナ待機
             WebDriverWait(driver, 30).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, "div.product_body"))
             )
-            
+
             # ページネーション確認
             soup = BeautifulSoup(driver.page_source, 'html.parser')
             next_page = soup.select_one('a.pagination_next:not(.disabled)')
             if not next_page and page != 1:
                 break
-                
+
             # 商品情報取得
             for item in soup.select('div.product_body'):
                 # 基本情報
@@ -134,7 +134,7 @@ def scrape_brand(driver, brand):
                 if random.random() < 0.3:
                     detail_link = item.select_one('a.product_name')['href']
                     details = get_product_details(driver, urljoin(url, detail_link)) if detail_link else {}
-                
+
                 products.append({
                     'brand': brand,
                     'name': name,

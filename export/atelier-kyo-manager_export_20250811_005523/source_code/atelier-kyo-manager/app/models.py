@@ -23,7 +23,7 @@ class Product(db.Model):
     def calculate_profit(self, fee_rate=0.15):
         """None対策済みの利益計算式"""
         calculated_profit = (
-            (self.selling_price or 0) 
+            (self.selling_price or 0)
             - (self.purchase_price or 0)
             - ((self.selling_price or 0) * fee_rate)
             - (self.transaction_fee or 0)

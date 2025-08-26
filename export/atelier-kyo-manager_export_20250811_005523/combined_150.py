@@ -9692,7 +9692,7 @@ def get_dom_storage_items(
     ) -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.List[Item]]:
     '''
     :param storage_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['storageId'] = storage_id.to_json()
@@ -9914,7 +9914,7 @@ def get_dom_storage_items(
     ) -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.List[Item]]:
     '''
     :param storage_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['storageId'] = storage_id.to_json()
@@ -10136,7 +10136,7 @@ def get_dom_storage_items(
     ) -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.List[Item]]:
     '''
     :param storage_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['storageId'] = storage_id.to_json()

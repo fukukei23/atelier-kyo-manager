@@ -969,7 +969,7 @@ def get_realtime_data(
     Fetch the realtime data from the registered contexts.
 
     :param context_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['contextId'] = context_id.to_json()
@@ -1575,7 +1575,7 @@ def get_realtime_data(
     Fetch the realtime data from the registered contexts.
 
     :param context_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['contextId'] = context_id.to_json()
@@ -2181,7 +2181,7 @@ def get_realtime_data(
     Fetch the realtime data from the registered contexts.
 
     :param context_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['contextId'] = context_id.to_json()

@@ -9796,7 +9796,7 @@ def get_storage_key_for_frame(
     Returns a storage key given a frame id.
 
     :param frame_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['frameId'] = frame_id.to_json()
@@ -10102,7 +10102,7 @@ def get_trust_tokens() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.List[T
 
     **EXPERIMENTAL**
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Storage.getTrustTokens',
@@ -10205,7 +10205,7 @@ def get_shared_storage_metadata(
     **EXPERIMENTAL**
 
     :param owner_origin:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['ownerOrigin'] = owner_origin
@@ -10226,7 +10226,7 @@ def get_shared_storage_entries(
     **EXPERIMENTAL**
 
     :param owner_origin:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['ownerOrigin'] = owner_origin
@@ -10393,7 +10393,7 @@ def run_bounce_tracking_mitigations() -> typing.Generator[T_JSON_DICT,T_JSON_DIC
 
     **EXPERIMENTAL**
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Storage.runBounceTrackingMitigations',
@@ -10463,7 +10463,7 @@ def get_related_website_sets() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typin
 
     **EXPERIMENTAL**
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Storage.getRelatedWebsiteSets',

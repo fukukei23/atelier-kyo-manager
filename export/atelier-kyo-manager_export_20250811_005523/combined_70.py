@@ -1152,7 +1152,7 @@ def global_lexical_scope_names(
     Returns all let, const and class variables from global scope.
 
     :param execution_context_id: *(Optional)* Specifies in which execution context to lookup global scope variables.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if execution_context_id is not None:
@@ -1412,7 +1412,7 @@ def get_exception_details(
     **EXPERIMENTAL**
 
     :param error_object_id: The error object for which to resolve the exception details.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['errorObjectId'] = error_object_id.to_json()
@@ -9007,7 +9007,7 @@ _all_timezones_unchecked = \
  'Zulu']
 all_timezones = LazyList(
         tz for tz in _all_timezones_unchecked if resource_exists(tz))
-        
+
 all_timezones_set = LazySet(all_timezones)
 common_timezones = \
 ['Africa/Abidjan',
@@ -9445,7 +9445,7 @@ common_timezones = \
  'UTC']
 common_timezones = LazyList(
             tz for tz in common_timezones if tz in all_timezones)
-        
+
 common_timezones_set = LazySet(common_timezones)
 
 # === atelier-kyo-manager/.venv_backup\Lib\site-packages\sympy\physics\mechanics\system.py ===

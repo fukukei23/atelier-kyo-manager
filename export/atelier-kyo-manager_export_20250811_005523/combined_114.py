@@ -3087,7 +3087,7 @@ def get_full_ax_tree(
 
     :param depth: *(Optional)* The maximum depth at which descendants of the root node should be retrieved. If omitted, the full tree is returned.
     :param frame_id: *(Optional)* The frame for whose document the AX tree should be retrieved. If omitted, the root frame is used.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if depth is not None:
@@ -3112,7 +3112,7 @@ def get_root_ax_node(
     **EXPERIMENTAL**
 
     :param frame_id: *(Optional)* The frame in whose document the node resides. If omitted, the root frame is used.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if frame_id is not None:
@@ -3139,7 +3139,7 @@ def get_ax_node_and_ancestors(
     :param node_id: *(Optional)* Identifier of the node to get.
     :param backend_node_id: *(Optional)* Identifier of the backend node to get.
     :param object_id: *(Optional)* JavaScript object id of the node wrapper to get.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if node_id is not None:
@@ -3168,7 +3168,7 @@ def get_child_ax_nodes(
 
     :param id_:
     :param frame_id: *(Optional)* The frame in whose document the node resides. If omitted, the root frame is used.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['id'] = id_.to_json()
@@ -3737,7 +3737,7 @@ def get_full_ax_tree(
 
     :param depth: *(Optional)* The maximum depth at which descendants of the root node should be retrieved. If omitted, the full tree is returned.
     :param frame_id: *(Optional)* The frame for whose document the AX tree should be retrieved. If omitted, the root frame is used.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if depth is not None:
@@ -3762,7 +3762,7 @@ def get_root_ax_node(
     **EXPERIMENTAL**
 
     :param frame_id: *(Optional)* The frame in whose document the node resides. If omitted, the root frame is used.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if frame_id is not None:
@@ -3789,7 +3789,7 @@ def get_ax_node_and_ancestors(
     :param node_id: *(Optional)* Identifier of the node to get.
     :param backend_node_id: *(Optional)* Identifier of the backend node to get.
     :param object_id: *(Optional)* JavaScript object id of the node wrapper to get.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if node_id is not None:
@@ -3818,7 +3818,7 @@ def get_child_ax_nodes(
 
     :param id_:
     :param frame_id: *(Optional)* The frame in whose document the node resides. If omitted, the root frame is used.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['id'] = id_.to_json()
@@ -4387,7 +4387,7 @@ def get_full_ax_tree(
 
     :param depth: *(Optional)* The maximum depth at which descendants of the root node should be retrieved. If omitted, the full tree is returned.
     :param frame_id: *(Optional)* The frame for whose document the AX tree should be retrieved. If omitted, the root frame is used.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if depth is not None:
@@ -4412,7 +4412,7 @@ def get_root_ax_node(
     **EXPERIMENTAL**
 
     :param frame_id: *(Optional)* The frame in whose document the node resides. If omitted, the root frame is used.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if frame_id is not None:
@@ -4439,7 +4439,7 @@ def get_ax_node_and_ancestors(
     :param node_id: *(Optional)* Identifier of the node to get.
     :param backend_node_id: *(Optional)* Identifier of the backend node to get.
     :param object_id: *(Optional)* JavaScript object id of the node wrapper to get.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if node_id is not None:
@@ -4468,7 +4468,7 @@ def get_child_ax_nodes(
 
     :param id_:
     :param frame_id: *(Optional)* The frame in whose document the node resides. If omitted, the root frame is used.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['id'] = id_.to_json()

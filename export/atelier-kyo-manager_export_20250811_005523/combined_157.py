@@ -908,7 +908,7 @@ def get_storage_items(
     :param id_: ID of extension.
     :param storage_area: StorageArea to retrieve data from.
     :param keys: *(Optional)* Keys to retrieve.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['id'] = id_
@@ -1073,7 +1073,7 @@ def get_storage_items(
     :param id_: ID of extension.
     :param storage_area: StorageArea to retrieve data from.
     :param keys: *(Optional)* Keys to retrieve.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['id'] = id_
@@ -1238,7 +1238,7 @@ def get_storage_items(
     :param id_: ID of extension.
     :param storage_area: StorageArea to retrieve data from.
     :param keys: *(Optional)* Keys to retrieve.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['id'] = id_

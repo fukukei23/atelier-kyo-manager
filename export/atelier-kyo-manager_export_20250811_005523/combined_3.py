@@ -2874,13 +2874,13 @@ class ProductForm(FlaskForm):
         DataRequired(),
         NumberRange(min=0, message="0以上の数値を入力してください")
     ])
-    
+
     # 経費項目（追加部分）
     transaction_fee = FloatField('取引手数料', validators=[Optional()])
     shipping_cost = FloatField('送料・梱包費', validators=[Optional()])
     customs_duty = FloatField('関税・輸入消費税', validators=[Optional()])
     procurement_fee = FloatField('買付代行料', validators=[Optional()])
-    
+
     # URL関連
     supplier_url = URLField('仕入先URL', validators=[
         URL(message='有効なURLを入力してください', require_tld=False)
@@ -2888,10 +2888,10 @@ class ProductForm(FlaskForm):
     image_url = URLField('画像URL', validators=[
         URL(message='有効なURLを入力してください', require_tld=False)
     ])
-    
+
     # 在庫
     stock_status = BooleanField('在庫あり')
-    
+
     submit = SubmitField('登録/更新')
 
 class ProfitFilterForm(FlaskForm):
@@ -4214,7 +4214,7 @@ def import_products_from_csv(file):
     # ファイルをUTF-8で開く
     csv_file = TextIOWrapper(file, encoding='utf-8')
     reader = csv.DictReader(csv_file)
-    
+
     # 既存のデータをクリアするか、更新するかは要検討
     # ここでは単純に追加する例
 
@@ -4255,7 +4255,7 @@ def import_products_from_csv(file):
     # ファイルをUTF-8で開く
     csv_file = TextIOWrapper(file, encoding='utf-8')
     reader = csv.DictReader(csv_file)
-    
+
     # 既存のデータをクリアするか、更新するかは要検討
     # ここでは単純に追加する例
 

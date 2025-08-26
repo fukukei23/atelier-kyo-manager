@@ -1211,7 +1211,7 @@ def get_target_info(
     **EXPERIMENTAL**
 
     :param target_id: *(Optional)*
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if target_id is not None:
@@ -6466,7 +6466,7 @@ def get_target_info(
     **EXPERIMENTAL**
 
     :param target_id: *(Optional)*
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if target_id is not None:
@@ -7214,7 +7214,7 @@ def get_target_info(
     **EXPERIMENTAL**
 
     :param target_id: *(Optional)*
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if target_id is not None:

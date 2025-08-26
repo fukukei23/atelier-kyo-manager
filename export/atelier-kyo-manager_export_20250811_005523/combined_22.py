@@ -6813,7 +6813,7 @@ def get_certificate(
     **EXPERIMENTAL**
 
     :param origin: Origin to get certificate for.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['origin'] = origin
@@ -6929,7 +6929,7 @@ def take_response_body_for_interception_as_stream(
     **EXPERIMENTAL**
 
     :param interception_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['interceptionId'] = interception_id.to_json()
@@ -7250,7 +7250,7 @@ def get_security_isolation_status(
     **EXPERIMENTAL**
 
     :param frame_id: *(Optional)* If no frameId is provided, the status of the target is provided.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if frame_id is not None:
@@ -7296,7 +7296,7 @@ def load_network_resource(
     :param frame_id: *(Optional)* Frame id to get the resource for. Mandatory for frame targets, and should be omitted for worker targets.
     :param url: URL of the resource to get content for.
     :param options: Options for the request.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     if frame_id is not None:

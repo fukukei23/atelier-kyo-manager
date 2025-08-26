@@ -1845,7 +1845,7 @@ def resolve_values(
     :param property_name: *(Optional)* Only longhands and custom property names are accepted.
     :param pseudo_type: *(Optional)* Pseudo element type, only works for pseudo elements that generate elements in the tree, such as ::before and ::after.
     :param pseudo_identifier: *(Optional)* Pseudo element custom ident.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['values'] = [i for i in values]
@@ -1875,7 +1875,7 @@ def get_longhand_properties(
 
     :param shorthand_name:
     :param value:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['shorthandName'] = shorthand_name
@@ -1997,7 +1997,7 @@ def get_media_queries() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.List[
     '''
     Returns all media queries parsed by the rendering engine.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'CSS.getMediaQueries',
@@ -2057,7 +2057,7 @@ def get_layers_for_node(
     **EXPERIMENTAL**
 
     :param node_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['nodeId'] = node_id.to_json()
@@ -2081,7 +2081,7 @@ def get_location_for_selector(
 
     :param style_sheet_id:
     :param selector_text:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['styleSheetId'] = style_sheet_id.to_json()
@@ -2423,7 +2423,7 @@ def stop_rule_usage_tracking() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typin
     Stop tracking rule usage and return the list of rules that were used since last call to
     ``takeCoverageDelta`` (or since start of coverage instrumentation).
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'CSS.stopRuleUsageTracking',
@@ -2439,7 +2439,7 @@ def take_coverage_delta() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.Tup
 
     :returns: A tuple with the following items:
 
-        0. **coverage** - 
+        0. **coverage** -
         1. **timestamp** - Monotonically increasing time, in seconds.
     '''
     cmd_dict: T_JSON_DICT = {
@@ -4407,7 +4407,7 @@ def resolve_values(
     :param property_name: *(Optional)* Only longhands and custom property names are accepted.
     :param pseudo_type: **(EXPERIMENTAL)** *(Optional)* Pseudo element type, only works for pseudo elements that generate elements in the tree, such as ::before and ::after.
     :param pseudo_identifier: **(EXPERIMENTAL)** *(Optional)* Pseudo element custom ident.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['values'] = [i for i in values]
@@ -4437,7 +4437,7 @@ def get_longhand_properties(
 
     :param shorthand_name:
     :param value:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['shorthandName'] = shorthand_name
@@ -4559,7 +4559,7 @@ def get_media_queries() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.List[
     '''
     Returns all media queries parsed by the rendering engine.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'CSS.getMediaQueries',
@@ -4619,7 +4619,7 @@ def get_layers_for_node(
     **EXPERIMENTAL**
 
     :param node_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['nodeId'] = node_id.to_json()
@@ -4643,7 +4643,7 @@ def get_location_for_selector(
 
     :param style_sheet_id:
     :param selector_text:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['styleSheetId'] = style_sheet_id.to_json()
@@ -4985,7 +4985,7 @@ def stop_rule_usage_tracking() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typin
     Stop tracking rule usage and return the list of rules that were used since last call to
     ``takeCoverageDelta`` (or since start of coverage instrumentation).
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'CSS.stopRuleUsageTracking',
@@ -5001,7 +5001,7 @@ def take_coverage_delta() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.Tup
 
     :returns: A tuple with the following items:
 
-        0. **coverage** - 
+        0. **coverage** -
         1. **timestamp** - Monotonically increasing time, in seconds.
     '''
     cmd_dict: T_JSON_DICT = {
@@ -6969,7 +6969,7 @@ def resolve_values(
     :param property_name: *(Optional)* Only longhands and custom property names are accepted.
     :param pseudo_type: **(EXPERIMENTAL)** *(Optional)* Pseudo element type, only works for pseudo elements that generate elements in the tree, such as ::before and ::after.
     :param pseudo_identifier: **(EXPERIMENTAL)** *(Optional)* Pseudo element custom ident.
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['values'] = [i for i in values]
@@ -6999,7 +6999,7 @@ def get_longhand_properties(
 
     :param shorthand_name:
     :param value:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['shorthandName'] = shorthand_name
@@ -7121,7 +7121,7 @@ def get_media_queries() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.List[
     '''
     Returns all media queries parsed by the rendering engine.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'CSS.getMediaQueries',
@@ -7181,7 +7181,7 @@ def get_layers_for_node(
     **EXPERIMENTAL**
 
     :param node_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['nodeId'] = node_id.to_json()
@@ -7205,7 +7205,7 @@ def get_location_for_selector(
 
     :param style_sheet_id:
     :param selector_text:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['styleSheetId'] = style_sheet_id.to_json()
@@ -7547,7 +7547,7 @@ def stop_rule_usage_tracking() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typin
     Stop tracking rule usage and return the list of rules that were used since last call to
     ``takeCoverageDelta`` (or since start of coverage instrumentation).
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'CSS.stopRuleUsageTracking',
@@ -7563,7 +7563,7 @@ def take_coverage_delta() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.Tup
 
     :returns: A tuple with the following items:
 
-        0. **coverage** - 
+        0. **coverage** -
         1. **timestamp** - Monotonically increasing time, in seconds.
     '''
     cmd_dict: T_JSON_DICT = {

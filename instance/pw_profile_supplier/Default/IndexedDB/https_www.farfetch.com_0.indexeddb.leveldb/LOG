@@ -1,0 +1,36 @@
+2025/08/26-11:09:42.461 6c14 Reusing MANIFEST C:\Users\USER\tools\atelier-kyo-manager\instance\pw_profile_supplier\Default\IndexedDB\https_www.farfetch.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/08/26-11:09:42.461 6c14 Recovering log #206
+2025/08/26-11:09:42.462 6c14 Reusing old log C:\Users\USER\tools\atelier-kyo-manager\instance\pw_profile_supplier\Default\IndexedDB\https_www.farfetch.com_0.indexeddb.leveldb/000206.log
+2025/08/26-11:09:42.462 6c14 Delete type=2 #204
+2025/08/26-11:09:42.467 6c14 Level-0 table #211: started
+2025/08/26-11:09:42.470 6c14 Level-0 table #211: 322 bytes OK
+2025/08/26-11:09:42.473 6c14 Delete type=0 #206
+2025/08/26-11:09:42.474 6c14 Manual compaction at level-0 from '\x00o\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00p\x00\x00\x00' @ 0 : 0; will stop at '\x00p\x00\x00\x05' @ 6912 : 1
+2025/08/26-11:09:42.474 6c14 Compacting 1@0 + 1@1 files
+2025/08/26-11:09:42.478 6c14 Generated table #212@0: 476 keys, 6663 bytes
+2025/08/26-11:09:42.478 6c14 Compacted 1@0 + 1@1 files => 6663 bytes
+2025/08/26-11:09:42.479 6c14 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/08/26-11:09:42.480 6c14 Delete type=2 #211
+2025/08/26-11:09:42.480 3a64 Manual compaction at level-0 from '\x00p\x00\x00\x05' @ 6912 : 1 .. '\x00p\x00\x00\x00' @ 0 : 0; will stop at (end)
+2025/08/26-11:09:42.485 6c14 Level-0 table #214: started
+2025/08/26-11:09:42.487 6c14 Level-0 table #214: 1395 bytes OK
+2025/08/26-11:09:42.489 6c14 Delete type=2 #208
+2025/08/26-11:09:42.489 6c14 Delete type=0 #210
+2025/08/26-11:09:42.489 6c14 Manual compaction at level-0 from '\x00q\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00r\x00\x00\x00' @ 0 : 0; will stop at '\x00q\x01\x03\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 6953 : 1
+2025/08/26-11:09:42.489 6c14 Compacting 1@0 + 1@1 files
+2025/08/26-11:09:42.492 6c14 Generated table #215@0: 477 keys, 6707 bytes
+2025/08/26-11:09:42.493 6c14 Compacted 1@0 + 1@1 files => 6707 bytes
+2025/08/26-11:09:42.494 6c14 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/08/26-11:09:42.494 6c14 Delete type=2 #214
+2025/08/26-11:09:42.495 6c14 Manual compaction at level-0 from '\x00q\x01\x03\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 6953 : 1 .. '\x00r\x00\x00\x00' @ 0 : 0; will stop at (end)
+2025/08/26-11:09:44.887 5db0 Level-0 table #217: started
+2025/08/26-11:09:44.891 5db0 Level-0 table #217: 493 bytes OK
+2025/08/26-11:09:44.892 5db0 Delete type=2 #212
+2025/08/26-11:09:44.893 5db0 Delete type=0 #213
+2025/08/26-11:09:44.893 5db0 Manual compaction at level-0 from '\x00p\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00q\x00\x00\x00' @ 0 : 0; will stop at '\x00p\x00\x00\x05' @ 7017 : 0
+2025/08/26-11:09:44.894 5db0 Compacting 1@0 + 1@1 files
+2025/08/26-11:09:44.897 5db0 Generated table #218@0: 475 keys, 6678 bytes
+2025/08/26-11:09:44.897 5db0 Compacted 1@0 + 1@1 files => 6678 bytes
+2025/08/26-11:09:44.898 5db0 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/08/26-11:09:44.898 5db0 Delete type=2 #217
+2025/08/26-11:09:44.899 5db0 Manual compaction at level-0 from '\x00p\x00\x00\x05' @ 7017 : 0 .. '\x00q\x00\x00\x00' @ 0 : 0; will stop at (end)

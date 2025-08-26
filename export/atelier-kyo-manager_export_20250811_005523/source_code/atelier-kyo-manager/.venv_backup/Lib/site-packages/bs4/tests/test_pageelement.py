@@ -199,12 +199,12 @@ class TestFormatters(SoupTest):
         # encounter the first </pre> tag, because we know it's not
         # the one that put us into string literal mode.
         markup = """<div><pre><code>some
-<script><pre>code</pre></script> for you 
+<script><pre>code</pre></script> for you
 </code></pre></div>"""
 
         expect = """<div>
  <pre><code>some
-<script><pre>code</pre></script> for you 
+<script><pre>code</pre></script> for you
 </code></pre>
 </div>
 """

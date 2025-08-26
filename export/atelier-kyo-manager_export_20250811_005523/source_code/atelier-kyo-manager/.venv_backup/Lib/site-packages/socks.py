@@ -818,7 +818,7 @@ class socksocket(_BaseSocket):
                 # Protocol error while negotiating with proxy
                 self.close()
                 raise
-                
+
     @set_self_blocking
     def connect_ex(self, dest_pair):
         """ https://docs.python.org/3/library/socket.html#socket.socket.connect_ex
@@ -828,7 +828,7 @@ class socksocket(_BaseSocket):
             self.connect(dest_pair, catch_errors=True)
             return 0
         except OSError as e:
-            # If the error is numeric (socket errors are numeric), then return number as 
+            # If the error is numeric (socket errors are numeric), then return number as
             # connect_ex expects. Otherwise raise the error again (socket timeout for example)
             if e.errno:
                 return e.errno

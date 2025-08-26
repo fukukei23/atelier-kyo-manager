@@ -100,7 +100,7 @@ class BUYMACatalogManager:
 
         service = ChromeService(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        
+
         stealth(driver,
             languages=["ja-JP", "ja"],
             vendor="Google Inc.",
@@ -159,10 +159,10 @@ class BUYMACatalogManager:
         try:
             extract_dir = os.path.join(CONFIG['extracted_images_dir'], brand_name, catalog_id)
             os.makedirs(extract_dir, exist_ok=True)
-            
+
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_dir)
-            
+
             image_files = []
             for root, dirs, files in os.walk(extract_dir):
                 for file in files:
@@ -172,7 +172,7 @@ class BUYMACatalogManager:
                         new_path = os.path.join(extract_dir, new_filename)
                         os.rename(old_path, new_path)
                         image_files.append(new_path)
-            
+
             return len(image_files), image_files
         except Exception as e:
             print(f"ZIP解凍エラー: {e}")
@@ -186,22 +186,22 @@ class BUYMACatalogManager:
             'Referer': self.driver.current_url,
             'User-Agent': self.driver.execute_script("return navigator.userAgent;")
         }
-        
+
         response = session.get(url, headers=headers)
         if response.status_code == 200:
             file_hash = hashlib.md5(response.content).hexdigest()
             if catalog_id in self.downloaded_catalog_ids or file_hash in self.downloaded_hashes:
                 return False, None
-            
+
             save_dir = os.path.join(CONFIG['base_dir'], brand_name, catalog_id)
             os.makedirs(save_dir, exist_ok=True)
             zip_path = os.path.join(save_dir, f'catalog_{catalog_id}.zip')
-            
+
             with open(zip_path, 'wb') as f:
                 f.write(response.content)
-            
+
             image_count, image_files = self._extract_images_from_zip(zip_path, brand_name, catalog_id)
-            
+
             record = {
                 'brand': brand_name,
                 'catalog_id': catalog_id,
@@ -214,13 +214,13 @@ class BUYMACatalogManager:
                 'all_image_paths': '|'.join(image_files),
                 'status': 'success'
             }
-            
+
             self.csv_records.append(record)
             self.downloaded_hashes.add(file_hash)
             self.downloaded_catalog_ids.add(catalog_id)
-            
+
             self._add_to_google_sheet(record)
-            
+
             return True, record
         return False, None
 
@@ -247,7 +247,7 @@ class BUYMACatalogManager:
     def get_popular_brands(self, limit=50):
         return {
             203: "GUCCI",
-            290: "PRADA", 
+            290: "PRADA",
             142: "CHANEL",
             180: "HERMES",
             195: "LOUIS VUITTON",
@@ -284,30 +284,30 @@ class BUYMACatalogManager:
         try:
             self._force_close_modals()
             catalog_id = row.find_element(By.CSS_SELECTOR, 'span.catalogs-table__contents-id').text.strip()
-            
+
             image_cell = WebDriverWait(row, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, '.catalogs-table__image-item > .catalogs-table__image'))
             )
             ActionChains(self.driver).move_to_element(image_cell).pause(0.5).click().perform()
-            
+
             WebDriverWait(self.driver, 15).until(
                 EC.visibility_of_element_located((By.CSS_SELECTOR, ".catalogs-modal-table"))
             )
-            
+
             download_link = WebDriverWait(self.driver, 15).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "a.catalogs-modal-table__link"))
             )
             download_url = download_link.get_attribute('href')
-            
+
             success, record = self._download_file(download_url, brand_name, catalog_id)
             if success:
                 print(f"成功: {brand_name} {catalog_id} (画像{record['image_count']}枚)")
             else:
                 print(f"スキップ: {brand_name} {catalog_id}")
-            
+
             self._force_close_modals()
             return True
-            
+
         except Exception as e:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             self.driver.save_screenshot(os.path.join(CONFIG['screenshot_dir'], f'error_{timestamp}.png'))
@@ -324,17 +324,17 @@ class BUYMACatalogManager:
                 WebDriverWait(self.driver, 20).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, 'tr.catalogs-table__row'))
                 )
-                
+
                 rows = self.driver.find_elements(By.CSS_SELECTOR, 'tr.catalogs-table__row')
                 if not rows:
                     break
-                    
+
                 for row in rows:
                     if self.stop_flag:
                         return
                     self.process_catalog(row, brand_name)
                     self._human_like_delay()
-                
+
                 try:
                     next_btn = WebDriverWait(self.driver, 10).until(
                         EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.pagination__next:not([disabled])'))
@@ -352,24 +352,24 @@ class BUYMACatalogManager:
     def _save_csv_summary(self):
         if not self.csv_records:
             return
-        
+
         fieldnames = [
             'brand', 'catalog_id', 'zip_path', 'extracted_dir',
             'download_date', 'image_count', 'file_size',
             'first_image_path', 'all_image_paths', 'status'  # ← ここに'all_image_paths'を追加
         ]
-        
+
         with open(CONFIG['csv_path'], 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(self.csv_records)
-        
+
         print(f"詳細レポート保存: {CONFIG['csv_path']}")
-        
+
         total_downloads = len(self.csv_records)
         total_images = sum(record['image_count'] for record in self.csv_records)
         total_size_mb = sum(record['file_size'] for record in self.csv_records) / (1024 * 1024)
-        
+
         summary = f"""
 === ダウンロード完了サマリー ===
 総ダウンロード数: {total_downloads}件
@@ -386,25 +386,25 @@ Googleスプレッドシート: {'連携済み' if self.worksheet else '未接�
         try:
             if self.worksheet:
                 try:
-                    headers = ['Brand', 'Catalog_ID', 'ZIP_Path', 'Extracted_Dir', 
-                             'Download_Date', 'Image_Count', 'File_Size_Bytes', 
+                    headers = ['Brand', 'Catalog_ID', 'ZIP_Path', 'Extracted_Dir',
+                             'Download_Date', 'Image_Count', 'File_Size_Bytes',
                              'First_Image_Path', 'All_Image_Paths', 'Status']
                     self.worksheet.clear()
                     self.worksheet.append_row(headers)
                     print("Googleスプレッドシートヘッダー設定完了")
                 except Exception as e:
                     print(f"ヘッダー設定エラー: {e}")
-            
+
             self.driver.get('https://www.buyma.com/login/')
             input("手動ログイン後、Enterを押してください...\n（途中で止めたい場合はCtrl+C）")
 
             popular_brands = self.get_popular_brands(30)
             print(f"処理対象ブランド: {list(popular_brands.values())}")
-            
+
             for brand_id, brand_name in popular_brands.items():
                 if self._safety_check():
                     break
-                
+
                 print(f"\n{brand_name}の処理を開始します...")
                 catalog_url = f'https://www.buyma.com/my/sell/catalogs?brand_id={brand_id}'
                 self.process_pagination(catalog_url, brand_name)
@@ -440,7 +440,7 @@ if __name__ == "__main__":
     print("2. credentials.jsonがD:ルートにあること")
     print("3. スプレッドシートの共有設定（サービスアカウント追加）")
     print("-" * 50)
-    
+
     manager = BUYMACatalogManager()
     manager.main_flow()
 
@@ -535,7 +535,7 @@ class BUYMACatalogManager:
 
         service = ChromeService(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
-        
+
         stealth(driver,
             languages=["ja-JP", "ja"],
             vendor="Google Inc.",
@@ -594,10 +594,10 @@ class BUYMACatalogManager:
         try:
             extract_dir = os.path.join(CONFIG['extracted_images_dir'], brand_name, catalog_id)
             os.makedirs(extract_dir, exist_ok=True)
-            
+
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 zip_ref.extractall(extract_dir)
-            
+
             image_files = []
             for root, dirs, files in os.walk(extract_dir):
                 for file in files:
@@ -607,7 +607,7 @@ class BUYMACatalogManager:
                         new_path = os.path.join(extract_dir, new_filename)
                         os.rename(old_path, new_path)
                         image_files.append(new_path)
-            
+
             return len(image_files), image_files
         except Exception as e:
             print(f"ZIP解凍エラー: {e}")
@@ -621,22 +621,22 @@ class BUYMACatalogManager:
             'Referer': self.driver.current_url,
             'User-Agent': self.driver.execute_script("return navigator.userAgent;")
         }
-        
+
         response = session.get(url, headers=headers)
         if response.status_code == 200:
             file_hash = hashlib.md5(response.content).hexdigest()
             if catalog_id in self.downloaded_catalog_ids or file_hash in self.downloaded_hashes:
                 return False, None
-            
+
             save_dir = os.path.join(CONFIG['base_dir'], brand_name, catalog_id)
             os.makedirs(save_dir, exist_ok=True)
             zip_path = os.path.join(save_dir, f'catalog_{catalog_id}.zip')
-            
+
             with open(zip_path, 'wb') as f:
                 f.write(response.content)
-            
+
             image_count, image_files = self._extract_images_from_zip(zip_path, brand_name, catalog_id)
-            
+
             record = {
                 'brand': brand_name,
                 'catalog_id': catalog_id,
@@ -649,13 +649,13 @@ class BUYMACatalogManager:
                 'all_image_paths': '|'.join(image_files),
                 'status': 'success'
             }
-            
+
             self.csv_records.append(record)
             self.downloaded_hashes.add(file_hash)
             self.downloaded_catalog_ids.add(catalog_id)
-            
+
             self._add_to_google_sheet(record)
-            
+
             return True, record
         return False, None
 
@@ -682,7 +682,7 @@ class BUYMACatalogManager:
     def get_popular_brands(self, limit=50):
         return {
             203: "GUCCI",
-            290: "PRADA", 
+            290: "PRADA",
             142: "CHANEL",
             180: "HERMES",
             195: "LOUIS VUITTON",
@@ -719,30 +719,30 @@ class BUYMACatalogManager:
         try:
             self._force_close_modals()
             catalog_id = row.find_element(By.CSS_SELECTOR, 'span.catalogs-table__contents-id').text.strip()
-            
+
             image_cell = WebDriverWait(row, 10).until(
                 EC.presence_of_element_located((By.CSS_SELECTOR, '.catalogs-table__image-item > .catalogs-table__image'))
             )
             ActionChains(self.driver).move_to_element(image_cell).pause(0.5).click().perform()
-            
+
             WebDriverWait(self.driver, 15).until(
                 EC.visibility_of_element_located((By.CSS_SELECTOR, ".catalogs-modal-table"))
             )
-            
+
             download_link = WebDriverWait(self.driver, 15).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "a.catalogs-modal-table__link"))
             )
             download_url = download_link.get_attribute('href')
-            
+
             success, record = self._download_file(download_url, brand_name, catalog_id)
             if success:
                 print(f"成功: {brand_name} {catalog_id} (画像{record['image_count']}枚)")
             else:
                 print(f"スキップ: {brand_name} {catalog_id}")
-            
+
             self._force_close_modals()
             return True
-            
+
         except Exception as e:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
             self.driver.save_screenshot(os.path.join(CONFIG['screenshot_dir'], f'error_{timestamp}.png'))
@@ -759,17 +759,17 @@ class BUYMACatalogManager:
                 WebDriverWait(self.driver, 20).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, 'tr.catalogs-table__row'))
                 )
-                
+
                 rows = self.driver.find_elements(By.CSS_SELECTOR, 'tr.catalogs-table__row')
                 if not rows:
                     break
-                    
+
                 for row in rows:
                     if self.stop_flag:
                         return
                     self.process_catalog(row, brand_name)
                     self._human_like_delay()
-                
+
                 try:
                     next_btn = WebDriverWait(self.driver, 10).until(
                         EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.pagination__next:not([disabled])'))
@@ -787,24 +787,24 @@ class BUYMACatalogManager:
     def _save_csv_summary(self):
         if not self.csv_records:
             return
-        
+
         fieldnames = [
             'brand', 'catalog_id', 'zip_path', 'extracted_dir',
             'download_date', 'image_count', 'file_size',
             'first_image_path', 'all_image_paths', 'status'  # ← ここに'all_image_paths'を追加
         ]
-        
+
         with open(CONFIG['csv_path'], 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(self.csv_records)
-        
+
         print(f"詳細レポート保存: {CONFIG['csv_path']}")
-        
+
         total_downloads = len(self.csv_records)
         total_images = sum(record['image_count'] for record in self.csv_records)
         total_size_mb = sum(record['file_size'] for record in self.csv_records) / (1024 * 1024)
-        
+
         summary = f"""
 === ダウンロード完了サマリー ===
 総ダウンロード数: {total_downloads}件
@@ -821,25 +821,25 @@ Googleスプレッドシート: {'連携済み' if self.worksheet else '未接�
         try:
             if self.worksheet:
                 try:
-                    headers = ['Brand', 'Catalog_ID', 'ZIP_Path', 'Extracted_Dir', 
-                             'Download_Date', 'Image_Count', 'File_Size_Bytes', 
+                    headers = ['Brand', 'Catalog_ID', 'ZIP_Path', 'Extracted_Dir',
+                             'Download_Date', 'Image_Count', 'File_Size_Bytes',
                              'First_Image_Path', 'All_Image_Paths', 'Status']
                     self.worksheet.clear()
                     self.worksheet.append_row(headers)
                     print("Googleスプレッドシートヘッダー設定完了")
                 except Exception as e:
                     print(f"ヘッダー設定エラー: {e}")
-            
+
             self.driver.get('https://www.buyma.com/login/')
             input("手動ログイン後、Enterを押してください...\n（途中で止めたい場合はCtrl+C）")
 
             popular_brands = self.get_popular_brands(30)
             print(f"処理対象ブランド: {list(popular_brands.values())}")
-            
+
             for brand_id, brand_name in popular_brands.items():
                 if self._safety_check():
                     break
-                
+
                 print(f"\n{brand_name}の処理を開始します...")
                 catalog_url = f'https://www.buyma.com/my/sell/catalogs?brand_id={brand_id}'
                 self.process_pagination(catalog_url, brand_name)
@@ -875,7 +875,7 @@ if __name__ == "__main__":
     print("2. credentials.jsonがD:ルートにあること")
     print("3. スプレッドシートの共有設定（サービスアカウント追加）")
     print("-" * 50)
-    
+
     manager = BUYMACatalogManager()
     manager.main_flow()
 

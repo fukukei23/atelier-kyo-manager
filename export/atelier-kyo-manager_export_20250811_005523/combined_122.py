@@ -1166,7 +1166,7 @@ class RuleSet:
     #: Source text of JSON representing the rule set. If it comes from
     #: ``script`` tag, it is the textContent of the node. Note that it is
     #: a JSON for valid case.
-    #: 
+    #:
     #: See also:
     #: - https://wicg.github.io/nav-speculation/speculation-rules.html
     #: - https://github.com/WICG/nav-speculation/blob/main/triggers.md
@@ -1178,7 +1178,7 @@ class RuleSet:
     #: the BackendNodeId of the relevant ``script`` tag. For the second
     #: case, we include the external URL where the rule set was loaded
     #: from, and also RequestId if Network domain is enabled.
-    #: 
+    #:
     #: See also:
     #: - https://wicg.github.io/nav-speculation/speculation-rules.html#speculation-rules-script
     #: - https://wicg.github.io/nav-speculation/speculation-rules.html#speculation-rules-header
@@ -1726,7 +1726,7 @@ class RuleSet:
     #: Source text of JSON representing the rule set. If it comes from
     #: ``script`` tag, it is the textContent of the node. Note that it is
     #: a JSON for valid case.
-    #: 
+    #:
     #: See also:
     #: - https://wicg.github.io/nav-speculation/speculation-rules.html
     #: - https://github.com/WICG/nav-speculation/blob/main/triggers.md
@@ -1738,7 +1738,7 @@ class RuleSet:
     #: the BackendNodeId of the relevant ``script`` tag. For the second
     #: case, we include the external URL where the rule set was loaded
     #: from, and also RequestId if Network domain is enabled.
-    #: 
+    #:
     #: See also:
     #: - https://wicg.github.io/nav-speculation/speculation-rules.html#speculation-rules-script
     #: - https://wicg.github.io/nav-speculation/speculation-rules.html#speculation-rules-header
@@ -4521,7 +4521,7 @@ class RuleSet:
     #: Source text of JSON representing the rule set. If it comes from
     #: ``script`` tag, it is the textContent of the node. Note that it is
     #: a JSON for valid case.
-    #: 
+    #:
     #: See also:
     #: - https://wicg.github.io/nav-speculation/speculation-rules.html
     #: - https://github.com/WICG/nav-speculation/blob/main/triggers.md
@@ -4533,7 +4533,7 @@ class RuleSet:
     #: the BackendNodeId of the relevant ``script`` tag. For the second
     #: case, we include the external URL where the rule set was loaded
     #: from, and also RequestId if Network domain is enabled.
-    #: 
+    #:
     #: See also:
     #: - https://wicg.github.io/nav-speculation/speculation-rules.html#speculation-rules-script
     #: - https://wicg.github.io/nav-speculation/speculation-rules.html#speculation-rules-header

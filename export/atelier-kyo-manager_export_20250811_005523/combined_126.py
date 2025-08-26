@@ -6018,7 +6018,7 @@ def take_response_body_as_stream(
     domain before body is received results in an undefined behavior.
 
     :param request_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['requestId'] = request_id.to_json()
@@ -6525,7 +6525,7 @@ def take_response_body_as_stream(
     domain before body is received results in an undefined behavior.
 
     :param request_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['requestId'] = request_id.to_json()
@@ -7032,7 +7032,7 @@ def take_response_body_as_stream(
     domain before body is received results in an undefined behavior.
 
     :param request_id:
-    :returns: 
+    :returns:
     '''
     params: T_JSON_DICT = dict()
     params['requestId'] = request_id.to_json()

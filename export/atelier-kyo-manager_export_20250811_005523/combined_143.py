@@ -2301,9 +2301,9 @@ def get_dom_counters() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.Tuple[
 
     :returns: A tuple with the following items:
 
-        0. **documents** - 
-        1. **nodes** - 
-        2. **jsEventListeners** - 
+        0. **documents** -
+        1. **nodes** -
+        2. **jsEventListeners** -
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getDOMCounters',
@@ -2421,7 +2421,7 @@ def get_all_time_sampling_profile() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,
     Retrieve native memory allocations profile
     collected since renderer process startup.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getAllTimeSamplingProfile',
@@ -2435,7 +2435,7 @@ def get_browser_sampling_profile() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,S
     Retrieve native memory allocations profile
     collected since browser process startup.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getBrowserSamplingProfile',
@@ -2449,7 +2449,7 @@ def get_sampling_profile() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,SamplingP
     Retrieve native memory allocations profile collected since last
     ``startSampling`` call.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getSamplingProfile',
@@ -2606,9 +2606,9 @@ def get_dom_counters() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.Tuple[
 
     :returns: A tuple with the following items:
 
-        0. **documents** - 
-        1. **nodes** - 
-        2. **jsEventListeners** - 
+        0. **documents** -
+        1. **nodes** -
+        2. **jsEventListeners** -
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getDOMCounters',
@@ -2726,7 +2726,7 @@ def get_all_time_sampling_profile() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,
     Retrieve native memory allocations profile
     collected since renderer process startup.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getAllTimeSamplingProfile',
@@ -2740,7 +2740,7 @@ def get_browser_sampling_profile() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,S
     Retrieve native memory allocations profile
     collected since browser process startup.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getBrowserSamplingProfile',
@@ -2754,7 +2754,7 @@ def get_sampling_profile() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,SamplingP
     Retrieve native memory allocations profile collected since last
     ``startSampling`` call.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getSamplingProfile',
@@ -2911,9 +2911,9 @@ def get_dom_counters() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.Tuple[
 
     :returns: A tuple with the following items:
 
-        0. **documents** - 
-        1. **nodes** - 
-        2. **jsEventListeners** - 
+        0. **documents** -
+        1. **nodes** -
+        2. **jsEventListeners** -
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getDOMCounters',
@@ -3031,7 +3031,7 @@ def get_all_time_sampling_profile() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,
     Retrieve native memory allocations profile
     collected since renderer process startup.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getAllTimeSamplingProfile',
@@ -3045,7 +3045,7 @@ def get_browser_sampling_profile() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,S
     Retrieve native memory allocations profile
     collected since browser process startup.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getBrowserSamplingProfile',
@@ -3059,7 +3059,7 @@ def get_sampling_profile() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,SamplingP
     Retrieve native memory allocations profile collected since last
     ``startSampling`` call.
 
-    :returns: 
+    :returns:
     '''
     cmd_dict: T_JSON_DICT = {
         'method': 'Memory.getSamplingProfile',

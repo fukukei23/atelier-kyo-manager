@@ -19,7 +19,7 @@ class DescriptionGenerator:
         使用するモデルを 'gemini' または 'deepseek' から選択できる。
         """
         logging.info(f"Generating description for product: {product_info.get('name', 'N/A')}")
-        
+
         # あなたが作り上げた、高品質な出力を引き出すプロンプトを維持・活用します
         prompt = f"""
 あなたはBUYMA専門のプロのコピーライターです。
@@ -40,7 +40,7 @@ class DescriptionGenerator:
 - 「激安」「最安値」といった安易な表現は絶対に使用しないでください。
 - 最後に、商品の魅力を要約するような、心を動かす一文を添えてください。
 """
-        
+
         description = self.controller.generate(prompt, model_name=model_name)
         logging.info(f"Successfully generated description using {model_name}.")
         return description
@@ -60,7 +60,7 @@ if __name__ == '__main__':
     # 実際の使用時は、Flaskのルート（routes.pyなど）から呼び出してください。
     print("これは商品説明文生成モジュールです。")
     print("Flaskアプリケーションのルートから呼び出して使用してください。")
-    
+
     # --- 使用方法のサンプル ---
     # from app.utils.ai_generate_descriptions import DescriptionGenerator
     #

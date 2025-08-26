@@ -21,7 +21,7 @@ from app.utils.ai_llm_controller import AILlmController
 def test_deepseek_connection():
     """DeepSeekへの接続と応答をテストする関数"""
     print("--- DeepSeek 接続テスト開始 ---")
-    
+
     app = create_app()
     with app.app_context():
         try:
@@ -35,7 +35,7 @@ def test_deepseek_connection():
 
             print("3. DeepSeekにリクエストを送信中...")
             response = controller.generate(prompt, model_name='deepseek')
-            
+
             if response.startswith("エラー:"):
                 print("\n--- テスト結果 ---")
                 print("❌ テストに失敗しました。コントローラーからのエラーメッセージ:")

@@ -1,0 +1,14 @@
+2025/08/26-06:12:27.998 6870 Reusing MANIFEST C:\Users\USER\tools\atelier-kyo-manager\instance\pw_profile_supplier\Default\IndexedDB\https_www.farfetch.com_0.indexeddb.leveldb/MANIFEST-000001
+2025/08/26-06:12:27.999 6870 Recovering log #202
+2025/08/26-06:12:27.999 6870 Reusing old log C:\Users\USER\tools\atelier-kyo-manager\instance\pw_profile_supplier\Default\IndexedDB\https_www.farfetch.com_0.indexeddb.leveldb/000202.log
+2025/08/26-06:12:27.999 6870 Delete type=2 #200
+2025/08/26-06:12:28.185 2eec Level-0 table #207: started
+2025/08/26-06:12:28.193 2eec Level-0 table #207: 1406 bytes OK
+2025/08/26-06:12:28.195 2eec Delete type=0 #202
+2025/08/26-06:12:28.196 25d8 Manual compaction at level-0 from '\x00o\x00\x00\x00' @ 72057594037927935 : 1 .. '\x00p\x00\x00\x00' @ 0 : 0; will stop at '\x00o\x01\x03\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 6858 : 1
+2025/08/26-06:12:28.199 25d8 Compacting 1@0 + 1@1 files
+2025/08/26-06:12:28.207 25d8 Generated table #208@0: 473 keys, 6617 bytes
+2025/08/26-06:12:28.207 25d8 Compacted 1@0 + 1@1 files => 6617 bytes
+2025/08/26-06:12:28.209 25d8 compacted to: files[ 0 1 1 0 0 0 0 ]
+2025/08/26-06:12:28.210 25d8 Delete type=2 #207
+2025/08/26-06:12:28.210 27f4 Manual compaction at level-0 from '\x00o\x01\x03\x03\x00\x00\x00\x00\x00\x00\xf0?' @ 6858 : 1 .. '\x00p\x00\x00\x00' @ 0 : 0; will stop at (end)
