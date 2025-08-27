@@ -49,3 +49,10 @@ dist/
 # (もしあれば) 開発用のローカルデータベース
 instance/site.db
 db.sqlite3
+
+# Orchestrator 実行ログ（都度生成されるので Git 管理しない）
+output/research_*.json
+
++# --- Research logs (毎回生成されるのでバージョン管理不要) ---
++output/research_*.json
++
