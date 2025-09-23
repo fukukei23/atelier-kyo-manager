@@ -1,0 +1,7 @@
+{
+  "proposed_selectors": [
+    ".product-card__title",
+    "a[data-e2e='product-link']"
+  ],
+  "rationale": "提供されたHTMLスニペットと失敗したセレクタに基づき、より安定している可能性が高いテストIDまたはBEMスタイルのクラス名を提案します。"
+}

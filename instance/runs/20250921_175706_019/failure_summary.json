@@ -1,0 +1,7 @@
+{
+  "error_type": "AttributeError",
+  "error_message": "'coroutine' object has no attribute 'get'",
+  "site": "GIVENCHY_OFFICIAL",
+  "query": "Givenchy",
+  "attempt": 1
+}

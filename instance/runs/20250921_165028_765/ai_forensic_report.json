@@ -1,0 +1,15 @@
+{
+  "ai_analysis": {
+    "diagnosis": "ナビゲーション中にタイムアウトが発生しました。",
+    "root_cause": "ターゲットサイトの応答が遅いか、表示を待機すべき特定の要素（セレクタ）がDOM上に存在しなかった可能性があります。",
+    "recommended_action": "config/overrides.local.jsonの該当サイト設定で、`timeout_sec`を延長するか、`wait_for_selectors`の値を見直してください。"
+  },
+  "evidence_links": {
+    "system_log": "C:\\Users\\USER\\tools\\atelier-kyo-manager\\instance\\runs\\20250921_165028_765\\system.log",
+    "console_log": "C:\\Users\\USER\\tools\\atelier-kyo-manager\\instance\\runs\\20250921_165028_765\\console.log",
+    "trace_file": "C:\\Users\\USER\\tools\\atelier-kyo-manager\\instance\\runs\\20250921_165028_765\\trace.zip",
+    "har_file": "C:\\Users\\USER\\tools\\atelier-kyo-manager\\instance\\runs\\20250921_165028_765\\network.har",
+    "screenshots_directory": "C:\\Users\\USER\\tools\\atelier-kyo-manager\\instance\\runs\\20250921_165028_765\\screenshots",
+    "final_settings": "C:\\Users\\USER\\tools\\atelier-kyo-manager\\instance\\runs\\20250921_165028_765\\resolved_settings.json"
+  }
+}
