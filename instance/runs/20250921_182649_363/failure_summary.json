@@ -1,0 +1,7 @@
+{
+  "error_type": "RuntimeError",
+  "error_message": "自己修復の最大試行回数 (3) に達しました。",
+  "site": "GIVENCHY_OFFICIAL",
+  "query": "Givenchy",
+  "attempt": 3
+}

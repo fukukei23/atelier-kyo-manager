@@ -1,0 +1,7 @@
+{
+  "error_type": "TypeError",
+  "error_message": "SelfHealingAgent.execute() got an unexpected keyword argument 'attempt'",
+  "site": "GIVENCHY_OFFICIAL",
+  "query": "Givenchy",
+  "attempt": 1
+}
