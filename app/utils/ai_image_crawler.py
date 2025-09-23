@@ -31,7 +31,7 @@ from selenium.common.exceptions import TimeoutException
 
 # Flask 経由でなく単体実行も可能にするための config 読み込み
 try:
-    from config import Config
+    from app.config.config import Config
 except ImportError:
     raise ImportError("config.py が見つかりません。プロジェクトルートに config.py を配置してください。")
 

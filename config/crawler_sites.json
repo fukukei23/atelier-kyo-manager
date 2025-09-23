@@ -1,9 +1,0 @@
-{
-  "farfetch": {
-    "cookie_accept_selector": "button[aria-label=\"Accept\"]",
-    "search_input_selector": "input[type=\"search\"]",
-    "search_result_link_selector": "a[data-component*=\"ProductCard\"]",
-    "structured_data_selector": "script[type=\"application/ld+json\"]",
-    "search_url_template": "https://www.farfetch.com/jp/shopping/women/search/items.aspx?q={query}"
-  }
-}
