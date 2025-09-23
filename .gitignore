@@ -1,17 +1,21 @@
 # メモ:
+# 日付: 2025年9月23日 (日本時間)
 # フォルダ名: atelier-kyo-manager/
 # ファイル名: .gitignore (完成版)
-# 使い方: この内容で既存のファイルを完全に上書きしてください。
-# 役割: Gitのバージョン管理から、秘密情報や不要なファイルを除外します。
+# 使い方: この内容で既存の .gitignore ファイルを完全に上書きしてください。
+# 役割: Gitのバージョン管理から、秘密情報、環境依存ファイル、自動生成される成果物を一括で除外します。
 
-# --- Secrets ---
-# APIキーやパスワードなどの秘密情報。これは最重要です。
+# --- Secrets (秘密情報) ---
+# APIキーやパスワードなど。リポジトリに含めてはいけない最重要ファイル。
 .env
-# .envのテンプレートファイルは、必要な環境変数を周知するためにGit管理に含めることがあります。
+
+# .envのテンプレートファイルは、必要な環境変数を周知するためにリポジトリに含めます。
+# `!` は「無視しない」という例外ルールです。
 !.env.template
 
-# --- Virtual Environments ---
-# 仮想環境フォルダはOSや環境ごとに異なり、リポジトリに含めるべきではありません。
+
+# --- Python Virtual Environments (仮想環境) ---
+# OSや環境ごとに異なり、サイズも大きいためリポジトリに含めません。
 .venv/
 venv/
 ENV/
@@ -19,40 +23,47 @@ env/
 env.bak/
 venv.bak/
 
-# --- Python Cache & Compiled Files ---
-# Pythonが自動生成するキャッシュファイル。不要であり、コンフリクトの原因になります。
+
+# --- Python Cache & Compiled Files (キャッシュ) ---
+# Pythonが実行時に自動生成するファイル。不要であり、コンフリクトの原因になります。
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 
-# --- IDE / Editor Settings ---
-# 個人の開発環境設定をリポジトリから除外します。
+
+# --- IDE / Editor Settings (開発環境の設定) ---
+# 個人のエディタ設定が他の開発者に影響を与えないようにします。
 .vscode/
 .idea/
 
-# --- Project-Specific Ignores ---
-# エージェントがエラー時に自動生成するスクリーンショットフォルダ
-error_screenshots/
 
-# ログファイルやフォルダ
+# --- Generated Outputs & Logs (生成物とログ) ---
+# アプリケーションが実行時に生成するすべてのファイル/フォルダ。
+# レポート(HTML/CSV/PNG)、履歴(JSON)、デバッグ情報などを一括で除外します。
+output/
 logs/
 *.log
+error_screenshots/
 
-# --- Distribution / Packaging ---
-# wheelやsdistを作成する際に生成されるフォルダ（将来的な拡張のため）
+# 開発用のデバッグ成果物（スクリーンショットやHTMLレスポンスなど）。
+instance/supplier_debug/
+
+
+# --- Distribution / Packaging (パッケージング) ---
+# ライブラリとして配布する際に生成されるフォルダ（将来的な拡張のため）。
 build/
 dist/
 *.egg-info/
 
-# --- Django/Flask specific ---
-# (もしあれば) 開発用のローカルデータベース
+
+# --- Framework Specific (フレームワーク固有) ---
+# 開発用のローカルデータベースなど。
 instance/site.db
 db.sqlite3
 
-# Orchestrator 実行ログ（都度生成されるので Git 管理しない）
-output/research_*.json
 
-+# --- Research logs (毎回生成されるのでバージョン管理不要) ---
-+output/research_*.json
-+
+# --- OS Generated Files (OSが自動生成するファイル) ---
+# macOSやWindowsが自動で生成する隠しファイル。
+.DS_Store
+Thumbs.db
