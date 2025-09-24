@@ -67,3 +67,5 @@ db.sqlite3
 # macOSやWindowsが自動で生成する隠しファイル。
 .DS_Store
 Thumbs.db
+
+/instance/pw_profiles/
