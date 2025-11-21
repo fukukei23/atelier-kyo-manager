@@ -1,0 +1,119 @@
+{
+    "MONCLER_OFFICIAL": {
+        "proxies": [
+            {
+                "label": "webshare_gb_01",
+                "host": "86.38.26.102",
+                "port": 6267,
+                "server": "http://86.38.26.102:6267",
+                "username": "yurwciqk",
+                "password": "har86tufqrkb",
+                "country": "GB",
+                "city": "Unknown",
+                "active": true
+            },
+            {
+                "label": "webshare_gb_02",
+                "host": "45.43.65.31",
+                "port": 6545,
+                "server": "http://45.43.65.31:6545",
+                "username": "yurwciqk",
+                "password": "har86tufqrkb",
+                "country": "GB",
+                "city": "Unknown",
+                "active": true
+            },
+            {
+                "label": "webshare_gb_03",
+                "host": "151.245.205.79",
+                "port": 5274,
+                "server": "http://151.245.205.79:5274",
+                "username": "yurwciqk",
+                "password": "har86tufqrkb",
+                "country": "GB",
+                "city": "Unknown",
+                "active": true
+            },
+            {
+                "label": "webshare_gb_04",
+                "host": "64.137.93.61",
+                "port": 6518,
+                "server": "http://64.137.93.61:6518",
+                "username": "yurwciqk",
+                "password": "har86tufqrkb",
+                "country": "GB",
+                "city": "Unknown",
+                "active": true
+            },
+            {
+                "label": "webshare_gb_05",
+                "host": "104.249.55.3",
+                "port": 6371,
+                "server": "http://104.249.55.3:6371",
+                "username": "yurwciqk",
+                "password": "har86tufqrkb",
+                "country": "GB",
+                "city": "Unknown",
+                "active": true
+            },
+            {
+                "label": "webshare_gb_06",
+                "host": "107.181.132.201",
+                "port": 6179,
+                "server": "http://107.181.132.201:6179",
+                "username": "yurwciqk",
+                "password": "har86tufqrkb",
+                "country": "GB",
+                "city": "Unknown",
+                "active": true
+            },
+            {
+                "label": "webshare_gb_07",
+                "host": "64.137.93.173",
+                "port": 6630,
+                "server": "http://64.137.93.173:6630",
+                "username": "yurwciqk",
+                "password": "har86tufqrkb",
+                "country": "GB",
+                "city": "Unknown",
+                "active": true
+            },
+            {
+                "label": "webshare_gb_08",
+                "host": "37.44.218.215",
+                "port": 5898,
+                "server": "http://37.44.218.215:5898",
+                "username": "yurwciqk",
+                "password": "har86tufqrkb",
+                "country": "GB",
+                "city": "Unknown",
+                "active": true
+            },
+            {
+                "label": "webshare_gb_09",
+                "host": "198.105.121.146",
+                "port": 6408,
+                "server": "http://198.105.121.146:6408",
+                "username": "yurwciqk",
+                "password": "har86tufqrkb",
+                "country": "GB",
+                "city": "Unknown",
+                "active": true
+            },
+            {
+                "label": "webshare_gb_10",
+                "host": "107.181.142.241",
+                "port": 5834,
+                "server": "http://107.181.142.241:5834",
+                "username": "yurwciqk",
+                "password": "har86tufqrkb",
+                "country": "GB",
+                "city": "Unknown",
+                "active": true
+            }
+        ]
+    },
+    "DEFAULT": {
+        "proxies": []
+    }
+}

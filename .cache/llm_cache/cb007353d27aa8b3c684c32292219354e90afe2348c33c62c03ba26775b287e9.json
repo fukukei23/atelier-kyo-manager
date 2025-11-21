@@ -1,0 +1,25 @@
+{
+  "success": true,
+  "error": null,
+  "provider": "openai",
+  "model": "gpt-4o-mini",
+  "content": "```json\n{\n  \"diagnosis\": \"MONCLER_OFFICIALサイトでのデータ取得に失敗した。\",\n  \"root_cause\": \"サイトの構造変更またはAPIのエンドポイントが無効になったため、要求が正しく処理されなかった可能性がある。\",\n  \"recommended_action\": \"サイトのHTML構造やAPIドキュメントを再確認し、最新のエンドポイントやクラス名を使用するようにコードを修正する。\"\n}\n```",
+  "tool_calls": null,
+  "usage": {
+    "prompt_tokens": 175,
+    "completion_tokens": 111,
+    "total_tokens": 286
+  },
+  "cost": 0.00254,
+  "latency_ms": 5671,
+  "sentiment": "NEUTRAL",
+  "text": "```json\n{\n  \"diagnosis\": \"MONCLER_OFFICIALサイトでのデータ取得に失敗した。\",\n  \"root_cause\": \"サイトの構造変更またはAPIのエンドポイントが無効になったため、要求が正しく処理されなかった可能性がある。\",\n  \"recommended_action\": \"サイトのHTML構造やAPIドキュメントを再確認し、最新のエンドポイントやクラス名を使用するようにコードを修正する。\"\n}\n```",
+  "tokens": {
+    "prompt_tokens": 175,
+    "completion_tokens": 111,
+    "total_tokens": 286
+  },
+  "cost_usd": 0.00254,
+  "model_family": "openai",
+  "cached": false
+}
