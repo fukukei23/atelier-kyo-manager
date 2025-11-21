@@ -69,3 +69,18 @@ db.sqlite3
 Thumbs.db
 
 /instance/pw_profiles/
+/instance/runs/
+
+# Playwright / browser cache profiles
+/instance/pw_profile/
+/instance/pw_profile_supplier/
+
+# Temporary video frames
+/tmp/video_frames/
+
+# Exported archives / generated packs
+/exports/
+/exports_atelier/
+
+# Misc generated backups
+app/models_backup.py

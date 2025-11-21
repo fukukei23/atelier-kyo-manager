@@ -1,0 +1,35 @@
+Atelier-Kyo 開発方針宣言　2025.11.5目的:
+ 常に 実際のスクレイピング・観測結果 に基づいてシステムを自己進化させる。
+ 机上修正ではなく、「AIエージェントが現場で見た事実（DOM・URL・レスポンス）」から自動生成された差分を分析・保存・再利用し、次の実行サイクルに反映させる。🔁 基本サイクル（理想の状態）Run Phase – 実行／観測
+run_orchestrator.py を実行し、BrowserUseAgent や ProxyScrapeAgent が実サイトを巡回。
+ページDOM・URL遷移・トラップ判定などをAIエージェントがリアルに観測。
+Detect Phase – 異常検知
+落とし穴（locale trap / legal page / redirect loop など）を実行ログベースで検出。
+失敗パターンを failure_context として構造化保存（URL・DOM・タイムスタンプ）。
+Heal Phase – 自動修復
+SelfHealingAgent / GPTIntegration / CodeUpdateAgent が協調し、
+LLMにより根因分析（どのセレクタ・正規化ルールが欠落していたか）
+修正提案（selectors・regex・hard_redirectsなど）を生成。
+Diff Phase – 差分生成
+CodeUpdateAgent が app/config/sites/*.json と照合し、
+ 自動で .diff / .patch を生成・保存。
+exports/patches/ に差分ファイル、exports/llm_proposals/ に提案JSONを保存。
+Learn Phase – 次回への継承
+新しい差分・提案を pinned 設定や Knowledge Base に統合。
+これにより 次回実行時に同じ失敗を再発しない。
+🧠 原則観測→提案→差分→学習 の循環を絶対に切らない。
+人間は “提案の承認者・監督者” であり、修正そのものはエージェントが担う。
+変更の根拠は常に「実際の観測ログ」または「エージェント生成パッチ」に基づく。
+すべての修正・提案・ログは時系列とRunIDで管理し、再現可能性を担保。
+“手動の勘修正” は最小限に留め、エージェントが自ら改善ループを学習できる状態を維持する。
+⚙️ 技術的要点ログ・DOM・HAR・スナップショットを毎回保存。
+HEAL_WRITE_MODE=patch と HEAL_WRITE_DIR=exports/patches を必ずON。
+GPTIntegration により LLM 提案（selectors, regex, redirects）を JSON 出力。
+CodeUpdateAgent が提案JSONを解析して .diff を自動生成。
+SelfHealingAgent が提案を再評価し、次実行前に自動適用。
+成果物（差分・提案・ログ）は KnowledgeCuratorAgent が整理・再学習。
+🧩 この方針のゴール「AIが自ら観測し、失敗を理解し、修復案を生成し、次に活かす」
+ つまり 自己修復型・自己進化型スクレイピング基盤 の完成。📜 ChatGPTへの固定プロンプト例私は次の原則を守っています。
+ 私の開発では、エージェントを実際に走らせてスクレイピングを行い、その観測結果に基づいて自動生成された差分（.diff/.patch）を保存し、次回以降の実行で学習・適用する循環を確立しています。
+ したがって、あなたの提案は必ず「実地観測データから得られる差分生成と適用」という前提を維持してください。
+ 手動修正ではなく、エージェントの自己進化ループを中核とした設計を一貫して進めます。
