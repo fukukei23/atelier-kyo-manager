@@ -1,0 +1,33 @@
+{
+  "url_rules": {
+    "normalize": [
+      {
+        "pattern": "^https?://www\\.moncler\\.com/(?:([a-z]{2}(?:-[a-z]{2})?)/)?$",
+        "rewrite": "https://www.moncler.com/$1men/ready-to-wear/jackets/"
+      }
+    ],
+    "blocklist": [
+      "^https?://(www\\.)?monclergroup\\.com/.*"
+    ]
+  },
+  "selectors_patch": {},
+  "rationale": "The failure occurred because the homepage (/en-jp/) is not a PLP and contains no product tiles. A safe fix is to normalize root URLs to a known category PLP while preserving the locale segment, and to dismiss the cookie banner that can block interactions. This avoids unexpected modals/layouts and leverages existing selectors on an actual PLP.",
+  "risk": "medium",
+  "code_hints": [
+    "Before starting extraction, if current URL is the site root (with or without a locale segment), rewrite to `${root}/{locale-or-empty}men/ready-to-wear/jackets/` to land on a stable PLP.",
+    "After navigation, attempt to click the OneTrust cookie accept button `#onetrust-accept-btn-handler` if present; ignore errors if not found.",
+    "Wait for any of the PLP grid/tile selectors in overrides.wait_for_selectors; once present, perform a short progressive scroll to ensure tiles render before querying.",
+    "Reuse existing PLP/PDP selectors; no change required unless PLP still fails. If it does, log DOM and consider adding a specific tile selector observed at runtime."
+  ],
+  "overrides_patch": {
+    "pre_click_selectors": [
+      "#onetrust-accept-btn-handler"
+    ],
+    "wait_for_selectors": [
+      "[data-testid='product-tile']",
+      ".product-tile",
+      ".product-grid, [data-component='ProductGrid']"
+    ],
+    "scroll_strategy": "progressive"
+  }
+}

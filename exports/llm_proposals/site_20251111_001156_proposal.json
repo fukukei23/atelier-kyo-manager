@@ -1,0 +1,63 @@
+{
+  "overrides_patch": {
+    "wait_for_selectors": {
+      "pre_click": [
+        "#onetrust-accept-btn-handler",
+        "button[aria-label*='Accept'][id*='onetrust']",
+        "button:has-text('Accept All')",
+        "[data-testid*='country'], [id*='country'], [class*='country'] >> button:has-text('Continue')"
+      ],
+      "plp": [
+        "article[data-component='ProductCard']",
+        "div[class*='product-grid']"
+      ],
+      "pdp": [
+        "h1[data-testid='pdp-title'], h1[itemprop='name']"
+      ]
+    },
+    "start_url": "https://www.moncler.com/en-gb/men/outerwear/",
+    "wait_until": "networkidle",
+    "navigation_timeout_ms": 30000,
+    "headers": {
+      "Accept-Language": "en-GB,en;q=0.9"
+    },
+    "timezone_id": "Europe/London"
+  },
+  "url_rules": {},
+  "rationale": "The run landed on the Moncler homepage (/en-gb/) with no product tiles. Moncler commonly displays cookie and country modals and requires navigating to a category PLP. We add a reliable seeded PLP URL, robust PLP/PDP selectors, and pre-click handlers for cookie/region popups via overrides (no code changes). URL normalization enforces en-gb, strips tracking parameters, and blocks misredirects to monclergroup.com. These minimal patches should allow the scraper to land on a proper PLP, see product cards, and reach PDPs to extract title and price.",
+  "risk": "medium",
+  "code_hints": [
+    "If the resolved URL is the Moncler homepage or just the locale root, immediately rewrite to the seeded PLP (men/outerwear) before navigation to ensure tiles materialize.",
+    "Before waiting for PLP selectors, attempt to click OneTrust cookie consent (#onetrust-accept-btn-handler) and any country/region modal 'Continue' button. Retry clicks if detached once.",
+    "Set Accept-Language to en-GB and timezone to Europe/London to reduce geolocation-driven redirects to other locales.",
+    "After navigating to the PLP, wait for at least one of the PLP selectors and then scroll to the bottom once to trigger lazy loading before collecting product tiles.",
+    "Extract PDP links from product_card > a elements constrained to /en-gb/ and prefer links containing '/p/' when available to avoid non-PDP anchors.",
+    "On PDP, wait for the title selector first; if price text node is empty initially, wait for [itemprop='price'] to have non-empty textContent before reading."
+  ],
+  "selectors_patch": {
+    "plp": {
+      "product_card": [
+        "article[data-component='ProductCard']",
+        "li[class*='product'] article",
+        "a[data-testid='product-card']"
+      ],
+      "product_link": [
+        "article[data-component='ProductCard'] a[href*='/en-gb/']",
+        "a[data-testid='product-card'][href*='/en-gb/']",
+        "a[href*='/en-gb/'][href*='/p/']"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-testid='pdp-title']",
+        "h1[itemprop='name']",
+        "h1[class*='product-name']"
+      ],
+      "price": [
+        "[data-testid='pdp-price'] [itemprop='price']",
+        "span[itemprop='price']",
+        "div[class*='price'] span[class*='value']"
+      ]
+    }
+  }
+}

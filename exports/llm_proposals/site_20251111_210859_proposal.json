@@ -1,0 +1,56 @@
+{
+  "risk": "medium",
+  "overrides_patch": {
+    "start_url": "https://www.moncler.com/en-gb/men/ready-to-wear/down-jackets-and-vests/",
+    "headers": {
+      "Accept-Language": "en-GB,en;q=0.9"
+    },
+    "actions": [
+      {
+        "type": "click",
+        "selector": "#onetrust-accept-btn-handler",
+        "optional": true,
+        "wait_after_ms": 500
+      }
+    ],
+    "pacing": {
+      "dom_ready_timeout_ms": 15000,
+      "network_idle_timeout_ms": 2500
+    },
+    "plp": {
+      "infinite_scroll": {
+        "steps": 6,
+        "delay_ms": 800
+      },
+      "load_more_selector": "button[data-testid='load-more'], button.load-more, .pagination__load-more"
+    }
+  },
+  "rationale": "The run landed on the homepage (no product tiles) and likely hit cookie/region gating. Directing to a stable PLP under en-gb and handling the OneTrust cookie banner should allow tiles to render. Adding resilient PLP/PDP selectors and URL normalization prevents locale drift and cross-domain hops that break scraping.",
+  "selectors_patch": {
+    "selectors": {
+      "consent": "#onetrust-accept-btn-handler",
+      "plp": {
+        "container": "main [data-component='product-list'], main .product-grid, main .plp",
+        "product_tile": "li.product-grid__item, div.product-tile, article.product-card",
+        "product_link": "a[href*='/en-gb/'][href*='/products/'], a.product-tile__link, article.product-card a"
+      },
+      "pdp": {
+        "title": "h1.product-name, h1[data-test='product-title'], h1[itemprop='name']",
+        "price": "span.price__value, span.sales, [itemprop='price'], meta[itemprop='price']"
+      }
+    },
+    "wait_for_selectors": [
+      "#onetrust-accept-btn-handler",
+      "main [data-component='product-list'], .product-grid, .plp"
+    ]
+  },
+  "url_rules": {},
+  "code_hints": [
+    "If current page is homepage (no PLP tiles after 4s), hard-navigate to start_url override.",
+    "After navigation, try clicking cookie banner: querySelector('#onetrust-accept-btn-handler')?.click().",
+    "Wait for PLP hydration by polling for product tiles count > 0; then scroll/infinite-load using the configured infinite_scroll and/or click load_more_selector if present.",
+    "Extract PDP links from product_link within product_tile; de-duplicate and normalize via url_rules before visiting.",
+    "On PDP, if CSS price not found, parse JSON-LD: script[type='application/ld+json'] and read offers.price and name as fallback.",
+    "If a geolocation/region overlay appears, try clicking a visible button/link containing 'Continue' or 'United Kingdom'; then re-check for PLP tiles."
+  ]
+}

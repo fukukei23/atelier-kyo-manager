@@ -1,0 +1,88 @@
+{
+  "risk": "medium",
+  "selectors_patch": {
+    "plp": {
+      "grid": [
+        "[data-testid='product-grid']",
+        "[data-test='product-grid']",
+        "section[id*='product'] ul[role='list']"
+      ],
+      "items": [
+        "[data-testid='product-card'] a[href*='/products/']",
+        "[data-test='product-card'] a[href*='/products/']",
+        "ul[role='list'] li a[href*='/products/']",
+        "a[href*='/en-de/'][href*='/products/']"
+      ]
+    },
+    "consent": {
+      "accept": [
+        "#onetrust-accept-btn-handler",
+        "button#onetrust-accept-btn-handler",
+        "button[aria-label='Accept all']",
+        "[data-testid='cookie-accept-all']"
+      ]
+    },
+    "pdp": {
+      "price": [
+        "[data-testid='pdp-price']",
+        "[data-test='pdp-price']",
+        "[itemprop='price']",
+        "meta[itemprop='price'][content]"
+      ],
+      "title": [
+        "h1[data-testid='pdp-title']",
+        "h1[itemprop='name']",
+        "h1"
+      ]
+    }
+  },
+  "overrides_patch": {
+    "wait_for_selectors": [
+      "[data-testid='product-grid']",
+      "[data-test='product-grid']",
+      "#onetrust-accept-btn-handler"
+    ],
+    "actions_on_page_load": [
+      {
+        "action": "click_if_present",
+        "selector": "#onetrust-accept-btn-handler"
+      },
+      {
+        "action": "click_if_present",
+        "selector": "button[aria-label='Accept all']"
+      },
+      {
+        "action": "click_if_present",
+        "selector": "[data-testid='cookie-accept-all']"
+      },
+      {
+        "action": "click_if_present",
+        "selector": "[data-testid*='country'][data-testid*='continue'], button[data-testid*='continue']"
+      }
+    ],
+    "infinite_scroll": {
+      "enabled": true,
+      "max_scrolls": 6,
+      "scroll_delay_ms": 400,
+      "stop_on_selector": "[data-testid='product-card'] a, [data-test='product-card'] a"
+    },
+    "timeouts": {
+      "page_load_ms": 30000,
+      "plp_materialize_ms": 15000
+    },
+    "request_headers": {
+      "Accept-Language": "en-DE,en;q=0.9"
+    }
+  },
+  "url_rules": {},
+  "rationale": "PLPが『タイル未出現』となる主因は、OneTrustクッキーバナーやロケール/国選択モーダルで表示がブロックされるケースが多いです。まずはオーバーレイ解除（Accept All）を最優先し、続いてPLPグリッドの安定化待機と軽いインフィニットスクロールで初期タイルが遅延レンダリングされても拾えるようにしました。選択子はMonclerのコンポーネント命名（data-testid/data-test）と、汎用的なproductsリンクを併用するフォールバック構成にして、DOM変化にも耐性を持たせています。URLルールは/en-de/へ強制正規化し、monclergroup.com等の誤遷移とトラッキングクエリを排除して収集の安定性を高めます。",
+  "code_hints": [
+    "After navigation, first try clicking OneTrust: await page.locator('#onetrust-accept-btn-handler').click({ timeout: 3000 }).catch(()=>{});",
+    "Wait for a stable PLP container before tile query: await page.waitForSelector(\"[data-testid='product-grid'], [data-test='product-grid']\", { timeout: 15000 });",
+    "If no tiles found, perform controlled scrolls (6x) and recheck: document.scrollingElement.scrollBy(0, document.body.scrollHeight/2); await wait(400ms).",
+    "Query PDP links within the grid only: grid.querySelectorAll(\"[data-testid='product-card'] a[href*='/products/'], [data-test='product-card'] a[href*='/products/']\");",
+    "If a locale/country modal overlays (body overflow hidden), remove blockers: document.documentElement.style.overflow='auto'; document.body.style.overflow='auto';",
+    "Guard against homepage fallback: if location.pathname === '/en-de/' and no grid after 5s, re-navigate to intended PLP and re-accept cookies.",
+    "On PDP, prefer price selectors: [data-testid='pdp-price'], [itemprop='price'] (fallback to meta[itemprop=price]). Extract title via h1[data-testid='pdp-title'] or h1[itemprop='name']."
+  ]
+}

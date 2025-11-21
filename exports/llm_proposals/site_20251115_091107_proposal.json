@@ -1,0 +1,64 @@
+{
+  "code_hints": [
+    "Do not treat the locale homepage as a PLP. If the current URL matches ^https://www.moncler.com/en-[a-z]{2}/?$, immediately navigate to the configured default PLP (overrides.start_url).",
+    "After navigation, attempt a one-time click on the cookie banner acceptors (#onetrust-accept-btn-handler or a button containing 'Accept All') before waiting for PLP selectors.",
+    "Wait for 'a[href*=\"/products/\"]' as the PLP readiness signal, then collect unique hrefs preserving the locale prefix.",
+    "On PDP, read price via selectors in selectors.pdp.price and title via selectors.pdp.title. If multiple prices exist, pick the first visible one.",
+    "If fewer than N product links are found, try a gentle scroll-to-bottom and re-scan (Moncler PLP can lazy-load tiles). Avoid clicking navigation items from the homepage."
+  ],
+  "overrides_patch": {
+    "start_url": "https://www.moncler.com/en-lt/men/ready-to-wear/jackets/",
+    "wait_for_selectors": [
+      "a[href*=\"/products/\"]"
+    ],
+    "click_selectors_once": [
+      "#onetrust-accept-btn-handler",
+      "button[aria-label*=\"Accept\" i]",
+      "button:has-text(\"Accept All\")"
+    ],
+    "navigation_timeout_ms": 45000
+  },
+  "risk": "medium",
+  "selectors_patch": {
+    "plp": {
+      "product_link": "a[href*=\"/products/\"]:not([href^=\"http\"]):not([href^=\"#\"])"
+    },
+    "pdp": {
+      "price": "span[itemprop=\"price\"], [data-testid*=\"price\"], [class*=\"Price\"] span",
+      "title": "h1[itemprop=\"name\"], h1[data-testid*=\"product-name\"], h1"
+    }
+  },
+  "url_rules": {
+    "normalize": [
+      {
+        "if_url_matches": "^https://www\\.moncler\\.com/en-lt/?$",
+        "rewrite_to": "https://www.moncler.com/en-lt/men/ready-to-wear/jackets/"
+      }
+    ],
+    "allow_domains": [
+      "www.moncler.com"
+    ],
+    "block_domains": [
+      "www.monclergroup.com"
+    ],
+    "allow_path_patterns": [
+      "^/en-[a-z]{2}/(men|women|kids)/.+",
+      "^/en-[a-z]{2}/.+/products/.+"
+    ],
+    "deny_path_patterns": [
+      "^/en-[a-z]{2}/?$",
+      "/store-locator",
+      "/stories",
+      "/collection",
+      "/corporate"
+    ],
+    "strip_query_params": [
+      "utm_*",
+      "icid",
+      "gclid",
+      "fbclid"
+    ],
+    "preserve_locale_prefix": true
+  },
+  "rationale": "The failure occurred because the scraper landed on the locale homepage (/en-lt/) where no product grid exists, and likely a cookie banner blocked interaction. We resolve this by: 1) starting directly on a stable PLP category URL; 2) handling the OneTrust cookie banner; 3) waiting for robust, domain-specific product link selectors (anchors containing '/products/'); and 4) normalizing/allowlisting URLs to avoid locale traps and the monclergroup.com corporate site. PDP selectors are broadened but remain minimal and robust."
+}

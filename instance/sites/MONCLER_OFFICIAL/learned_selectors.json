@@ -1,0 +1,36 @@
+{
+  "pdp_link_selectors": [
+    "[data-qa='product-tile'] a[href]",
+    "a[data-qa='product-card-link']",
+    "a[data-testid*='product' i][href]",
+    "a[href*='/en-int/'][href*='/p/']",
+    "a[href*='/products/']",
+    "a[href*='/p/']",
+    ".product-card a[href]",
+    "[data-qa='product-tile'] [data-href]",
+    "[data-testid*='product' i][data-href]",
+    ".product-card [data-href]",
+    "[data-qa='product-tile'] [onclick]",
+    "[data-testid*='product' i][onclick]",
+    ".product-card [onclick]"
+  ],
+  "price_selectors": [
+    "[itemprop='price']",
+    "meta[itemprop='price'][content]",
+    "[data-testid*='price' i]",
+    "[data-qa*='price' i]",
+    "[data-test*='price' i]",
+    "[class*='price' i]",
+    ".c-price, .product-price, .price__value, .price--value",
+    ":text-matches('/\\p{Sc}|USD|EUR|GBP|¥|円/i')"
+  ],
+  "title_selectors": [
+    "h1",
+    "h1[itemprop='name']",
+    "[data-testid='product-name']",
+    "[data-testid*='product' i][data-testid*='name' i]",
+    "[data-qa='pdp-title']",
+    "[data-qa*='product' i][data-qa*='title' i]",
+    ".c-product-title, .product-title, .pdp-title, [class*='product' i][class*='title' i]"
+  ]
+}

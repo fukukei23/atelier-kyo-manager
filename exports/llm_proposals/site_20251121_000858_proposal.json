@@ -1,0 +1,75 @@
+{
+  "selectors_patch": {
+    "plp": {
+      "tiles": [
+        "li[data-testid='product-card']",
+        "article[data-testid='product-card']",
+        "div[data-component='ProductCard']",
+        "div.c-product-card"
+      ],
+      "tile_link": [
+        "a[data-testid='product-card-link']",
+        "a.c-product-card__link",
+        "a[href*='/products/']"
+      ]
+    },
+    "shared": {
+      "cookie_accept": [
+        "#onetrust-accept-btn-handler",
+        "button[aria-label='Accept all cookies']"
+      ],
+      "geo_modal_close": [
+        "div[role='dialog'] button:has-text('Continue')",
+        "div[role='dialog'] button:has-text('United Kingdom')",
+        "button[aria-label='Close']",
+        "button[aria-label='close']"
+      ]
+    }
+  },
+  "rationale": "Moncler PLP often remains empty until cookies/geo modals are dismissed and the page is scrolled to trigger lazy loading. The run likely saw no tiles due to an overlay or the need to scroll. We add robust, Moncler-typical product card/link selectors with fallbacks, explicit cookie/geo handling, and controlled scrolling. URL normalization prevents locale/domain drift (e.g., to en-jp or monclergroup.com) that can break PLP/PDP extraction.",
+  "code_hints": [
+    "After navigation, attempt cookie and geo modal dismissal before waiting for tiles: click #onetrust-accept-btn-handler if present, then click a dialog button with text 'Continue' or 'United Kingdom', else close any dialog via button[aria-label='Close'].",
+    "Wait for any of the PLP tile selectors (OR wait) instead of a single selector. If none appear after 6 scroll rounds, treat as PLP empty/fail.",
+    "Use incremental auto-scroll to bottom with pauses (800ms) to trigger lazy-loading until no DOM growth or until a tile is found.",
+    "When extracting PDP links from a tile, prefer a[data-testid='product-card-link'] then a.c-product-card__link, then fallback to the first a[href*='/products/'] within the tile.",
+    "Guard against locale drift: if a captured PDP URL does not include '/en-int/', rewrite it to '/en-int/' and add forceLocale=en-int&shipToCountry=GB before visiting."
+  ],
+  "risk": "medium",
+  "url_rules": {},
+  "overrides_patch": {
+    "wait_for_selectors": [
+      "li[data-testid='product-card'], article[data-testid='product-card'], div[data-component='ProductCard'], div.c-product-card"
+    ],
+    "pre_actions": [
+      {
+        "click": "#onetrust-accept-btn-handler",
+        "optional": true,
+        "wait_after": 300
+      },
+      {
+        "click": "div[role='dialog'] button:has-text('Continue')",
+        "optional": true,
+        "wait_after": 400
+      },
+      {
+        "click": "div[role='dialog'] button:has-text('United Kingdom')",
+        "optional": true,
+        "wait_after": 400
+      },
+      {
+        "click": "button[aria-label='Close']",
+        "optional": true,
+        "wait_after": 200
+      }
+    ],
+    "scroll": {
+      "enabled": true,
+      "max_rounds": 6,
+      "pause_ms": 800,
+      "until_selector": "li[data-testid='product-card'], article[data-testid='product-card'], div[data-component='ProductCard'], div.c-product-card"
+    },
+    "navigation": {
+      "wait_until": "networkidle"
+    }
+  }
+}

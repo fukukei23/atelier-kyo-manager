@@ -1,0 +1,75 @@
+{
+  "code_hints": [
+    "If no PLP tiles materialize and the current URL ends with .html on moncler.com, treat the page as a PDP and attempt PDP extraction instead of failing immediately.",
+    "Implement JSON-LD fallback on PDP: parse the first script[type='application/ld+json'] block; read Product.name for title and Offers.price (or offers[0].price) for price. Currency is typically Offers.priceCurrency.",
+    "After navigation, auto-click cookie consent if #onetrust-accept-btn-handler exists before querying PLP/PDP selectors.",
+    "For PLP extraction, first wait for [data-test='product-grid'], [data-testid='product-grid'], or #product-grid; then collect product links via a[href$='.html'] within that container.",
+    "When normalizing URLs for PLP intent, apply regex s#/[^/]+\\.html(\\?.*)?$#/# to back out of PDPs to the parent category and ensure a trailing slash.",
+    "Guard against locale drift: if a redirect changes /en-de/ to another locale, rewrite back to the original locale before continuing."
+  ],
+  "overrides_patch": {
+    "wait_for_selectors": [
+      "#onetrust-accept-btn-handler",
+      "[data-test='product-grid'], [data-testid='product-grid'], #product-grid"
+    ],
+    "click_selectors_once": [
+      "#onetrust-accept-btn-handler",
+      "button[aria-label*='Accept all']"
+    ]
+  },
+  "risk": "medium",
+  "rationale": "The failure occurred on a PDP (.html) while expecting a PLP; Moncler often shows a cookie consent overlay that can block rendering. We add cookie-accept handling and broaden PLP grid/tile selectors to robust container/link patterns commonly used on moncler.com. We also add PDP fallbacks using JSON-LD to reliably read price/title if we land on a PDP. URL normalization rules convert accidental PDP URLs back to their parent PLP and enforce trailing slashes while avoiding locale drift and off-domain redirects (e.g., monclergroup.com).",
+  "url_rules": {
+    "normalize": [
+      {
+        "if": "https?://www\\.moncler\\.com/([^/]+)/(.*)/[^/]+\\.html(\\?.*)?$",
+        "then": "https://www.moncler.com/$1/$2/"
+      },
+      {
+        "if": "https?://www\\.moncler\\.com/([^/]+)/([^?]+[^/])(\\?.*)?$",
+        "then": "https://www.moncler.com/$1/$2/"
+      }
+    ],
+    "preserve_locale": [
+      {
+        "rule": "Keep the locale from the seed URL (e.g., en-de). Do not auto-switch to other locales."
+      }
+    ],
+    "allow": [
+      "^https?://www\\.moncler\\.com/en-de/.*?/$"
+    ],
+    "deny": [
+      "monclergroup\\.com",
+      "/account",
+      "/login",
+      "/stores",
+      "/store-locator",
+      "/help",
+      "/search\\?"
+    ]
+  },
+  "selectors_patch": {
+    "plp": {
+      "tile_alt": [
+        "[data-test='product-grid'] a[href$='.html']",
+        "[data-testid='product-grid'] a[href$='.html']",
+        "#product-grid a[href$='.html']",
+        "main a[href$='.html']"
+      ],
+      "link_within_tile_alt": "a[href$='.html']"
+    },
+    "pdp": {
+      "title_alt": [
+        "h1[data-test='product-name']",
+        "h1[class*='product']",
+        "meta[property='og:title']::attr(content)"
+      ],
+      "price_alt": [
+        "script[type='application/ld+json']$json:$.offers.price",
+        "[itemprop='price']::attr(content)",
+        "[data-test*='price']",
+        ".price, .ProductPrice"
+      ]
+    }
+  }
+}

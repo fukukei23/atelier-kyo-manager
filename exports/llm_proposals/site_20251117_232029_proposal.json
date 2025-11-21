@@ -1,0 +1,89 @@
+{
+  "overrides_patch": {
+    "start_urls_add": [
+      "https://www.moncler.com/en-de/men/outerwear/down-jackets/",
+      "https://www.moncler.com/en-de/women/outerwear/down-jackets/"
+    ],
+    "wait_for_selectors_add": [
+      "main a[href*=\"/p/\"]"
+    ],
+    "pre_click_selectors_add": [
+      "#onetrust-accept-btn-handler",
+      "button[aria-label*=\"Accept\"]",
+      "button:has-text(\"Accept All\")",
+      "button:has-text(\"Continue\")",
+      "button[data-testid*=\"continue\"]"
+    ],
+    "request_headers_patch": {
+      "accept-language": "en-DE,en;q=0.9"
+    }
+  },
+  "selectors_patch": {
+    "plp": {
+      "tile": "main a[href*=\"/p/\"]",
+      "tile_link": ":self"
+    },
+    "pdp": {
+      "price_alt": [
+        "meta[itemprop=\"price\"]@content",
+        "meta[property=\"product:price:amount\"]@content",
+        "span[itemprop=\"price\"]"
+      ],
+      "title_alt": [
+        "h1[itemprop=\"name\"]",
+        "h1[data-testid*=\"title\"]",
+        "h1"
+      ]
+    }
+  },
+  "risk": "medium",
+  "url_rules": {
+    "normalize": [
+      {
+        "if_host": "www.moncler.com",
+        "if_path_regex": "^/(?:en-de/)?$",
+        "rewrite_to": "https://www.moncler.com/en-de/men/outerwear/down-jackets/"
+      }
+    ],
+    "force_locale_prefix": {
+      "host": "www.moncler.com",
+      "preferred_prefix": "/en-de/",
+      "apply_on_same_host": true,
+      "rewrite_regex": "^/en-[a-z]{2}/",
+      "rewrite_to": "/en-de/"
+    },
+    "allowlist_path_regex": [
+      "^/en-de/(men|women)/",
+      "^/en-de/.*/p/.*"
+    ],
+    "blocklist": [
+      "monclergroup.com",
+      "/store-locator",
+      "/boutiques",
+      "/help",
+      "/customer-service",
+      "/login",
+      "/sign-in",
+      "/wishlist",
+      "/cart"
+    ],
+    "strip_query_params": [
+      "utm_*",
+      "gclid",
+      "fbclid",
+      "cid",
+      "icid"
+    ]
+  },
+  "code_hints": [
+    "If landing on the locale homepage (/en-de/ with no category), immediately rewrite to the primary PLP seed via url_rules.normalize before DOM actions.",
+    "Try clicking consent in this order and continue regardless of failures: #onetrust-accept-btn-handler, button[aria-label*=\"Accept\"], button:has-text(\"Accept All\"). Then close/continue geo/store overlay with button:has-text(\"Continue\") or [data-testid*=\"continue\"].",
+    "Consider main a[href*=\"/p/\"] as PLP product tiles. Filter duplicates by href and keep only same-host links.",
+    "Only treat links containing \"/p/\" as PDP. Ignore editorial tiles.",
+    "On PDP, first parse JSON-LD (script[type=\"application/ld+json\"]) and prefer offers.price if present. Fallback to selectors: meta[itemprop=price]@content, meta[property=product:price:amount]@content, span[itemprop=price].",
+    "Support selector suffix @attr (e.g., @content) to extract attributes when provided; if not supported, treat as CSS selector then read the specified attribute.",
+    "Set Accept-Language header to en-DE to reduce locale redirects; also rewrite any navigated URLs to enforce /en-de/ prefix.",
+    "Wait for at least one PLP tile selector (main a[href*=\"/p/\"]) before extraction; if not present after consent handling, trigger normalize rewrite to the alternate seed (women/outerwear/down-jackets/)."
+  ],
+  "rationale": "The failure occurred because we landed on the Moncler homepage, which has no PLP grid and may show consent/geo overlays. We enforce a stable PLP seed under /en-de/ and add robust product tile detection via anchors linking to /p/ (Moncler PDP pattern). We add cookie/geo consent clicks and a locale-forcing rule to avoid language/country traps or monclergroup.com. PDP price/title extraction is hardened with meta and JSON-LD fallbacks, reducing dependency on volatile classes."
+}

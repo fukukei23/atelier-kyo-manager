@@ -1,0 +1,82 @@
+{
+  "rationale": "We landed on the Moncler homepage with no product tiles, likely due to locale/cookie gates and a non-PLP entry URL. The patch enforces the en-gb locale, adds robust OneTrust cookie handling, seeds a stable PLP URL, and broadens PLP/PDP selectors to match Moncler’s components. URL normalization avoids locale traps and external monclergroup.com redirects, increasing the chance of immediately seeing product tiles and collecting PDP links and prices.",
+  "risk": "medium",
+  "code_hints": [
+    "On first load, race two waits: cookie banner and PLP tiles. If '#onetrust-accept-btn-handler' appears, click it, then re-wait for 'li[data-testid=\"product-tile\"]'.",
+    "If current URL host != 'www.moncler.com' or locale prefix not '/en-gb/', rebuild URL to enforce https://www.moncler.com/en-gb/ + original path and navigate there.",
+    "If you land on the homepage or any page without product tiles after 6–8 seconds, navigate directly to the seeded PLP: /en-gb/men/ready-to-wear/down-jackets/.",
+    "For lazy-loaded PLPs, scroll incrementally (e.g., 1000–1500px steps, 300–500ms delay) until either at least 24 product tiles are present or no growth after 2 scrolls.",
+    "Extract PDP links from the closest anchor within the product tile; prefer 'a[data-testid=\"product-tile-link\"]', else the first descendant 'a[href*=\"/en-gb/\"]'. De-duplicate by pathname.",
+    "On PDP, try price selectors in order: [data-testid='pdp-price'] -> [itemprop='price'] -> '.pdp [class*=\"Price\"]'. Normalize currency by reading 'content' or 'data-*' attributes if present.",
+    "If a locale/country modal appears, try a generic close: 'button[aria-label=\"Close\"]' or '[data-testid=\"close-modal\"]'. If a region selection CTA exists, prefer links that contain '/en-gb/'.",
+    "Abort or skip any navigation that redirects to monclergroup.com or changes locale away from en-gb."
+  ],
+  "overrides_patch": {
+    "request_headers": {
+      "Accept-Language": "en-GB,en;q=0.9"
+    },
+    "start_urls": [
+      "https://www.moncler.com/en-gb/men/ready-to-wear/down-jackets/"
+    ],
+    "wait_for_selectors": [
+      "li[data-testid='product-tile']",
+      "#onetrust-accept-btn-handler"
+    ],
+    "navigation": {
+      "enforce_locale_prefix": "en-gb",
+      "block_external": [
+        "monclergroup.com"
+      ],
+      "same_origin_only": true
+    },
+    "consent": {
+      "click_once": [
+        "#onetrust-accept-btn-handler"
+      ]
+    }
+  },
+  "url_rules": {},
+  "selectors_patch": {
+    "plp": {
+      "product_card": [
+        "li[data-testid='product-tile']",
+        "div[data-component='ProductTile']",
+        "li[class*='product'] a[href*='/en-gb/'][href*='/p/']"
+      ],
+      "product_link": [
+        "a[data-testid='product-tile-link']",
+        "li[data-testid='product-tile'] a[href*='/en-gb/']",
+        "a[href*='/en-gb/'][href*='/p/']"
+      ],
+      "price": [
+        "li[data-testid='product-tile'] [data-testid='price']",
+        "li[data-testid='product-tile'] [class*='Price']",
+        "li[data-testid='product-tile'] [itemprop='price']"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-testid='pdp-title']",
+        "h1[itemprop='name']",
+        "h1[class*='ProductName']"
+      ],
+      "price": [
+        "[data-testid='pdp-price']",
+        "[itemprop='price']",
+        ".pdp [class*='Price']"
+      ]
+    },
+    "consent": {
+      "accept_all": [
+        "#onetrust-accept-btn-handler",
+        "button#onetrust-accept-btn-handler",
+        "div#onetrust-banner-sdk button[aria-label='Accept all']"
+      ],
+      "close_modal": [
+        "button[aria-label='Close']",
+        "[data-testid='close-modal']",
+        "div[role='dialog'] button[aria-label='Close']"
+      ]
+    }
+  }
+}

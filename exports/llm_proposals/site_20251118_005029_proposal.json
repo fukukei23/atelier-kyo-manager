@@ -1,0 +1,60 @@
+{
+  "rationale": "The failure occurred because we landed on the locale homepage (/en-jp/) where no PLP tiles exist. Prioritizing settings-level fixes, we set a stable, directly-listing PLP kickoff URL (jackets) within the same locale and add an automatic redirect from the locale home to that PLP. URL normalization keeps us on moncler.com with the /en-jp prefix and avoids corporate/auxiliary domains like monclergroup.com. We avoid changing selectors since the core issue is entry-point/flow rather than DOM targeting; instead we provide code hints to accept cookies/geo modals and to fall back to robust PDP selectors.",
+  "selectors_patch": {},
+  "code_hints": [
+    "If current URL is a locale home like /en-jp/ and no PLP tiles appear within 6–8s, proactively navigate to /en-jp/men/ready-to-wear/jackets/?sz=120 (or the women fallback) and continue.",
+    "Handle cookie consent: if #onetrust-accept-btn-handler exists, click it immediately.",
+    "Handle potential geo/country modal: in any dialog, try clicking a primary button containing text: 'Continue', 'Japan', or 'Accept all'.",
+    "After landing on a PLP, wait for a product grid container such as: [data-testid=\"product-grid\"], .product-grid, ul.products-grid, or [role='list'] with product cards, then scroll to the bottom once to trigger lazy load.",
+    "Extract PLP links by querying anchors within the grid first; keep locale segment (/en-jp) when resolving hrefs.",
+    "On PDP, try multiple price/title selectors; typical fallbacks: title -> h1[data-test='pdp-title'], h1.product-name, h1[itemprop='name']; price -> span[itemprop='price'], [data-test='pdp-price'], .price__value.",
+    "Ensure all navigations preserve https and the /en-jp locale; if a link drops the locale, rewrite it to include /en-jp before requesting."
+  ],
+  "risk": "medium",
+  "overrides_patch": {
+    "kickoff_url": "https://www.moncler.com/en-jp/men/ready-to-wear/jackets/?sz=120",
+    "alternate_entry_urls": [
+      "https://www.moncler.com/en-jp/women/ready-to-wear/jackets/?sz=120"
+    ],
+    "wait_until": "networkidle",
+    "timeouts": {
+      "plp_max_wait_ms": 20000,
+      "after_nav_wait_ms": 1000
+    }
+  },
+  "url_rules": {
+    "enforce_https": true,
+    "stay_on_domain": "www.moncler.com",
+    "deny_hosts": [
+      "monclergroup.com",
+      "help.moncler.com",
+      "stores.moncler.com",
+      "corporate.moncler.com"
+    ],
+    "normalize_locale_prefix": {
+      "ensure_prefix": "/en-jp",
+      "preserve_when_present": true
+    },
+    "entry_redirects": [
+      {
+        "if_path_equals": "/en-jp/",
+        "goto": "/en-jp/men/ready-to-wear/jackets/?sz=120"
+      }
+    ],
+    "allow_patterns": [
+      "^https://www\\.moncler\\.com/en-jp/(men|women)/.*(ready-to-wear|outerwear|jackets).*$",
+      "^https://www\\.moncler\\.com/en-jp/.*/new.*$"
+    ],
+    "deny_patterns": [
+      "/stories",
+      "/brand",
+      "/genius",
+      "/collection$",
+      "/login",
+      "/store-locator",
+      "/contact",
+      "/sustainability",
+      "/careers"
+    ]
+  }
+}

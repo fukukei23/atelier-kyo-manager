@@ -1,0 +1,74 @@
+{
+  "rationale": "Run hit the Moncler homepage, which has no PLP grid. Likely causes: region/cookie gates and lack of direct PLP navigation. We prioritize non-code fixes: start directly on a stable PLP (men/outerwear), set Accept-Language to en-GB, and auto-accept cookies/close locale modal. We also add robust discovery by treating anchors with '/en-gb/.../p/' as product links if no explicit tiles render. URL normalization forces the en-gb locale and avoids locale traps or monclergroup.com redirects.",
+  "url_rules": {
+    "allow_hosts": [
+      "www.moncler.com",
+      "moncler.com"
+    ],
+    "block_hosts": [
+      "monclergroup.com",
+      "*.monclergroup.com"
+    ],
+    "normalize": [
+      {
+        "if_path_matches": "^/(en-[a-z]{2})(/.*)?$",
+        "rewrite_path": "/en-gb$2"
+      },
+      {
+        "if_path_missing_locale": true,
+        "prepend_path": "/en-gb"
+      }
+    ],
+    "strip_query_params_except": [],
+    "plp_allowlist_paths": [
+      "^/en-gb/(men|women)/[a-z0-9-]+/?$"
+    ],
+    "pdp_href_regex": "^https?://www\\.moncler\\.com/en-gb/.+/p/.+$"
+  },
+  "overrides_patch": {
+    "start_urls": [
+      "https://www.moncler.com/en-gb/men/outerwear/"
+    ],
+    "request_headers": {
+      "Accept-Language": "en-GB,en;q=0.8"
+    },
+    "wait_for_selectors": [
+      "#onetrust-accept-btn-handler",
+      "a[href*=\"/en-gb/\"][href*=\"/p/\"]"
+    ],
+    "click_selectors_once": [
+      "#onetrust-accept-btn-handler",
+      "button[aria-label*=\"Accept all\" i]"
+    ],
+    "dismiss_modals_selectors": [
+      "button[aria-label=\"Close\"], button[data-testid*=\"close\" i]",
+      "div[role=\"dialog\"] button[aria-label*=\"Close\" i]",
+      "a[href=\"/en-gb/\"]"
+    ],
+    "scroll": {
+      "mode": "viewport",
+      "rounds": 6,
+      "delay_ms": 400
+    }
+  },
+  "selectors_patch": {
+    "plp": {
+      "item": "a[href*=\"/en-gb/\"][href*=\"/p/\"]",
+      "item_link": "a[href*=\"/en-gb/\"][href*=\"/p/\"]"
+    },
+    "pdp": {
+      "title": "h1[itemprop=\"name\"], h1[data-testid=\"product-name\"], h1[class*=\"ProductName\"], h1",
+      "price": "span[itemprop=\"price\"], [data-testid=\"price\"] span, [class*=\"Price\"] span"
+    }
+  },
+  "risk": "medium",
+  "code_hints": [
+    "- Before waiting for PLP items, attempt to click cookie consent if present: query '#onetrust-accept-btn-handler' or a button with aria-label containing 'Accept all' (case-insensitive).",
+    "- If a locale/country modal is detected (role=dialog), first try clicking a link to '/en-gb/' or otherwise close via a button with aria-label containing 'Close'.",
+    "- If landing on a non-PLP page (homepage), navigate directly to the category by pushing the normalized URL 'https://www.moncler.com/en-gb/men/outerwear/'.",
+    "- Fallback PLP detection: if configured PLP tiles are not found after scroll, collect anchors matching regex '/en-gb/.+/p/' within <main> and treat them as product tiles.",
+    "- PDP price fallback: parse JSON-LD script[type='application/ld+json'] for a Product object and read offers.price if CSS price selectors are empty.",
+    "- Enforce locale normalization: when encountering '/en-xx/' or missing locale, rewrite to '/en-gb/' before requesting.",
+    "- Only follow links on allowed hosts and reject any navigation to monclergroup.com subdomains."
+  ]
+}

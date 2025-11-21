@@ -1,0 +1,65 @@
+{
+  "overrides_patch": {
+    "headers": {
+      "Accept-Language": "en-DE,en;q=0.9,de;q=0.8"
+    },
+    "wait_for_selectors": [
+      "#onetrust-accept-btn-handler",
+      "[data-testid='product-grid'], #product-grid, .product-grid"
+    ],
+    "click_once_selectors": [
+      "#onetrust-accept-btn-handler",
+      "button[data-testid='locale-modal-continue'], button[data-testid='country-modal-continue'], button[data-testid='geolocation-continue']"
+    ],
+    "timeouts": {
+      "dom_content_loaded_ms": 12000,
+      "plp_wait_ms": 15000
+    }
+  },
+  "rationale": "The run likely hit Moncler’s cookie and/or locale gate, causing a redirect to the home page under /en-de and preventing PLP tiles from rendering. We add safe overrides to accept OneTrust cookies, continue past the locale modal, enforce the intended locale prefix (/en-de), and make the crawler sticky to the requested PLP path. Additional PLP/PDP selector fallbacks match Moncler’s grid and product tile patterns, improving resilience when class names vary.",
+  "risk": "medium",
+  "code_hints": [
+    "After page.goto, try clicking '#onetrust-accept-btn-handler' if present; do not wait forever (timeout ~3s).",
+    "If a locale/country modal appears (buttons with data-testid containing 'locale' or 'country'), click the primary continue/confirm button before PLP checks.",
+    "If you land on https://www.moncler.com/en-de/ (home) instead of the PLP, immediately navigate back to the original PLP path (sticky category) once consents are handled.",
+    "Wait for one of the PLP grid selectors ([data-testid='product-grid'], #product-grid, .product-grid). If none appears within plp_wait_ms, treat as PLP-not-materialized and retry once after consent/locale actions.",
+    "Scroll the PLP to trigger lazy load before collecting tiles; require at least 1 product element before extracting links.",
+    "On PDP, read title with h1[data-testid='product-name'] fallback to h1.product-name; price from [data-testid='price'] then fallbacks."
+  ],
+  "url_rules": {},
+  "selectors_patch": {
+    "plp": {
+      "list": [
+        "[data-testid='product-grid']",
+        "#product-grid",
+        "section[data-component='ProductGrid']",
+        ".product-grid"
+      ],
+      "product": [
+        "li[data-testid='product-card']",
+        ".product-grid .product-tile",
+        ".c-product-tile",
+        "[data-component='ProductTile']"
+      ],
+      "link": [
+        "li[data-testid='product-card'] a[href*='/en-']",
+        "a[data-testid='product-tile-link']",
+        ".product-tile a",
+        ".c-product-tile a"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-testid='product-name']",
+        "h1.product-name",
+        "h1[itemprop='name']"
+      ],
+      "price": [
+        "[data-testid='price']",
+        ".price [itemprop='price']",
+        ".price .amount",
+        ".c-product-price [data-price]"
+      ]
+    }
+  }
+}

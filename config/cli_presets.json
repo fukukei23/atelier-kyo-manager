@@ -1,0 +1,13 @@
+{
+  "moncler_headful": {
+    "site": "MONCLER_OFFICIAL",
+    "query": "down jacket",
+    "target_url": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB",
+    "likely_plp": true,
+    "auto_heal": true,
+    "headful": true,
+    "use_proxy": true,
+    "enable_video": true,
+    "interactive_pause": false
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "rationale": "The failure occurred on a Genius landing page with a duplicate locale segment and a hash fragment, leading to a non-PLP experience and likely a consent/legal gate. Normalizing locale to 'en-int' and stripping fragments prevents landing on editorial/anchor sections. Adding resilient PLP/PDP selectors targets Moncler’s SFCC-style grids and schema attributes, while consent dismissal improves reliability. URL blocking avoids corporate domain traps.",
+  "overrides_patch": {
+    "wait_for_selectors": [
+      "[data-testid='plp-grid'], .product-grid, [data-component='product-list']",
+      "[data-testid='product-tile'], li.grid-tile"
+    ],
+    "click_once_selectors": [
+      "#onetrust-accept-btn-handler",
+      "button[aria-label*='Accept'][aria-label*='cookie']",
+      "button:has-text('Accept all')"
+    ],
+    "headers": {
+      "Accept-Language": "en,en-US;q=0.9,en-GB;q=0.8"
+    }
+  },
+  "selectors_patch": {
+    "plp": {
+      "container": [
+        "main [data-component='product-list']",
+        "[data-testid='plp-grid']",
+        ".product-grid, .grid.product-grid"
+      ],
+      "item": [
+        "[data-testid='product-tile']",
+        ".product-grid a[href*='/products/']:has(img)",
+        "li.grid-tile, article [data-pid]"
+      ],
+      "link": [
+        "a[href*='/products/']"
+      ],
+      "price": [
+        "[data-testid='price']",
+        "[itemprop='price']",
+        ".price .value, .price__amount, .prices .value"
+      ],
+      "title": [
+        "[data-testid='product-name']",
+        "[itemprop='name']",
+        ".product-name, .tile-body .name"
+      ]
+    },
+    "pdp": {
+      "price": [
+        "[data-testid='price']",
+        "[itemprop='price']",
+        ".price .value, .price__amount"
+      ],
+      "title": [
+        "[data-testid='pdp-title']",
+        "h1[itemprop='name']",
+        "h1.product-name, h1[data-testid='product-title']"
+      ]
+    }
+  },
+  "risk": "medium",
+  "url_rules": {},
+  "code_hints": [
+    "Before navigation, apply URL canonicalization: strip fragments ('#...') and normalize locale to '/en-int/'.",
+    "If path contains '/genius/shop-genius/', do not assume it's a PLP. After page load, search for a PLP container ([data-component='product-list'], [data-testid='plp-grid'], .product-grid). If absent, click the first visible CTA containing 'Shop', 'Shop now', or 'Shop the collection' to reach the actual PLP.",
+    "Always attempt to dismiss cookie/consent banners once using click_once_selectors before PLP extraction.",
+    "When extracting PLP items, prefer anchors matching a[href*='/products/'] within the grid; they are stable PDP links on Moncler.",
+    "Set Accept-Language to an English preference to reduce locale/geo gates; avoid relying on geo-detected locales.",
+    "If PLP selectors are not found within a reasonable timeout, re-canonicalize current URL to '/en-int/' and retry once to bypass regional traps."
+  ]
+}

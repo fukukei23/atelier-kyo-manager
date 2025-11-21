@@ -1,0 +1,82 @@
+{
+  "rationale": "PLPが出ないのはホーム(/en-jp/)に滞留し、クッキー/地域モーダルやメニュー操作を経ずにPLP到達できていない可能性が高い。まず設定で開始URLをカテゴリPLP（Men > Outerwear > Down Jackets）に固定し、Onetrustクッキーと地域確認をハンドリングするセレクタを追加。さらにルートロケール(/en-xx/)に来た場合はPLPへ正規化するURLルールで『ホーム落ち』を回避する。PLPタイルとPDP価格は一般的なMonclerの構造（.htmlで終わる商品リンク、itemprop='price'等）を優先した冗長セレクタでフォールバック性を確保。万一ホームに着地した場合でも、ハンバーガーメニューからMen/Womenカテゴリへ到達する安全な手順をコード側にヒントとして提示。",
+  "overrides_patch": {
+    "start_url": "https://www.moncler.com/en-jp/men/outerwear/down-jackets/",
+    "wait_for_selectors": [
+      "blocking.cookie_accept",
+      "plp.tiles"
+    ],
+    "politeness": {
+      "wait_after_navigation_ms": 1500
+    }
+  },
+  "url_rules": {},
+  "risk": "medium",
+  "selectors_patch": {
+    "plp": {
+      "tiles": [
+        "ul li a[href$='.html'][href*='/men/'], ul li a[href$='.html'][href*='/women/']",
+        "[class*='product'] a[href$='.html']",
+        "a[data-test*='product'][href$='.html']",
+        "article a[href$='.html']"
+      ],
+      "next_page": [
+        "a[rel='next']",
+        "button[aria-label='Next']",
+        "a[aria-label*='Next']"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-test='pdp-title']",
+        "h1[class*='title']",
+        "h1"
+      ],
+      "price": [
+        "[itemprop='price']",
+        "[data-test='price']",
+        "[class*='Price'] [class*='value']",
+        "[class*='price']"
+      ]
+    },
+    "blocking": {
+      "cookie_accept": [
+        "#onetrust-accept-btn-handler",
+        "button#onetrust-accept-btn-handler",
+        "button[aria-label='Accept all cookies']",
+        "button:has-text('Accept all')",
+        "button:has-text('同意する')"
+      ],
+      "geo_confirm": [
+        "button:has-text('Continue')",
+        "button:has-text('Confirm')",
+        "button[data-test*='country'][data-test*='continue']"
+      ],
+      "close_overlays": [
+        "button[aria-label='Close']",
+        "button[aria-label='Close dialog']",
+        "button[data-test*='close']"
+      ],
+      "open_menu": [
+        "button[aria-label='Open menu']",
+        "button[data-test*='open-menu']",
+        "button[aria-controls*='menu']"
+      ],
+      "nav_men": [
+        "a[href*='/men/outerwear']",
+        "a[href*='/men/']"
+      ],
+      "nav_women": [
+        "a[href*='/women/outerwear']",
+        "a[href*='/women/']"
+      ]
+    }
+  },
+  "code_hints": [
+    "If start_url lands on home: click blocking.cookie_accept if visible, then try blocking.geo_confirm. If no PLP tiles, open hamburger with blocking.open_menu and click first available of blocking.nav_men or blocking.nav_women, then wait for plp.tiles.",
+    "Before extracting PLP, scroll incrementally to the bottom to trigger lazy-load; re-query plp.tiles after each scroll until count stabilizes or a sensible cap.",
+    "When no tiles yet, wait-for any of the selectors in plp.tiles with a longer timeout (e.g., 8–10s) after closing overlays.",
+    "Constrain domain to www.moncler.com; ignore and do not follow links to monclergroup.com or corporate pages.",
+    "On PDP, prefer itemprop='price' and data-test price selectors; strip currency symbols and non-digits safely. Also capture the currency from nearby elements if available."
+  ]
+}

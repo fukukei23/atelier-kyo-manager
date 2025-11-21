@@ -1,0 +1,49 @@
+{
+  "selectors_patch": {
+    "dismiss": {
+      "cookie": "#onetrust-accept-btn-handler, button[aria-label*='Accept all cookies']",
+      "geo": "[data-testid='geolocation-continue'], button[data-testid='dialog-accept'], button[data-test*='continue']"
+    },
+    "plp": {
+      "container": "main [data-testid='product-list'], main [data-component='ProductGrid'], main .product-grid",
+      "items": "li [data-testid='product-card'] a[href*='/products/'], article [data-testid='product-card'] a[href*='/products/'], a[href*='/products/'][data-testid*='product']",
+      "title": "[data-testid='product-card'] [data-testid*='title'], [data-testid='product-card'] [class*='title']",
+      "price": "[data-testid='product-card'] [data-testid*='price'], [data-testid='product-card'] [class*='price']"
+    },
+    "pdp": {
+      "title": "h1[data-testid='pdp-title'], h1[itemprop='name'], h1",
+      "price": "meta[itemprop='price']@content, [data-testid='pdp-price'] [data-testid*='value'], [class*='Price'] [class*='value']"
+    }
+  },
+  "url_rules": {},
+  "overrides_patch": {
+    "start_url": "https://www.moncler.com/en-int/men/ready-to-wear/jackets",
+    "wait_for_selectors": [
+      "#onetrust-accept-btn-handler",
+      "[data-testid='geolocation-continue'], button[data-testid='dialog-accept']",
+      "main [data-component='ProductGrid'], main [data-testid='product-list']"
+    ],
+    "actions": [
+      {
+        "click": "#onetrust-accept-btn-handler",
+        "optional": true
+      },
+      {
+        "click": "[data-testid='geolocation-continue'], button[data-testid='dialog-accept']",
+        "optional": true
+      }
+    ],
+    "pagination": {
+      "next": "a[rel='next'], button[aria-label='Next']",
+      "load_more": "button[aria-label*='Load more'], button[data-testid*='load-more']"
+    }
+  },
+  "rationale": "We landed on the regional homepage (en-lt), which has no PLP grid until a category is selected and may show consent/geo overlays. Normalizing to the international locale (en-int) and starting from a stable category PLP avoids the empty state. Added dismissors for OneTrust cookies and geo continue, robust PLP/PDP selectors, and URL rules to keep within moncler.com retail paths and avoid monclergroup.com.",
+  "code_hints": [
+    "Set Accept-Language to en to encourage en-int routing.",
+    "After navigation, attempt optional clicks on selectors.dismiss.cookie and selectors.dismiss.geo, then wait for selectors.plp.container.",
+    "If still on homepage after normalization, open the mega-menu and click a category link (e.g., a[href*='/en-int/men/ready-to-wear/jackets']).",
+    "On PDP, if CSS price is missing, parse application/ld+json for offers.price and currency."
+  ],
+  "risk": "medium"
+}

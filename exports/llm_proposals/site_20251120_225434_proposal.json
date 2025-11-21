@@ -1,0 +1,80 @@
+{
+  "overrides_patch": {
+    "pre_actions$append": [
+      {
+        "action": "click_if_present",
+        "selector": "#onetrust-accept-btn-handler",
+        "wait_after_ms": 300
+      },
+      {
+        "action": "click_if_present",
+        "selector": "button[aria-label='Close']",
+        "context": "dialog",
+        "wait_after_ms": 200
+      }
+    ],
+    "wait_for_selectors$append": [
+      "[data-testid='product-tile']",
+      ".product-tile"
+    ],
+    "plp_wait_ms": 15000,
+    "scroll": {
+      "strategy": "incremental",
+      "until_selector_any": [
+        "[data-testid='product-tile']",
+        ".product-tile"
+      ],
+      "step_px": 800,
+      "max_passes": 4,
+      "delay_ms": 400
+    },
+    "navigation$user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+  },
+  "url_rules": {},
+  "rationale": "The PLP likely failed to render due to an unhandled cookie consent (OneTrust) and dynamic, JS-driven rendering. Adding a reliable consent click and waiting/scrolling improves materialization. Moncler commonly uses data-testid-based hooks for grid and tiles; the added selectors cover both data-testid and class-based variants seen across locales/AB tests. URL normalization ensures we stay on en-int and avoid locale traps or monclergroup.com redirects, and preserves the GB shipping context for consistent pricing.",
+  "selectors_patch": {
+    "plp": {
+      "container$append": [
+        "main [data-testid='product-grid']",
+        "main .product-grid"
+      ],
+      "product_card$append": [
+        "[data-testid='product-tile']",
+        ".product-tile",
+        ".c-product-tile",
+        "li[class*='product-grid__item'] article"
+      ],
+      "product_link$append": [
+        "a[data-testid='product-tile-link']",
+        "a.product-tile__link",
+        "a.product-tile_link",
+        "a.c-product-tile__link"
+      ]
+    },
+    "pdp": {
+      "price$append": [
+        "[itemprop='price']",
+        "[data-testid='price'] [data-testid='amount']",
+        ".prices__current .value",
+        ".price .value"
+      ],
+      "title$append": [
+        "h1[data-testid='product-name']",
+        "h1[itemprop='name']",
+        "h1.product-name"
+      ]
+    },
+    "consent$append": [
+      "#onetrust-accept-btn-handler"
+    ]
+  },
+  "code_hints": [
+    "After navigation, first click the OneTrust button (#onetrust-accept-btn-handler) if present, then wait for either [data-testid='product-grid'] or product tiles to appear.",
+    "Use a visible-only wait: page.waitForSelector('[data-testid=\"product-tile\"]', { visible: true, timeout: 15000 }) before declaring PLP failure.",
+    "If tiles are still missing after 8s, perform incremental scroll (800px steps) with short delays to trigger lazy render, then re-check.",
+    "When extracting PLP links, prefer the first anchor matching the product_link selectors within each product_card; de-duplicate by href.",
+    "Preserve/merge the query params forceLocale=en-int and shipToCountry=GB when following PDP links.",
+    "On PDP, read price from [itemprop=price] or [data-testid=price] [data-testid=amount]; ensure the element has non-empty textContent or a content/value attribute before accepting."
+  ],
+  "risk": "medium"
+}

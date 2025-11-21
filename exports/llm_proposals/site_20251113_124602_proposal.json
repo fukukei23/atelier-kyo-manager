@@ -1,0 +1,112 @@
+{
+  "overrides_patch": {
+    "wait_for_selectors": [
+      "a.cmp-producttile__image-link",
+      "[data-component*='ProductGrid']",
+      "#onetrust-accept-btn-handler"
+    ],
+    "pre_click_selectors": [
+      "#onetrust-accept-btn-handler",
+      "button:has-text('Accept All')",
+      "a[href*='/en-de/']:not([href*='choose'])"
+    ],
+    "plp_infinite_scroll": {
+      "enabled": true,
+      "max_scrolls": 12,
+      "scroll_step_px": 1200,
+      "wait_after_scroll_ms": 400
+    },
+    "headers": {
+      "Accept-Language": "en-DE,en;q=0.9"
+    },
+    "navigation": {
+      "wait_until": "networkidle",
+      "pdp_parse_ld_json": true
+    }
+  },
+  "selectors_patch": {
+    "plp": {
+      "product_card": [
+        "a.cmp-producttile__image-link",
+        "li.product-grid__item a[href$='.html']",
+        "a[data-testid='productTile']",
+        "a[href$='.html'][href*='/en-de/'][href*='/men/'][href*='/outerwear/']"
+      ],
+      "product_link_within_card": "a",
+      "wait_for": [
+        "main [data-cmp-is*='product'], [data-component*='ProductGrid'], .product-grid, [data-testid='plp-grid']",
+        "a.cmp-producttile__image-link"
+      ],
+      "load_more": [
+        "button[aria-label*='Load more']",
+        "button[data-load-more]"
+      ]
+    },
+    "pdp": {
+      "price": [
+        "meta[itemprop='price'][content]",
+        "[itemprop='price']",
+        "[data-test='price'], [data-testid='price']",
+        ".price, .price__value, [data-price]"
+      ],
+      "title": [
+        "h1[itemprop='name']",
+        "h1[data-test='pdp-title']",
+        "h1.product-name",
+        "h1"
+      ],
+      "wait_for": [
+        "script[type='application/ld+json']",
+        "[itemtype*='Product'], [data-testid='pdp']"
+      ]
+    },
+    "modals": {
+      "consent": [
+        "#onetrust-accept-btn-handler",
+        "button[id*='onetrust'][aria-label*='Accept']",
+        "button:has-text('Accept All')",
+        "button:has-text('Allow all')",
+        "button:has-text('Continue without accepting')"
+      ],
+      "geo": [
+        "[data-test*='geolocation'] button:has-text('Shop Germany')",
+        "a[href*='/en-de/']:not([href*='choose'])"
+      ],
+      "generic_close": [
+        "button[aria-label='Close']",
+        "[data-test='close-modal']"
+      ]
+    }
+  },
+  "risk": "medium",
+  "code_hints": [
+    "On every navigation, try to accept cookies: click('#onetrust-accept-btn-handler') if present; fallback to button containing 'Accept All'.",
+    "If a geolocation/country modal appears, prefer an anchor/button that contains '/en-de/' or text 'Shop Germany'.",
+    "PLP load: wait for any of [data-component*='ProductGrid'] or a.cmp-producttile__image-link; then perform incremental scrolls (max 12) and also click a visible Load more button if present.",
+    "PLP extraction: collect unique hrefs from selectors in selectors.plp.product_card that end with .html and include '/en-de/'.",
+    "PDP extraction: first parse JSON-LD Product in script[type='application/ld+json'] for offers.price and name; fallback to selectors.pdp.price/title.",
+    "Use Accept-Language header 'en-DE,en;q=0.9' and a desktop UA to reduce locale prompts.",
+    "Guard against redirects: if location.pathname does not start with '/en-de/', rewrite URL to normalized '/en-de/' form and retry once."
+  ],
+  "rationale": "The PLP likely failed due to a cookie consent/geolocation modal blocking content, and because product tiles on Moncler are lazy-loaded. We add robust consent/geo closers, wait-for product grid, and infinite scroll support. For PDP, JSON-LD parsing makes price/title extraction resilient to UI changes. URL normalization keeps us on /en-de and avoids country selector traps and monclergroup.com diversions.",
+  "url_rules": {
+    "allow": [
+      "^https://www\\.moncler\\.com/en-de/men/outerwear/.*"
+    ],
+    "block": [
+      "^https?://(www\\.)?monclergroup\\.com/.*",
+      "^https://www\\.moncler\\.com/.*/choose-your-country.*",
+      "^https://www\\.moncler\\.com/en-[a-z]{2}(?!/).*"
+    ],
+    "normalize": [
+      {
+        "when": "^https://www\\.moncler\\.com/en-[a-z]{2}/(.*)$",
+        "rewrite": "https://www.moncler.com/en-de/$1"
+      },
+      {
+        "when": "^https://www\\.moncler\\.com/(?!en-de/)(.*)$",
+        "rewrite": "https://www.moncler.com/en-de/$1"
+      }
+    ]
+  }
+}

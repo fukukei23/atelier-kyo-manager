@@ -1,0 +1,111 @@
+{
+  "overrides_patch": {
+    "wait_for_selectors": [
+      "#onetrust-accept-btn-handler",
+      "a[data-testid='product-card-link'], .product-card, li[class*='product']"
+    ],
+    "pre_actions": [
+      {
+        "action": "click_if_present",
+        "selector": "#onetrust-accept-btn-handler",
+        "timeout_ms": 3000
+      },
+      {
+        "action": "click_if_present",
+        "selector": "button:has-text('Accept All')",
+        "timeout_ms": 2000
+      },
+      {
+        "action": "click_if_present",
+        "selector": "button:has-text('Agree')",
+        "timeout_ms": 2000
+      }
+    ],
+    "plp_scroll": {
+      "enabled": true,
+      "max_scrolls": 6,
+      "wait_ms": 800,
+      "until_selector": "a[data-testid='product-card-link'], .product-card, li[class*='product'] a[href*='/p/']"
+    },
+    "headers": {
+      "Accept-Language": "en-DE,en;q=0.9"
+    }
+  },
+  "rationale": "The PLP likely failed due to a consent overlay (OneTrust) blocking rendering/scroll and dynamic loading that requires user interaction/scroll. Adding explicit consent handling, a short scroll routine, and resilient product selectors should allow items to materialize. URL normalization to /en-de/ prevents region traps and unintended redirects. The selector set uses common Moncler attributes and generic product-card fallbacks without disrupting existing keys.",
+  "url_rules": {
+    "normalize": [
+      {
+        "if_host_matches": "moncler.com",
+        "ensure_https": true,
+        "ensure_www": true
+      },
+      {
+        "if_path_missing_regex": "^/en-[a-z]{2}/",
+        "prepend_path": "/en-de"
+      },
+      {
+        "if_path_matches_regex": "^/en-[a-z]{2}/",
+        "rewrite_regex": "^/en-[a-z]{2}/",
+        "rewrite_to": "/en-de/"
+      }
+    ],
+    "strip_query_params": [
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_term",
+      "utm_content",
+      "gclid",
+      "gbraid",
+      "wbraid",
+      "cjevent",
+      "irgwc"
+    ],
+    "disallow_hosts": [
+      "monclergroup.com",
+      "corporate.moncler.com",
+      "login.moncler.com"
+    ]
+  },
+  "risk": "medium",
+  "code_hints": [
+    "Use a realistic desktop UA and enable stealth/anti-detection options. Keep headful if bot friction persists.",
+    "On navigation, immediately try clicking OneTrust consent (#onetrust-accept-btn-handler). Retry after a short wait if first attempt fails.",
+    "After consent, wait for one of the PLP item selectors. If not found, perform incremental scrolling (6 steps, 800ms pauses) and re-check.",
+    "Guard against overlay blocking: if a visible modal or backdrop exists ([class*='consent'], [class*='modal'], .ot-sdk-row), attempt to close it before querying tiles.",
+    "Treat PLP items as anchors linking to /p/ on moncler.com. Extract href, then navigate to PDP and read PDP price/title via the provided selectors.",
+    "Use timeout budgeting: 12–15s total for PLP materialization (including scrolls). If still empty, reload once and repeat consent + wait.",
+    "Set Accept-Language to en-DE to reduce locale switches; verify final URL contains /en-de/ before extraction and rewrite if needed using url_rules."
+  ],
+  "selectors_patch": {
+    "plp": {
+      "items": [
+        "a[data-testid='product-card-link']",
+        "div[class*='product-card'] a[href*='/p/']",
+        "li[class*='product'] a[href*='/p/']"
+      ],
+      "price": [
+        "[data-testid='product-card-price']",
+        ".product-card [class*='price']",
+        "li[class*='product'] [class*='price']"
+      ],
+      "title": [
+        "[data-testid='product-card-name']",
+        ".product-card [class*='title'], .product-card [class*='name']",
+        "li[class*='product'] [class*='title'], li[class*='product'] [class*='name']"
+      ]
+    },
+    "pdp": {
+      "price": [
+        "[data-testid='pdp-price']",
+        "div[class*='price'] [data-currency]",
+        "div[class*='price']"
+      ],
+      "title": [
+        "[data-testid='pdp-title']",
+        "h1[class*='title']",
+        "h1[class*='product']"
+      ]
+    }
+  }
+}

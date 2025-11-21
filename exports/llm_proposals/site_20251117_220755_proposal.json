@@ -1,0 +1,31 @@
+{
+  "rationale": "The run landed on the locale homepage (no product grid) and likely hit the EU cookie banner. We normalize to a stable PLP (men/outerwear/down-jackets), add a deterministic cookie-accept selector (OneTrust), broaden product link detection on PLP, and harden PDP price/title extraction. URL rules also prevent accidental hops to corporate domains or wrong locales.",
+  "overrides_patch": {
+    "landing_url": "https://www.moncler.com/en-de/men/outerwear/down-jackets/",
+    "wait_for_selectors": [
+      "#onetrust-accept-btn-handler",
+      "a[href$='.html']"
+    ],
+    "max_scrolls": 6
+  },
+  "url_rules": {},
+  "selectors_patch": {
+    "consent": {
+      "accept": "#onetrust-accept-btn-handler"
+    },
+    "plp": {
+      "tile_link": "a[data-testid='product-card'], a[href*='/en-de/'][href$='.html']"
+    },
+    "pdp": {
+      "price": "meta[itemprop='price'], [itemprop='price'], [data-testid='price']",
+      "title": "h1[itemprop='name'], h1[data-testid='product-name'], h1"
+    }
+  },
+  "risk": "medium",
+  "code_hints": [
+    "If #onetrust-accept-btn-handler is present, click it before any PLP wait.",
+    "If current URL matches the site root/home (no product grid), navigate to /en-de/men/outerwear/down-jackets/ as the PLP seed.",
+    "After reaching PLP, wait for at least one a[href$='.html'] inside the product grid, then scroll up to max_scrolls to load more.",
+    "When on PDP, if visible price selector fails, also read from meta[itemprop='price'] as a fallback."
+  ]
+}
