@@ -1,0 +1,70 @@
+{
+  "overrides_patch": {
+    "consent_selectors": [
+      "#onetrust-accept-btn-handler",
+      "button[aria-label='Accept all']",
+      "button#onetrust-accept-btn-handler"
+    ],
+    "modal_close_selectors": [
+      "button[data-testid='modal-close']",
+      "button[aria-label='Close']",
+      "button[aria-label='Dismiss']"
+    ],
+    "wait_for_selectors": {
+      "plp_ready": [
+        "[data-testid='product-grid']",
+        ".product-grid",
+        "ul[class*='product']"
+      ]
+    },
+    "seed_plps": [
+      "https://www.moncler.com/en-de/men/ready-to-wear/down-jackets",
+      "https://www.moncler.com/en-de/women/ready-to-wear/down-jackets"
+    ],
+    "blocked_domains": [
+      "monclergroup.com"
+    ]
+  },
+  "rationale": "The run landed on the Moncler homepage (en-de) where no product tiles exist, hence PLP extraction failed. Moncler often shows a OneTrust cookie banner and sometimes locale/promo modals that can block interactions. Adding consent/modal selectors and a deterministic fallback to a known PLP URL (men down jackets) stabilizes entry. Moncler PDP URLs consistently include '/products/', so using that pattern yields robust PDP link extraction. Additional PLP-ready selectors and PDP price/title fallbacks increase resilience against minor DOM changes. URL rules normalize the locale to en-de, avoid corporate monclergroup.com redirects, and strip marketing params to reduce redirect noise.",
+  "url_rules": {},
+  "risk": "medium",
+  "code_hints": [
+    "If landing on the homepage (path = /en-de/), immediately navigate to the seed PLP override (men down jackets) before attempting PLP extraction.",
+    "Before any extraction, try clicking cookie consent using selectors in overrides_patch.consent_selectors; ignore errors if not present.",
+    "If a modal overlays the page (e.g., locale or promo), try modal_close_selectors before proceeding.",
+    "Wait for overrides_patch.wait_for_selectors.plp_ready OR for at least 6 pdp_link matches before considering PLP ready.",
+    "For product tiles, prefer anchors matching a[href*='/products/']; derive the card element via anchor.closest('article, li').",
+    "On PDP, if visible price selectors fail, read meta[itemprop='price'][content] or parse JSON-LD (script[type='application/ld+json']) for offers.price.",
+    "Guard against lazy loading by scrolling incrementally until no new tiles appear twice; then extract.",
+    "Only treat a page as PLP if there are 8+ unique PDP links; otherwise follow top-nav links containing /men/ or /women/ and a Jackets/Down keyword."
+  ],
+  "selectors_patch": {
+    "plp": {
+      "product_card": [
+        "[data-testid='product-card']",
+        "li[class*='product'] article",
+        "li[class*='product']",
+        ".product-grid li",
+        "article[data-component='ProductTile']"
+      ],
+      "pdp_link": [
+        "a[href*='/products/']",
+        "a[href*='/p/']",
+        "a[data-testid='product-card-link']"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-testid='pdp-title']",
+        "h1[itemprop='name']",
+        "h1[class*='product']"
+      ],
+      "price": [
+        "[itemprop='price']",
+        "span[data-testid='price-current']",
+        "span[class*='price'] [class*='value'], span[class*='price-value']",
+        "meta[itemprop='price'][content]"
+      ]
+    }
+  }
+}

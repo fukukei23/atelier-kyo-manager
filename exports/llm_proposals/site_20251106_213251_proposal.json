@@ -1,0 +1,87 @@
+{
+  "rationale": "Crawler navigated off-site to monclergroup.com, likely via brand/external link. We add strict domain allowlist, block external navigations, and constrain PLP clicks to Target PDP anchors (/p/). We normalize URLs, strip locale traps, and add robust, minimal selectors for Target PLP/PDP along with explicit wait_for anchors. The code hint addresses the missing _force_plp_recover attribute and adds a safe recovery path plus off-domain navigation guards.",
+  "overrides_patch": {
+    "start_url": "https://www.target.com/c/women-s-clothing/-/N-5xtcm",
+    "settings": {
+      "allowed_domains": [
+        "target.com",
+        "www.target.com"
+      ],
+      "disallowed_domains": [
+        "monclergroup.com",
+        "www.monclergroup.com",
+        "moncler.com",
+        "www.moncler.com"
+      ],
+      "block_external_navigation": true,
+      "normalize_urls": true,
+      "remove_url_params": [
+        "utm_*",
+        "cid",
+        "intcmp"
+      ],
+      "headers": {
+        "Accept-Language": "en-US,en;q=0.9"
+      },
+      "cookies": [
+        {
+          "domain": ".target.com",
+          "name": "visitorLocale",
+          "value": "en_US",
+          "path": "/"
+        }
+      ],
+      "wait_for_selectors": [
+        "a[href^='/p/']",
+        "h1[data-test='product-title']"
+      ],
+      "dismiss_modals": [
+        "button#onetrust-accept-btn-handler",
+        "button[data-test='store-location-dialog-close']",
+        "button[data-test='email-modal-close']"
+      ]
+    }
+  },
+  "url_rules": {},
+  "code_hints": [
+    "Guard missing recovery method: replace direct calls to self._force_plp_recover() with if hasattr(self, 'force_plp_recover'): self.force_plp_recover(ctx) elif hasattr(self, '_force_plp_recover'): self._force_plp_recover(ctx)",
+    "Add domain-allowlist navigation guard: on each navigation or click, if new URL hostname not in allowed_domains, preventDefault or page.goBack(); prefer evaluating anchors and filtering to href^='/p/' on PLP.",
+    "When extracting PLP items, querySelectorAll('a[href^=\"/p/\"]') and de-duplicate by pathname; avoid any anchors that resolve to external hosts.",
+    "On PDP, wait for h1[data-test='product-title'] before price; if price selector not found, attempt reading from JSON-LD: find script[type='application/ld+json'] containing \"@type\":\"Product\" and parse offers.price.",
+    "Implement a generic modal dismiss routine that clicks selectors from settings.dismiss_modals if present, retried before giving up PLP detection.",
+    "Set Accept-Language header and en_US cookie before first navigation to stabilize content and reduce locale-driven redirects."
+  ],
+  "selectors_patch": {
+    "plp": {
+      "product_card": [
+        "a[href^='/p/']"
+      ],
+      "product_link": [
+        "a[href^='/p/']"
+      ],
+      "product_name": [
+        "a[href^='/p/'][data-test='product-title']",
+        "a[href^='/p/'] h3",
+        "a[href^='/p/'] span[aria-hidden='true']"
+      ],
+      "wait_for": [
+        "a[href^='/p/']"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-test='product-title']",
+        "h1[itemprop='name']"
+      ],
+      "price": [
+        "div[data-test='product-price'] span",
+        "span[data-test='current-price']",
+        "div[data-test='product-price']"
+      ],
+      "wait_for": [
+        "h1[data-test='product-title']"
+      ]
+    }
+  },
+  "risk": "medium"
+}

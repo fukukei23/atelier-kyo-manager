@@ -1,0 +1,86 @@
+{
+  "code_hints": [
+    "If a cookie banner appears, click one of selectors in consent.accept before any navigation.",
+    "If a geolocation/region modal appears, click geolocation.continue or the button that keeps United Kingdom.",
+    "Prefer starting directly from the provided PLP start_urls. If starting from homepage, open nav.men then click nav.men_down_jackets.",
+    "On PLP: wait for either plp.list or several plp.item; then auto-scroll to load more items before extracting.",
+    "Extract PDP links via plp.item_link; normalize links using url_rules before visiting.",
+    "On PDP: wait for pdp.title and pdp.price; handle prices that may render after a short delay."
+  ],
+  "overrides_patch": {
+    "start_urls": [
+      "https://www.moncler.com/en-gb/men/ready-to-wear/down-jackets/",
+      "https://www.moncler.com/en-gb/women/ready-to-wear/down-jackets/"
+    ],
+    "http_headers": {
+      "Accept-Language": "en-GB,en;q=0.9"
+    },
+    "wait_for_selectors": {
+      "before_plp": [
+        "consent.accept",
+        "geolocation.continue"
+      ],
+      "plp": [
+        "plp.list",
+        "plp.item"
+      ]
+    },
+    "scroll": {
+      "plp_auto_scroll": true,
+      "plp_min_items": 12
+    }
+  },
+  "risk": "medium",
+  "selectors_patch": {
+    "consent.accept": [
+      "#onetrust-accept-btn-handler",
+      "button[aria-label='Accept all cookies']",
+      "button:has-text('Accept All')",
+      "button:has-text('Accept all')"
+    ],
+    "geolocation.continue": [
+      "button:has-text('Continue to United Kingdom')",
+      "button[data-testid='GeolocationSelectConfirm']",
+      "button:has-text('Continue')"
+    ],
+    "nav.men": [
+      "a[href='/en-gb/men/']",
+      "button[aria-controls='men']",
+      "a:has-text('Men')"
+    ],
+    "nav.men_down_jackets": [
+      "a[href*='/en-gb/men/ready-to-wear/down-jackets']",
+      "a:has-text('Down Jackets')"
+    ],
+    "plp.list": [
+      "[data-testid='product-list']",
+      "ul[data-ui='product-list']",
+      "div[data-component='ProductGrid']"
+    ],
+    "plp.item": [
+      "[data-testid='product-card']",
+      "li[data-testid='product-card']",
+      "article[data-component='ProductCard']",
+      "li .product-tile, .product-tile"
+    ],
+    "plp.item_link": [
+      "a[data-testid='link-to-pdp']",
+      "a[href*='/en-gb/'][href*='/products/']",
+      "a[href*='/en-gb/'][href*='/p/']",
+      ".product-tile a[href*='/en-gb/']"
+    ],
+    "pdp.title": [
+      "[data-testid='product-title']",
+      "h1[data-ui='pdp-title']",
+      "h1.product-name"
+    ],
+    "pdp.price": [
+      "[data-testid='product-price']",
+      "[data-ui='price']",
+      ".price__value",
+      "span[itemprop='price']"
+    ]
+  },
+  "rationale": "The failure occurred because the homepage is not a PLP and likely showed cookie/region modals, so no product tiles appeared. We introduce safe overrides to start from stable PLPs under /en-gb/, add consent/region selectors, robust PLP item selectors, and URL normalization to keep the crawler within the en-gb locale while avoiding monclergroup.com or other locales. Auto-scroll is enabled to materialize lazy-loaded tiles.",
+  "url_rules": {}
+}

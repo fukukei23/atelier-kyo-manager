@@ -1,0 +1,636 @@
+{
+  "SSENSE": {
+    "home_url": "https://www.ssense.com/en-gb",
+    "discovery_settings": {
+      "use_warm_up": true,
+      "use_http2_fallback": false,
+      "max_navigation_attempts": 2,
+      "navigation_tactics": [
+        "direct_brand_url"
+      ],
+      "url_templates": {
+        "direct_brand_url": "/en-gb/men/designers/{brand}"
+      },
+      "timeout_sec": 20,
+      "extra_http_headers": {
+        "Accept-Language": "en-GB,en;q=0.9"
+      }
+    },
+    "selectors": {
+      "pdp": {
+        "pdp_link_selectors": [
+          "a:has(img[alt*='{brand}'])",
+          "article a:has(img)",
+          "a[href*='/men/'][href*='/product']",
+          "a[href*='/women/'][href*='/product']"
+        ]
+      }
+    }
+  },
+  "MATCHESFASHION": {
+    "home_url": "https://www.matchesfashion.com/intl",
+    "discovery_settings": {
+      "use_warm_up": false,
+      "use_http2_fallback": true,
+      "max_navigation_attempts": 3,
+      "navigation_tactics": [
+        "designers_hub",
+        "direct_brand_url"
+      ],
+      "url_templates": {
+        "designers_hub": "/intl/designers",
+        "direct_brand_url": "/intl/designers/{brand}"
+      },
+      "timeout_sec": 45,
+      "extra_http_headers": {
+        "Accept-Language": "en-GB,en;q=0.9"
+      }
+    },
+    "selectors": {
+      "pdp": {
+        "pdp_link_selectors": [
+          "a[data-testid='product-card-link']:has(img[alt])",
+          ".lister__product a[href*='/products/']"
+        ]
+      }
+    }
+  },
+  "GIVENCHY_OFFICIAL": {
+    "home_url": "https://www.givenchy.com",
+    "discovery_settings": {
+      "navigation_tactics": [
+        "official_catalog"
+      ],
+      "url_templates": {
+        "official_catalog": "/en-en/men/new-in"
+      },
+      "fallback_url": "/en-en/men/new-in",
+      "timeout_sec": 30,
+      "max_navigation_attempts": 2,
+      "extra_http_headers": {
+        "Accept-Language": "en-GB,en;q=0.9"
+      }
+    },
+    "selectors": {
+      "pdp": {
+        "plp_container_selectors": [
+          ".product-grid",
+          ".plp",
+          "main .grid"
+        ],
+        "pdp_link_selectors": [
+          ".product-grid a[href*='/en-en/'][href*='/p/']",
+          ".product-grid a:has(img)"
+        ]
+      }
+    }
+  },
+  "MONCLER_OFFICIAL": {
+    "home_url": "https://www.moncler.com/en-int",
+    "navigation": {
+      "strip_url_fragments": true
+    },
+    "locale": {
+      "prefer": "en-int",
+      "replace_rules": [
+        {
+          "from": "/en-jp/en-int/",
+          "to": "/en-int/"
+        },
+        {
+          "from": "/en-jp/",
+          "to": "/en-int/"
+        }
+      ]
+    },
+    "behavior": {
+      "scroll_to_load": true,
+      "scroll_steps": 3,
+      "wait_after_navigation_ms": 800
+    },
+    "allowed_domain": "moncler.com",
+    "trap_domains": [
+      "www.monclergroup.com",
+      "monclergroup.com"
+    ],
+    "seed_plp_url": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB",
+    "force_locale": "en-int",
+    "ship_to": "GB",
+    "plp_hard_nav": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB",
+    "deny_paths_regex": [
+      ".*/en-jp/.*",
+      ".*/legal/.*"
+    ],
+    "deny_fragment_contains": [
+      "#search-field",
+      "#product-information-panel",
+      "#main"
+    ],
+    "normalize_rules": [
+      {
+        "if_url_contains": "/en-jp/",
+        "replace": {
+          "/en-jp/": "/en-int/"
+        }
+      },
+      {
+        "if_url_contains": "/en-int/en-int/",
+        "replace": {
+          "/en-int/en-int/": "/en-int/"
+        }
+      },
+      {
+        "ensure_params": {
+          "forceLocale": "en-int",
+          "shipToCountry": "GB"
+        }
+      }
+    ],
+    "retry_on_trap": {
+      "max": 3,
+      "action": "goto_plp_hard_nav"
+    },
+    "discovery_settings": {
+      "wait_until": "networkidle",
+      "timeout_sec": 60,
+      "enable_video": true,
+      "overall_plp_budget_ms": 60000,
+      "accept_language": "en-US,en;q=0.7",
+      "plp_scroll_rounds": 8,
+      "plp_scroll_wait_ms": 400,
+      "pdp_watchdog_ms": 30000,
+      "fallback_url": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB",
+      "force_query_params": {
+        "forceLocale": "en-int",
+        "shipToCountry": "GB"
+      },
+      "plp_allowlist_regex": [
+        "^https://www\\.moncler\\.com/en-int/.*"
+      ],
+      "blocklist_path_regex": [
+        "/en-jp($|/)",
+        "/legal/",
+        "/client-service/",
+        "/children/"
+      ],
+      "hard_redirects": [
+        {
+          "if_url_regex": "https?://(www\\.)?monclergroup\\.com/.*",
+          "goto": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
+        },
+        {
+          "if_url_regex": "https?://www\\.moncler\\.com/en-jp/.*",
+          "goto": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
+        },
+        {
+          "if_url_regex": "https?://www\\.moncler\\.com/en-[a-z]{2}/?$",
+          "goto": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
+        },
+        {
+          "if_url_regex": "https?://www\\.moncler\\.com/.*/(legal|client-service|children)/.*",
+          "goto": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
+        }
+      ],
+      "navigation_tactics": [
+        "fallback_url",
+        "official_catalog",
+        "official_catalog_alt",
+        "search"
+      ],
+      "url_templates": {
+        "fallback_url": "/en-int/women/outerwear/all-down-jackets?forceLocale=en-int&shipToCountry=GB",
+        "official_catalog": "/en-int/women/outerwear/all-down-jackets?forceLocale=en-int&shipToCountry=GB",
+        "official_catalog_alt": "/en-int/women/outerwear/down-jackets?forceLocale=en-int&shipToCountry=GB",
+        "search": "/en-int/search?q={query}&forceLocale=en-int&shipToCountry=GB"
+      },
+      "search_keyword": "down jacket",
+      "wait_for_selectors": [
+        "[data-testid='product-grid']",
+        "[data-test='product-grid']",
+        "[data-testid='plp-grid']",
+        "[data-qa='product-tile']",
+        "[data-test*='product' i]",
+        "[data-component*='ProductGrid']",
+        "section[role='region'] .product-list",
+        ".plp-grid",
+        ".product-grid",
+        ".c-product-grid",
+        "a[href*='/products/']",
+        "#onetrust-accept-btn-handler"
+      ],
+      "extra_http_headers": {
+        "Accept-Language": "en-US,en;q=0.7",
+        "DNT": "1",
+        "Referer": "https://www.moncler.com/en-int/"
+      },
+      "shipToCountry": "GB",
+      "locale_param": "forceLocale=en-int",
+      "enable_locale_escape": true,
+      "viewport": {
+        "width": 1440,
+        "height": 900,
+        "deviceScaleFactor": 1
+      }
+    },
+    "selectors": {
+      "ui": {
+        "continue_shopping": [
+          "a:has-text('CONTINUE SHOPPING')",
+          "button:has-text('CONTINUE SHOPPING')"
+        ],
+        "cookie_accept": [
+          "#onetrust-accept-btn-handler",
+          "button:has-text('ACCEPT ALL')",
+          "button[aria-label='Accept all']",
+          "button:has-text('CONTINUE WITHOUT ACCEPTING')",
+          "[id^='onetrust-'] button",
+          "[data-testid='cookie-accept-all']"
+        ],
+        "search_open": [
+          "button[aria-label='Search']",
+          "button[aria-controls*='search' i]",
+          "button:has(svg[aria-label='search'])"
+        ],
+        "search_input": [
+          "form[role='search'] input[type='search']",
+          "input[aria-label*='Search' i]",
+          "input[type='search']"
+        ],
+        "search_submit": [
+          "form[role='search'] button[type='submit']",
+          "button[aria-label*='Search' i]"
+        ]
+      },
+      "pdp": {
+        "plp_container_selectors": [
+          "[data-testid='product-grid']",
+          "[data-test='product-grid']",
+          "section[id*='product'] ul[role='list']",
+          "[data-testid='plp-grid']",
+          "[data-qa='product-tile']",
+          "[data-test*='product' i]",
+          "[data-component*='ProductGrid']",
+          "section[role='region'] .product-list",
+          ".plp-grid",
+          ".product-grid",
+          ".c-product-grid"
+        ],
+        "pdp_link_selectors": [
+          "[data-testid='product-card'] a[href*='/products/']",
+          "[data-test='product-card'] a[href*='/products/']",
+          "ul[role='list'] li a[href*='/products/']",
+          "a[href*='/en-de/'][href*='/products/']",
+          "a[href*='/en-int/'][href*='/products/']",
+          "a[href*='/en-int/'][href*='/p/']",
+          "[data-qa='product-tile'] a[href]",
+          "[data-testid*='product' i] a[href]",
+          "a[data-qa='product-card-link']",
+          "a[href*='/products/']",
+          "a[href*='/p/']",
+          ".product-card a[href*='/products/']",
+          ".c-product-card__link",
+          ".c-product-tile a[href*='/products/']",
+          ".c-product-tile a[href*='/p/']"
+        ],
+        "plp_verification_selectors": [
+          "[data-testid='plp-grid']",
+          ".plp-grid",
+          ".product-grid"
+        ],
+        "pdp_click_fallback_selectors": [
+          "[data-qa='product-tile']",
+          "[data-testid='product-card']",
+          "[data-test*='product' i]",
+          ".c-product-card",
+          ".c-product-tile",
+          ".product-card",
+          ".product-item"
+        ],
+        "title_selectors": [
+          "[data-testid='pdp-title']",
+          "h1",
+          "[data-testid='product-name']",
+          ".c-product-title"
+        ],
+        "price_selectors": [
+          "[data-testid='pdp-price']",
+          "[itemprop='price']",
+          "[data-testid*='price' i]",
+          ".c-price__value",
+          ".price",
+          "[class*='price' i]"
+        ],
+        "blocklist_href_substrings": [
+          "/en-jp/",
+          "/legal/",
+          "/client-service/",
+          "/children/",
+          "/brands/moncler",
+          "monclergroup.com",
+          "onetrust",
+          "cookie",
+          "/help",
+          "/account",
+          "/stores",
+          "/contact",
+          "doubleclick.net",
+          "criteo.com",
+          "tracking",
+          "service_worker",
+          "mailto:",
+          "tel:",
+          "instagram.com",
+          "facebook.com",
+          "youtube.com",
+          "x.com",
+          "line.me",
+          "#",
+          "#product-information-panel",
+          "#search-field"
+        ],
+        "price_requires_size": true,
+        "auto_select_size": true,
+        "size_container_selectors": [
+          "[data-testid*='size' i]",
+          "[class*='size' i]",
+          "fieldset[aria-label*='Size' i]"
+        ],
+        "size_option_selectors": [
+          "button[aria-pressed='false'][data-testid*='size' i]:not([disabled])",
+          "button[role='radio']:not([aria-disabled='true']):not([disabled])",
+          "[role='option']:not([aria-disabled='true']) button:not([disabled])",
+          "li:not([aria-disabled='true']) button:not([disabled])"
+        ],
+        "size_selected_check_selectors": [
+          "button[aria-pressed='true'][data-testid*='size' i]",
+          "[role='option'][aria-selected='true']",
+          "[aria-live] .selected-size"
+        ],
+        "price_after_size_wait_selectors": [
+          "[itemprop='price']",
+          "[data-testid*='price' i]",
+          ".c-price__value",
+          ".price",
+          "[class*='price' i]"
+        ]
+      },
+      "url_rules": {
+        "allow_domains": [
+          "www.moncler.com",
+          "moncler.com"
+        ],
+        "block_domains": [
+          "monclergroup.com"
+        ],
+        "allow_path_patterns": [
+          "^/en-[a-z]{2}/(men|women|kids)/.+",
+          "^/en-[a-z]{2}/.+/products/.+"
+        ],
+        "deny_path_patterns": [
+          "^/en-[a-z]{2}/?$",
+          "/store-locator",
+          "/stories",
+          "/collection",
+          "/corporate"
+        ],
+        "strip_query_params": [
+          "utm_*",
+          "icid",
+          "gclid",
+          "fbclid"
+        ],
+        "normalize": [
+          {
+            "if_url_matches": "^https://www\\.moncler\\.com/en-[a-z]{2}/?$",
+            "rewrite_to": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
+          }
+        ],
+        "preserve_locale_prefix": true,
+        "canonical_plp": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
+      },
+      "selectors_patch": {
+        "plp": {
+          "item": [
+            "a[href*='/p-']",
+            "a[href*='/products/']",
+            "li[data-testid='product-card']",
+            "article[data-testid='product-card']",
+            "div.product-tile, div.c-product-tile"
+          ],
+          "link": [
+            "a[href*='/products/']",
+            "a[href*='/p-']"
+          ],
+          "price": "[data-testid='product-card'] [data-testid*='price'], [data-testid='product-card'] [class*='price']",
+          "container": "main [data-testid='product-list'], main [data-component='ProductGrid'], main .product-grid",
+          "items": "li [data-testid='product-card'] a[href*='/products/'], article [data-testid='product-card'] a[href*='/products/'], a[href*='/products/'][data-testid*='product']",
+          "title": "[data-testid='product-card'] [data-testid*='title'], [data-testid='product-card'] [class*='title']"
+        },
+        "pdp": {
+          "price": "meta[itemprop='price']@content, [data-testid='pdp-price'] [data-testid*='value'], [class*='Price'] [class*='value']",
+          "title": "h1[data-testid='pdp-title'], h1[itemprop='name'], h1"
+        },
+        "modals": {
+          "accept_cookies": [
+            "#onetrust-accept-btn-handler",
+            "button:has-text('Accept All')",
+            "button:has-text('Alle akzeptieren')"
+          ],
+          "geo_continue": [
+            "button:has-text('Continue')",
+            "button:has-text('Save')",
+            "button:has-text('Fortfahren')"
+          ]
+        },
+        "dismiss": {
+          "cookie": "#onetrust-accept-btn-handler, button[aria-label*='Accept all cookies']",
+          "geo": "[data-testid='geolocation-continue'], button[data-testid='dialog-accept'], button[data-test*='continue']"
+        }
+      },
+      "overrides_patch": {
+        "wait_for_selectors": [
+          "#onetrust-accept-btn-handler",
+          "[data-testid='geolocation-continue'], button[data-testid='dialog-accept']",
+          "main [data-component='ProductGrid'], main [data-testid='product-list']",
+          "a[href*='/products/']",
+          "a[href*='/p-']"
+        ],
+        "pre_actions": [
+          {
+            "action": "click_if_present",
+            "selector": "#onetrust-accept-btn-handler"
+          },
+          {
+            "action": "click_if_present",
+            "selector": "button:has-text('Accept All')"
+          },
+          {
+            "action": "click_if_present",
+            "selector": "button:has-text('Alle akzeptieren')"
+          },
+          {
+            "action": "click_if_present",
+            "selector": "button:has-text('Continue')"
+          },
+          {
+            "action": "click_if_present",
+            "selector": "button:has-text('Save')"
+          }
+        ],
+        "headers": {
+          "Accept-Language": "en-DE,en;q=0.9,de;q=0.8"
+        },
+        "scroll": {
+          "enabled": true,
+          "until_min_items": 24,
+          "stall_rounds": 2
+        },
+        "start_url": "https://www.moncler.com/en-int/men/ready-to-wear/jackets",
+        "actions": [
+          {
+            "click": "#onetrust-accept-btn-handler",
+            "optional": true
+          },
+          {
+            "click": "[data-testid='geolocation-continue'], button[data-testid='dialog-accept']",
+            "optional": true
+          }
+        ],
+        "pagination": {
+          "next": "a[rel='next'], button[aria-label='Next']",
+          "load_more": "button[aria-label*='Load more'], button[data-testid*='load-more']"
+        }
+      },
+      "rationale": "We landed on the regional homepage (en-lt), which has no PLP grid until a category is selected and may show consent/geo overlays. Normalizing to the international locale (en-int) and starting from a stable category PLP avoids the empty state. Added dismissors for OneTrust cookies and geo continue, robust PLP/PDP selectors, and URL rules to keep within moncler.com retail paths and avoid monclergroup.com.",
+      "code_hints": [
+        "Set Accept-Language to en to encourage en-int routing.",
+        "After navigation, attempt optional clicks on selectors.dismiss.cookie and selectors.dismiss.geo, then wait for selectors.plp.container.",
+        "If still on homepage after normalization, open the mega-menu and click a category link (e.g., a[href*='/en-int/men/ready-to-wear/jackets']).",
+        "On PDP, if CSS price is missing, parse application/ld+json for offers.price and currency.",
+        "Before waiting for PLP items, attempt to dismiss OneTrust via #onetrust-accept-btn-handler; fall back to button:has-text('Accept All') or 'Alle akzeptieren'.",
+        "Detect a locale/region modal (generic dialog) and click the first visible button matching 'Continue'/'Save'/'Fortfahren' if present.",
+        "Wait for PLP anchors a[href*='/p-'] as the product item/link selector; treat the anchor as the card when extracting href/title/price.",
+        "Implement auto-scroll until at least 24 unique a[href*='/p-'] are collected or two scroll cycles yield no new items.",
+        "If navigation to PLP gets redirected to /en-de/ (homepage), re-navigate to the canonical_plp and re-run pre_actions.",
+        "On PDP, read price from [data-testid='price'] first, then fall back to span[itemprop='price'] or span[class*='price']."
+      ],
+      "risk": "medium"
+    }
+  },
+  "SAINT_LAURENT_OFFICIAL": {
+    "home_url": "https://www.ysl.com/en-en",
+    "allowed_domain": "ysl.com",
+    "discovery_settings": {
+      "navigation_tactics": [
+        "official_catalog"
+      ],
+      "url_templates": {
+        "official_catalog": "https://www.ysl.com/en-en/shop-women/handbags"
+      },
+      "extra_http_headers": {
+        "Accept-Language": "en-GB,en;q=0.9"
+      }
+    },
+    "selectors": {
+      "pdp": {
+        "plp_container_selectors": [
+          ".product-grid",
+          "[data-testid='product-list']"
+        ],
+        "pdp_link_selectors": [
+          "a[href*='/product/']",
+          "a[href*='/p/']"
+        ]
+      }
+    }
+  },
+  "MARGIELA_OFFICIAL": {
+    "home_url": "https://www.maisonmargiela.com/en",
+    "discovery_settings": {
+      "navigation_tactics": [
+        "official_catalog"
+      ],
+      "url_templates": {
+        "official_catalog": "/en/women/shoes"
+      },
+      "fallback_url": "/en/women/shoes",
+      "timeout_sec": 30,
+      "extra_http_headers": {
+        "Accept-Language": "en-GB,en;q=0.9"
+      }
+    },
+    "selectors": {
+      "pdp": {
+        "plp_container_selectors": [
+          "main .product-grid",
+          "[data-testid='product-list']"
+        ],
+        "pdp_link_selectors": [
+          "a[href*='/en/'][href*='/products/']",
+          "a:has(img)"
+        ]
+      }
+    }
+  },
+  "GOLDEN_GOOSE_OFFICIAL": {
+    "home_url": "https://www.goldengoose.com/en",
+    "discovery_settings": {
+      "navigation_tactics": [
+        "official_catalog"
+      ],
+      "url_templates": {
+        "official_catalog": "/en/women/sneakers"
+      },
+      "fallback_url": "/en/women/sneakers",
+      "timeout_sec": 40,
+      "search_keyword": "sneakers",
+      "extra_http_headers": {
+        "Accept-Language": "en-GB,en;q=0.9"
+      }
+    },
+    "selectors": {
+      "pdp": {
+        "plp_container_selectors": [
+          "main .product-grid",
+          "[data-testid='product-list']"
+        ],
+        "pdp_link_selectors": [
+          "a[href*='/en/'][href*='/product/']",
+          "a:has(img)"
+        ]
+      }
+    }
+  },
+  "llm": {
+    "enabled": true,
+    "order": {
+      "analysis": [
+        "openai:analysis",
+        "gemini:default",
+        "deepseek:default"
+      ],
+      "code": [
+        "openai:code",
+        "gemini:default",
+        "deepseek:default"
+      ],
+      "default": [
+        "openai:analysis",
+        "gemini:default",
+        "deepseek:default"
+      ]
+    },
+    "models": {
+      "openai": {
+        "analysis": "gpt-5",
+        "code": "gpt-5"
+      },
+      "gemini": {
+        "default": "gemini-2.5-pro"
+      },
+      "deepseek": {
+        "default": "deepseek-chat"
+      }
+    }
+  }
+}

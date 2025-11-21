@@ -1,0 +1,63 @@
+{
+  "selectors_patch": {
+    "consent": [
+      "#onetrust-accept-btn-handler",
+      ".ot-sdk-container #onetrust-accept-btn-handler"
+    ],
+    "plp_wait_for": [
+      "article[data-test='product-tile']",
+      "li[data-test='product-tile']",
+      "a[data-test='product-tile-link']"
+    ],
+    "plp_item_link": "a[data-test='product-tile-link']",
+    "cta_to_plp": [
+      "a:has-text('Shop the collection')",
+      "a:has-text('Shop now')",
+      "a[href*='/shop-genius/'][href*='frgmt']:not([href*='#'])"
+    ],
+    "pdp_title": [
+      "h1[data-test='product-name']",
+      "h1.product-name"
+    ],
+    "pdp_price": [
+      "[data-test='pdp-price'] [itemprop='price']",
+      "meta[itemprop='price']"
+    ],
+    "pdp_json_ld": "script[type='application/ld+json']"
+  },
+  "overrides_patch": {
+    "navigation": {
+      "strip_url_fragments": true
+    },
+    "locale": {
+      "prefer": "en-int",
+      "replace_rules": [
+        {
+          "from": "/en-jp/en-int/",
+          "to": "/en-int/"
+        },
+        {
+          "from": "/en-jp/",
+          "to": "/en-int/"
+        }
+      ]
+    },
+    "behavior": {
+      "scroll_to_load": true,
+      "scroll_steps": 3,
+      "wait_after_navigation_ms": 800
+    }
+  },
+  "risk": "medium",
+  "code_hints": [
+    "If URL contains a fragment (e.g., #product-information-panel), remove it and reload before scraping.",
+    "Before PLP detection, click OneTrust consent if present using #onetrust-accept-btn-handler.",
+    "If no PLP tiles are found but CTA buttons exist on the landing page, click one of cta_to_plp to reach the PLP.",
+    "Wait for article[data-test='product-tile'] or a[data-test='product-tile-link']; scroll a few times to trigger lazy loading.",
+    "If current URL locale is en-jp, normalize to en-int and retry (avoid region-specific interstitials).",
+    "On PDP, if visible price selectors fail, parse JSON-LD (script[type='application/ld+json']) for price/name as a fallback.",
+    "Avoid treating editorial anchors like #product-information-panel as PLP; prefer navigating to a dedicated listing via CTA or normalized URL."
+  ],
+  "url_rules": {},
+  "rationale": "We landed on a marketing/legal-like landing page with a fragment and a double-locale path (/en-jp/en-int/), which likely triggers region/interstitial content. Normalizing to en-int and stripping fragments avoids the trap. Moncler commonly uses OneTrust, so adding consent handling prevents blocking overlays. The landing page often has CTAs (Shop the collection/Shop now) that lead to the real PLP; adding CTA selectors provides a safe click-through path. Product tiles on Moncler frequently use data-test product-tile link patterns; adding those wait-for and link selectors enables extraction once on the PLP. PDP price/title fallbacks include JSON-LD to increase robustness."
+}

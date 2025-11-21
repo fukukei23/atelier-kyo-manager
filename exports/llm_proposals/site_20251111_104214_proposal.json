@@ -1,0 +1,85 @@
+{
+  "selectors_patch": {
+    "modals": {
+      "cookie_accept": "#onetrust-accept-btn-handler"
+    },
+    "plp": {
+      "product_card_any": [
+        "article[data-component='ProductTile']",
+        "li.product-tile",
+        "div.product-grid-item"
+      ],
+      "product_link_within": [
+        "a[href*='/en-gb/'][href*='/p/']",
+        "a[href*='/en-gb/'][href*='/product/']",
+        "a[href*='/en-gb/'][href*='/products/']"
+      ]
+    },
+    "pdp": {
+      "price_fallback": [
+        "meta[itemprop='price']",
+        "span[itemprop='price']",
+        "[data-testid='pdp-price']",
+        "[data-test='price']",
+        "[class*='price'] [class*='value']"
+      ],
+      "title_fallback": [
+        "h1[itemprop='name']",
+        "h1[data-testid='pdp-title']",
+        "h1[class*='title']"
+      ]
+    }
+  },
+  "risk": "medium",
+  "code_hints": [
+    "Do not treat https://www.moncler.com/en-gb/ as a PLP; it is a homepage. If no product tiles are found after DOM ready, run fallback_navigation.",
+    "Always attempt to click #onetrust-accept-btn-handler if present before searching for tiles; retry selectors after dismissal.",
+    "When navigating via header, prefer anchor contains '/en-gb/men' then a category link containing 'ready-to-wear' or 'outerwear' or 'new-in'.",
+    "Wait for one of the product tile selectors (article[data-component='ProductTile'], li.product-tile, div.product-grid-item) before extracting.",
+    "For PDP price/title, attempt JSON-LD first; if unavailable, use price_fallback/title_fallback selectors provided.",
+    "Enable gentle infinite scroll on PLP to materialize tiles; stop after first page if tiles are present."
+  ],
+  "url_rules": {},
+  "rationale": "The failure occurred because the crawler landed on the Moncler homepage (not a PLP) and likely faced a cookie banner, so product tiles never appeared. We prioritize config-only fixes: accept the OneTrust cookie modal, add resilient PLP tile selectors, and provide a safe seed PLP URL plus a simple nav fallback from homepage to a category that yields product tiles. URL normalization forces en-gb and avoids locale traps or monclergroup.com hops.",
+  "overrides_patch": {
+    "wait_for_selectors": [
+      {
+        "selector": "#onetrust-accept-btn-handler",
+        "action": "click",
+        "timeout_ms": 4000,
+        "optional": true
+      }
+    ],
+    "fallback_navigation": [
+      {
+        "when_no_plp_tiles": true,
+        "steps": [
+          {
+            "click": "a[href*='/en-gb/men']"
+          },
+          {
+            "click": "a[href*='ready-to-wear'], a[href*='new-in'], a[href*='outerwear']"
+          }
+        ],
+        "wait_for": [
+          "article[data-component='ProductTile']",
+          "li.product-tile",
+          "div.product-grid-item"
+        ]
+      }
+    ],
+    "start_urls": [
+      "https://www.moncler.com/en-gb/men/ready-to-wear/down-jackets/"
+    ],
+    "infinite_scroll": {
+      "enabled": true,
+      "until_selector_any": [
+        "article[data-component='ProductTile']",
+        "li.product-tile",
+        "div.product-grid-item"
+      ],
+      "max_scrolls": 12,
+      "scroll_delay_ms": 500
+    }
+  }
+}

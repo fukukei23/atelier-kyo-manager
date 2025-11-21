@@ -1,0 +1,80 @@
+PROJECT_CONSTITUTION.mdatelier-kyo-manager｜自己進化型スクレイピング（Agent-Mode 差分反映）憲章
+ 版: v1.0 (2025-11-05 JST)
+ 適用範囲: atelier-kyo-manager の収集系エージェント一式
+ 除外: NexusCore 系の役割（Planner/Coder/Tester/Guardian/Curator/Postmortem/Policy）は不使用1. ゴール（不変の目的）ChatGPTのエージェントモードを実際に走らせてサイトを突破（スクレイピング成功）させる。
+突破で得られた事実ベースの知見（動くセレクタ／回避ルート／正規化規則）から、コード差分を自動生成し、
+ 人間が 承認→反映 することで、次回実行時の成功率を上げ続ける。
+2. 関与コンポーネント（本プロジェクトのみ）実行オーケストレータ
+app/utils/ai_research_orchestrator.py … 全体実行と自己回復ループの起点
+主要エージェント
+app/agents/browser_use_agent.py … 実ブラウザ操作・PLP/PDP遷移
+app/agents/gpt_integration.py … ★ChatGPTエージェントモード呼出・現場突破＋差分提案
+app/agents/proxy_scrape_agent.py … プロキシ試行・ヘッダ条件の検証
+app/agents/self_healing_agent.py … 失敗時の再試行・回復方針の適用
+app/agents/failure_analysis_agent.py … 失敗署名の抽出（LLM補助あり）
+app/agents/code_update_agent.py … 差分（.patch/.diff）生成＆書込
+app/agents/page_recovery_agent.py … ロケール罠/リーガル遷移からの復帰
+app/agents/plugin_runtime.py … サイト別プラグイン呼出
+補助ユーティリティ
+app/utils/ai_llm_controller.py … LLM ルーティング・コスト制御
+app/utils/overrides_store.py … overrides.local.json 読み書き
+app/agents/browser_use_moncler_patch.py … Moncler 専用のURL正規化・PLP保険
+設定
+app/config/sites/base.json（ベース）
+app/config/sites/overrides.local.json（★学習反映の主戦場）
+app/config/sites_pinned/20_moncler.pinned.json（ピン留め既知良設定・必要に応じて更新）
+3. 正しいループ（唯一の正解フロー）通常走行
+ run_orchestrator.py → browser_use_agent が対象サイトを実走。
+失敗検出
+ リーガル/ロケール罠・PLP非検出などを検知し、**証拠（最終URL、DOM断片、ログ）**を収集。
+エージェントモード突破（決定事項）
+ gpt_integration.py が ChatGPTのエージェントモードで実地スクレイピングを実行。
+目標：同じ制約下で突破（PLP到達→PDPリンク抽出）
+成果物：実際に動いたセレクタ／正規化／回避ナビの事実セット
+差分生成
+ code_update_agent.py が成果物から 安全な差分を生成：
+overrides.local.json への追加/更新（selectors・normalize_rules・hard_redirects 等）
+必要時のみ sites_pinned/*.json の保守
+パッチファイルを exports/patches/ に保存
+人間の承認（レビュー最小限）
+差分の読みやすさ（限定的スコープ、コメントあり）
+サイドエフェクト最小（影響範囲が当該サイト限定）
+反映→再走行
+承認後に即反映し再実行。成功すれば学習定着。
+失敗なら 3)〜6) を繰り返す（回数上限は設定値）。
+重要: 解析だけで終わらせない。
+ 必ず エージェントモードで突破実績を作り、その事実に基づく差分を反映する。4. 成功判定（Acceptance Criteria）PLP検出：plp_verification_selectors でグリッド/タイルを検出
+PDP遷移可能：pdp_link_selectors から最低 N 件のPDPリンクが抽出可能
+ノイズ回避：blocklist_href_substrings により罠/リーガル/外部追跡がクリックされない
+リグレッション：直近成功パスが再現し、1回目の再走で成功
+5. 設定更新の優先度app/config/sites/overrides.local.json（学習差分の第一格納先）
+サイト専用パッチ（例：browser_use_moncler_patch.py）
+必要時のみ sites_pinned/*.json（安定版の固定・広範囲変更は慎重に）
+6. 変更原則（セーフティガード）最小差分：既存ロジックを壊さず追加で勝つ。
+コメント必須：差分に「なぜ入れたか」を1行で明記。
+巻き戻し容易性：exports/patches/*.patch を必ず残す。
+スコープ限定：ドメイン/パスの正規表現はサイト限定に絞る。
+7. 観測と証跡ログ：logs/*.log に runID、最終URL、trap検知ログを出力。
+提案：exports/llm_proposals/*.json に LLM 提案を保存。
+差分：exports/patches/*.patch|*.diff を保存（未作成時はバグ）。
+設定：更新後の overrides.local.json を常に整形保存。
+8. 代表的な設定項目（Moncler例）ロケール強制：forceLocale=en-int、shipToCountry=GB
+正規化：/en-jp/ → /en-int/、二重 en-int/en-int の除去
+ハードリダイレクト：monclergroup.com・/legal/・/client-service/ から PLP に戻す
+罠回避：deny_fragment_contains に #product-information-panel 等
+PDP抽出：a[href*='/en-int/'][href*='/p/'] ほかサイト固有の data-qa 系
+9. よくある失敗と対処/en-jp/ が混入 → normalize_rules と hard_redirects を強化
+PLPが空 → wait_for_selectors と スクロール回数/ウェイトの調整
+OneTrust/モーダル → selectors.ui.cookie_accept の拡充
+罠クリック → blocklist_href_substrings にハッシュ/外部追跡を追加
+10. 人手レビューの観点（最小）変更が 当該サイトに限定されているか
+既存の成功サイトを壊す恐れがないか
+コメントと証跡（提案JSON/パッチ）が揃っているか
+11. 運用コマンド（例）# Moncler をエージェント学習込みで実行（ヘッド有・プロキシDryRun）python run_orchestrator.py `  --site "MONCLER_OFFICIAL" `  --query "down jacket" `  --target_url "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB" `  --likely_plp true `  --auto-heal --headful `  --use-proxy --proxy-dry-run12. この文書の役割備忘録／運用規約として方針ブレ防止に使う。
+自己進化ループ自体はこの文書に依存しない（コードと設定が真実のソース）。
+変更は基本自由だが、方針（§3）は固定：
+ 「実走で突破 → 事実ベース差分 → 承認反映」
+13. プロンプト（迷った時の定型）「ChatGPTのエージェントモードで実際にスクレイピングを突破し、その突破事実（動いたセレクタ・正規化・回避ナビ）に基づいて overrides.local.json へ最小差分を自動生成。差分は exports/patches/ に保存し、人間が承認後に反映。次回実行で成功率を上げ続ける。解析だけで終わらせない。」14. 付記：責務の線引きgpt_integration.py：突破も行う（ツール可のエージェントモード）＋提案生成
+code_update_agent.py：差分生成＆保存
+overrides_store.py：KV更新の実体
+browser_use_*：実運転（突破後の再現を担保）

@@ -1,0 +1,103 @@
+{
+  "risk": "medium",
+  "selectors_patch": {
+    "plp": {
+      "container?:add": [
+        "[data-test='product-grid']",
+        ".product-grid",
+        "[data-component='ProductGrid']"
+      ],
+      "tile_link?:add": [
+        ".product-grid a[href*='.html']:not([href*='?cgid']):not([href='#'])",
+        "[data-test='product-tile'] a[href]"
+      ]
+    },
+    "pdp": {
+      "title?:add": [
+        "h1[itemprop='name']",
+        "h1[data-test='product-name']",
+        "h1.product-name"
+      ],
+      "price?:add": [
+        "[itemprop='price']",
+        "[data-test='price'], [data-test='price-sales'], [data-test='price-value']",
+        "meta[itemprop='price']"
+      ]
+    }
+  },
+  "rationale": "The run started from the homepage (https://www.moncler.com/en-gb/) which is not a PLP and is often blocked by a cookie/region gate, so no product tiles appeared. We prioritize non-code fixes: (1) start directly on a stable PLP-like search results page, (2) add cookie consent handling for OneTrust, (3) wait for robust grid selectors, and (4) normalize/redirect URLs to enforce en-gb and avoid homepage/brand-corporate traps. Minimal selector fallbacks are added for PLP tiles and PDP title/price to improve resilience without breaking existing keys.",
+  "url_rules": {
+    "normalizers": [
+      {
+        "if": "https?://(www\\.)?moncler\\.com/(en-[a-z]{2})(/.*)?$",
+        "action": "rewrite",
+        "to": "https://www.moncler.com/en-gb$3"
+      },
+      {
+        "if": "^https?://(www\\.)?moncler\\.com(/(\\?.*)?)?$",
+        "action": "rewrite",
+        "to": "https://www.moncler.com/en-gb/"
+      }
+    ],
+    "traps": [
+      {
+        "if": "^https?://(www\\.)?moncler\\.com/en-gb/?$",
+        "action": "redirect",
+        "to": "https://www.moncler.com/en-gb/search?q=jackets",
+        "reason": "Homepage is not a PLP; go to a stable search PLP."
+      }
+    ],
+    "allowlist": [
+      "^https://www\\.moncler\\.com/en-gb/(search|men|women|kids|genius)/.*$",
+      "^https://www\\.moncler\\.com/en-gb/.*\\.html$"
+    ],
+    "blocklist": [
+      "^https?://(www\\.)?monclergroup\\.com/.*$",
+      "^https?://storelocator\\.moncler\\.com/.*$",
+      "(/[a-z]{2}-[A-Z]{2}/geo|/country-selector|/locale-selector)"
+    ]
+  },
+  "code_hints": [
+    "- Immediately check for and click OneTrust cookie button (#onetrust-accept-btn-handler) if present before any navigation waits.",
+    "- If you still land on the homepage after normalization, open site search: click header search button (button[aria-label*='Search' i] or [data-test='open-search']) and submit 'jackets', then wait for [data-test='product-grid'] or .product-grid.",
+    "- Consider PLP tiles as any link under the grid that ends with .html and is not a category (?cgid) link; de-duplicate by pathname.",
+    "- After navigating to PLP, perform 2-3 incremental scrolls (1200px step, ~800ms wait) to ensure lazy tiles render.",
+    "- PDP extraction: prefer visible selectors first; if price not visible, parse application/ld+json for offers.price/currency as fallback.",
+    "- Guard against locale/region gate: if a modal contains 'United Kingdom' or 'Stay on current site', click the primary button to continue.",
+    "- Ensure final URLs stay on https://www.moncler.com/en-gb/ and reject redirects to monclergroup.com or storelocator."
+  ],
+  "overrides_patch": {
+    "entry_urls?:set": [
+      "https://www.moncler.com/en-gb/search?q=jackets"
+    ],
+    "wait_for_selectors?:merge": {
+      "plp": [
+        "[data-test='product-grid']",
+        ".product-grid"
+      ],
+      "pdp": [
+        "h1[itemprop='name'], h1[data-test='product-name'], h1.product-name"
+      ]
+    },
+    "consent?:merge": {
+      "accept_selectors": [
+        "#onetrust-accept-btn-handler",
+        ".onetrust-pc-dark-filter ~ .ot-sdk-container #onetrust-accept-btn-handler",
+        "button[aria-label*='Accept all' i]"
+      ],
+      "wait_ms_after_click": 800
+    },
+    "interaction?:merge": {
+      "infinite_scroll": {
+        "enabled": true,
+        "max_pages": 3,
+        "scroll_step_px": 1200,
+        "wait_ms": 800
+      }
+    },
+    "timeouts?:merge": {
+      "navigation_ms": 20000,
+      "plp_materialize_ms": 15000
+    }
+  }
+}

@@ -1,0 +1,83 @@
+{
+  "url_rules": {
+    "allowlist": [
+      "^https://www\\.moncler\\.com/en-jp/",
+      "^https://www\\.moncler\\.com/en-jp/(men|women|children)/",
+      "^https://www\\.moncler\\.com/en-jp/.*/products/[^/?#]+"
+    ],
+    "denylist": [
+      "^https?://(www\\.)?monclergroup\\.com",
+      "^https://www\\.moncler\\.com/(?!en-jp/)"
+    ],
+    "normalize": [
+      {
+        "if": "^https://www\\.moncler\\.com/(?!en-jp/)(.*)$",
+        "then": "https://www.moncler.com/en-jp/$1"
+      }
+    ]
+  },
+  "code_hints": [
+    "If landing on '/' or no PLP tiles after 4s, navigate to the first start_url PLP and continue.",
+    "On every page load, attempt to click cookie consent: query '#onetrust-accept-btn-handler' or '.onetrust-accept-btn-handler'. Ignore errors if absent.",
+    "Wait for PLP presence via any of: 'a[data-test=\"product-tile-link\"]' or 'a[href*=\"/products/\"]' before scraping.",
+    "Extract PLP product links via querySelectorAll on the union of item_link selectors; resolve to absolute URLs; keep only those matching '/en-jp/' and '/products/'.",
+    "Handle pagination by clicking buttons matching next_page selectors up to a safety cap (e.g., 5 times) with a short wait for new tiles between clicks.",
+    "On PDP, wait for title then price; if no visible price matches, parse JSON-LD for offers.price as a fallback.",
+    "Guard region: after any navigation, if current URL does not start with 'https://www.moncler.com/en-jp/', rewrite via the normalize rule and retry. Abort if redirected to monclergroup.com."
+  ],
+  "risk": "medium",
+  "selectors_patch": {
+    "plp": {
+      "item_link": [
+        "a[data-test='product-tile-link']",
+        ".product-card a[href*='/products/']",
+        ".c-product-card a[href*='/products/']",
+        "a[href*='/en-jp/'][href*='/products/']"
+      ],
+      "next_page": [
+        "button[aria-label*='Load more']",
+        "button[data-test='load-more']",
+        ".load-more button"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-test='pdp-title']",
+        "h1.product-name",
+        "h1[itemprop='name']"
+      ],
+      "price": [
+        "[data-test='pdp-price'] [data-price]",
+        "[itemprop='price']",
+        ".product-price__value",
+        ".price__value",
+        ".prices [data-price]"
+      ]
+    },
+    "modals": {
+      "accept_cookies": [
+        "#onetrust-accept-btn-handler",
+        ".onetrust-accept-btn-handler",
+        "button[aria-label*='Accept'][id*='onetrust']"
+      ],
+      "close_region_modal": [
+        "[data-test='close-country-selector']",
+        "button[aria-label*='Close'][data-modal-close]"
+      ]
+    }
+  },
+  "rationale": "The failure occurred because the homepage (/en-jp/) is not a PLP and may show region/cookie overlays, so product tiles never appear. Directly targeting stable category PLPs (men/women outerwear) avoids menu interactions and geolocation modals. Added robust, domain-specific selectors for product tiles and PDP fields, plus cookie-consent handling. URL normalization and allow/deny rules ensure we stay on the en-jp storefront and avoid accidental redirects to monclergroup.com or other regions.",
+  "overrides_patch": {
+    "start_urls": [
+      "https://www.moncler.com/en-jp/men/ready-to-wear/outerwear/",
+      "https://www.moncler.com/en-jp/women/ready-to-wear/outerwear/"
+    ],
+    "wait_for_selectors": [
+      "a[data-test='product-tile-link']",
+      "a[href*='/en-jp/'][href*='/products/']"
+    ],
+    "request_headers": {
+      "Accept-Language": "en-JP,en;q=0.9"
+    }
+  }
+}

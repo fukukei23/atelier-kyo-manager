@@ -1,0 +1,99 @@
+{
+  "overrides_patch": {
+    "navigation": {
+      "wait_until": "networkidle",
+      "idle_time_ms": 1500
+    },
+    "wait_for_selectors": {
+      "plp_ready_any_of": [
+        "[data-testid='product-list']",
+        "[data-component*='product-list']",
+        "[itemtype*='Product']"
+      ],
+      "blockers_any_of": [
+        "#onetrust-accept-btn-handler",
+        "div[id^='onetrust']"
+      ]
+    },
+    "actions": {
+      "before_plp": [
+        {
+          "click_if_present": "#onetrust-accept-btn-handler"
+        },
+        {
+          "click_if_present": "button[aria-label*='Accept all'][id*='onetrust']"
+        },
+        {
+          "click_if_present": "button[aria-label*='Close'][data-testid*='close']"
+        }
+      ],
+      "after_plp": [
+        {
+          "scroll": "incremental",
+          "max_steps": 6,
+          "step_px": 1200,
+          "wait_ms": 600
+        }
+      ]
+    },
+    "request": {
+      "headers": {
+        "Accept-Language": "en-GB,en;q=0.8"
+      }
+    }
+  },
+  "url_rules": {},
+  "rationale": "Moncler PLP content is SPA-rendered and often delayed by the OneTrust cookie banner and locale/country gating. The failure indicates no product tiles materialized; this is likely due to waiting on the wrong selectors and/or not dismissing modals. The patch adds robust PLP container/tile selectors (data-testid/product-card/itemtype=Product), modal selectors for OneTrust and country overlays, and en-int URL normalization to avoid locale traps. Incremental scrolling helps trigger lazy-loaded tiles. PDP fallbacks use schema.org price/title where possible for resilience.",
+  "selectors_patch": {
+    "plp": {
+      "container": [
+        "[data-testid='product-list']",
+        "[data-component*='product-list']",
+        "section[class*='product-list']"
+      ],
+      "product_tile": [
+        "[data-testid*='product-card']",
+        "article[class*='product-card']",
+        "[itemtype*='Product']"
+      ],
+      "pdp_link_within_tile": [
+        "a[href$='.html']",
+        "a[href*='/en-int/'][href$='.html']"
+      ]
+    },
+    "modals": {
+      "accept_cookies": [
+        "#onetrust-accept-btn-handler",
+        "button[aria-label*='Accept all'][id*='onetrust']"
+      ],
+      "geo_country_close": [
+        "button[aria-label*='Close'][data-testid*='close']",
+        "button[data-testid*='confirm'][aria-label*='Ship'], button[type='submit'][data-testid*='country']"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-testid*='title']",
+        "h1[itemprop='name']",
+        "h1"
+      ],
+      "price": [
+        "meta[itemprop='price']",
+        "[data-testid*='price']",
+        "[class*='price'] [data-testid*='amount']",
+        "[itemprop='offers'] [itemprop='price']"
+      ]
+    }
+  },
+  "code_hints": [
+    "Before navigating to PLP, normalize URL to /en-int and append forceLocale=en-int&shipToCountry=GB if missing.",
+    "After navigation, immediately click OneTrust accept if present (#onetrust-accept-btn-handler).",
+    "Wait for any of: [data-testid='product-list'], [data-component*='product-list'], or at least one [itemtype*='Product'].",
+    "If no tiles after first wait, perform incremental scroll (5–6 steps, ~1200px with 600ms pauses) and retry tile detection.",
+    "Extract PDP URL from within tile using a[href$='.html'] to avoid non-product links.",
+    "On PDP, prefer meta[itemprop='price'] for stable price retrieval; fallback to [data-testid*='price'].",
+    "Set Accept-Language header to en-GB to reduce unwanted locale redirects.",
+    "Guard against unexpected redirects: if response URL host is not moncler.com, abort and retry with normalized URL."
+  ],
+  "risk": "medium"
+}

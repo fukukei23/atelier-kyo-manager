@@ -1,0 +1,54 @@
+{
+  "selectors_patch": {
+    "plp": {
+      "items": "main a[href*='/products/']",
+      "item_link": "a[href*='/products/']"
+    },
+    "pdp": {
+      "price": [
+        "[itemprop='price']",
+        "meta[itemprop='price'][content]",
+        "[data-testid*='price']",
+        "[class*='Price'] [data-price], [class*='price']"
+      ]
+    }
+  },
+  "overrides_patch": {
+    "start_url": "https://www.moncler.com/en-gb/men/outerwear/down-jackets",
+    "wait_for_selectors": [
+      "#onetrust-accept-btn-handler",
+      "main a[href*='/products/']"
+    ]
+  },
+  "risk": "medium",
+  "url_rules": {
+    "allowlist_domains": [
+      "www.moncler.com",
+      "moncler.com"
+    ],
+    "denylist_domains": [
+      "monclergroup.com",
+      "www.monclergroup.com"
+    ],
+    "path_allowlist_regex": [
+      "^/en-gb/(men|women)/.*",
+      "^/en-gb/products/.*"
+    ],
+    "normalize_locale": {
+      "sticky_prefix": "/en-gb",
+      "on_mismatch_replace": true
+    },
+    "redirect_map": {
+      "https://www.moncler.com/en-gb/": "https://www.moncler.com/en-gb/men/outerwear/down-jackets"
+    }
+  },
+  "code_hints": [
+    "Consent: try to click OneTrust button early without failing the run: await page.locator('#onetrust-accept-btn-handler').click({ timeout: 3000 }).catch(() => {});",
+    "Region gate: if a locale overlay appears, prefer any visible link to /en-gb/: const r = page.locator('a[href*=\"/en-gb/\"]'); if (await r.first().isVisible()) await r.first().click();",
+    "PLP readiness: await page.waitForSelector('main a[href*=\"/products/\"]', { timeout: 15000 }); then progressively scroll to trigger lazy loading before collecting links.",
+    "PLP extraction: de-duplicate anchors to PDP only: const links = await page.$$eval('main a[href*=\"/products/\"]', els => [...new Set(els.map(e => new URL(e.href).href))]);",
+    "PDP price: wait for multiple selectors: await page.waitForSelector('[itemprop=\"price\"], meta[itemprop=\"price\"][content], [data-testid*=\"price\"], [class*=\"Price\"] [data-price], [class*=\"price\"]', { timeout: 15000 });",
+    "PDP JSON-LD fallback: if DOM selectors fail, parse price from JSON-LD offers when present."
+  ],
+  "rationale": "ホームURL(en-gb)に着地し、地域／Cookie同意UIでPLPが描画されずにタイムアウトした可能性が高いです。まずは設定レベルでの対処を優先し、(1) スタートURLを確実なPLPに固定、(2) /en-gb ロケールを強制し、monclergroup.com等への誤遷移を遮断、(3) PLPの製品アンカーおよびPDP価格のフェールセーフなセレクタを追加しました。OneTrustの同意ボタンを軽くタップするだけで多くの初回阻害要因を解消できるため、wait_for_selectorsに追加。PLPでは製品詳細へのリンクが一般に /products/ を含むため、main配下の a[href*='/products/'] を収集対象にしています。PDP価格は構造化データ/一般的なprice表現の両方をフォールバックに用意しました。URLルールではロケールの固定とホームからPLPへの正規化遷移を定義し、ブランドコーポレートサイト(monclergroup.com)への逸脱を抑止します。"
+}

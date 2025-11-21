@@ -1,0 +1,101 @@
+{
+  "selectors_patch": {
+    "plp": {
+      "item": [
+        "a[href*=\"/products/\"][data-testid]",
+        "article [href*=\"/products/\"]",
+        "a[href*=\"/en-\" i][href*=\"/products/\"]"
+      ],
+      "link": [
+        "a[href*=\"/products/\"]"
+      ],
+      "price": [
+        "[data-testid*=\"Price\"]",
+        "[class*=\"price\"] [data-testid]",
+        "span[itemprop=\"price\"]"
+      ],
+      "next": [
+        "button[aria-label*=\"Load more\" i]",
+        "button[data-testid*=\"load-more\" i]"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-testid*=\"Product\" i]",
+        "h1[itemprop=\"name\"]",
+        "h1.product-name"
+      ],
+      "price": [
+        "[data-testid*=\"Price\" i]",
+        "meta[itemprop=\"price\"]",
+        "[itemprop=\"offers\"] [itemprop=\"price\"]"
+      ]
+    }
+  },
+  "url_rules": {
+    "normalize": [
+      {
+        "if": "^https?://www\\.moncler\\.com/(en-[a-z]{2})(/)?$",
+        "to": "https://www.moncler.com/$1/men/outerwear"
+      }
+    ],
+    "allow": [
+      "^https?://www\\.moncler\\.com/en-[a-z]{2}/(men|women)/.+"
+    ],
+    "deny": [
+      "monclergroup\\.com",
+      "/customer-service",
+      "/account",
+      "/login",
+      "/search",
+      "/stories",
+      "/brand",
+      "/kids",
+      "/stores",
+      "/fragments"
+    ],
+    "strip_params": [
+      "^utm_.*",
+      "gclid",
+      "fbclid",
+      "icid",
+      "cid",
+      "s_kwcid"
+    ]
+  },
+  "code_hints": [
+    "If final_url matches ^https://www.moncler.com/(en-[a-z]{2})/?$, programmatically navigate to https://www.moncler.com/$1/men/outerwear before PLP scraping.",
+    "After initial navigation, attempt cookie consent: click any of [#onetrust-accept-btn-handler, button#onetrust-accept-btn-handler, button[aria-label*=\"Accept all cookies\" i]] if present.",
+    "Wait for at least one PLP tile using selector a[href*=\"/en-jp/\"][href*=\"/products/\"] before extracting.",
+    "If no PLP tiles after wait, try header nav fallback: click a[href*=\"/men\" i] then a[href*=\"/outerwear\" i] with small delays, then re-wait for tiles.",
+    "Support 'Load more' pagination by clicking button[aria-label*=\"Load more\" i] or button[data-testid*=\"load-more\" i] until absent or disabled. Scroll into view before clicking to trigger lazy loading.",
+    "On PDP, prefer price from [data-testid*=\"Price\" i]; if missing, read meta[itemprop=\"price\"]."
+  ],
+  "overrides_patch": {
+    "start_url": "https://www.moncler.com/en-jp/men/outerwear",
+    "wait_for_selectors": [
+      "a[href*=\"/en-jp/\"][href*=\"/products/\"]"
+    ],
+    "click_selectors": [
+      "#onetrust-accept-btn-handler",
+      "button#onetrust-accept-btn-handler",
+      "button[aria-label*=\"Accept all cookies\" i]"
+    ],
+    "timeouts": {
+      "dom_content_loaded_ms": 20000,
+      "plp_wait_ms": 25000
+    },
+    "pagination": {
+      "load_more_selectors": [
+        "button[aria-label*=\"Load more\" i]",
+        "button[data-testid*=\"load-more\" i]"
+      ],
+      "type": "click"
+    },
+    "headers": {
+      "Accept-Language": "en-JP,en;q=0.9"
+    }
+  },
+  "risk": "medium",
+  "rationale": "The scraper landed on the locale homepage (/en-jp) which contains no product tiles. We switch the entry to a stable category PLP (/en-jp/men/outerwear), add cookie-consent handling, and wait explicitly for product links. Flexible selectors target Moncler’s products/ PDP path pattern and common price/title attributes. URL rules normalize accidental homepage hits to a PLP, constrain crawling to commerce paths, and block known non-commerce/brand domains."
+}

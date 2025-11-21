@@ -1,0 +1,97 @@
+{
+  "overrides_patch": {
+    "start_url": "https://www.moncler.com/en-jp/men/ready-to-wear/down-jackets/",
+    "wait_for_selectors": [
+      "section.product-grid,div.product-grid,ul.product-grid,div.search-result-items",
+      "li.product-grid__item a[href$='.html'],div.product-tile a.product-tile__link,div.c-product-tile a.c-product-tile__link,a.thumb-link[href$='.html']"
+    ],
+    "pre_click": [
+      "#onetrust-accept-btn-handler",
+      "button[aria-label='Close']"
+    ],
+    "request_headers": {
+      "Accept-Language": "en-JP,en;q=0.9"
+    }
+  },
+  "code_hints": [
+    "After initial navigation, attempt clicking consent: querySelector('#onetrust-accept-btn-handler')?.click(); also dismiss any generic close buttons with aria-label='Close'.",
+    "Wait up to 8-10s for any of the PLP grid selectors. If none appear or grid has zero tiles, navigate to the fallback PLP URL provided in overrides_patch.start_url.",
+    "Implement a gentle scroll (e.g., window.scrollBy(0, window.innerHeight) in a loop) to trigger lazy loading for tiles; re-evaluate tiles after scrolling.",
+    "Extract PDP links from the first matching tile selector list; prefer anchors ending with .html and within /en-jp/. De-duplicate and filter using url_rules.allow/block.",
+    "On PDP, wait for either price selectors or an 'Add to cart' button before reading title/price to avoid partial loads.",
+    "Set a modern desktop Chrome User-Agent and keep Accept-Language as en-JP to minimize locale modals/redirect loops."
+  ],
+  "risk": "medium",
+  "url_rules": {
+    "normalize": [
+      {
+        "if": {
+          "host": "www.moncler.com",
+          "path_regex": "^/(|en-jp/?)$"
+        },
+        "to": "https://www.moncler.com/en-jp/men/ready-to-wear/down-jackets/"
+      }
+    ],
+    "allow": [
+      "^https://www\\.moncler\\.com/en-jp/(men|women|kids)/.+"
+    ],
+    "block": [
+      "^https?://(www\\.)?monclergroup\\.com/.*",
+      "^https://www\\.moncler\\.com/.*/stories/.*",
+      "^https://www\\.moncler\\.com/.*/genius/.*",
+      "^https://www\\.moncler\\.com/.*/boutiques/.*",
+      "geoip=",
+      "utm_",
+      "facebook\\.com",
+      "instagram\\.com",
+      "youtube\\.com"
+    ]
+  },
+  "selectors_patch": {
+    "plp": {
+      "grid": [
+        "section.product-grid",
+        "div.product-grid",
+        "ul.product-grid",
+        "div.search-result-items"
+      ],
+      "tile": [
+        "li.product-grid__item a[href$='.html']",
+        "div.product-tile a.product-tile__link",
+        "div.c-product-tile a.c-product-tile__link",
+        "a.thumb-link[href$='.html']"
+      ],
+      "tile_price": [
+        "li.product-grid__item .price .value",
+        ".product-tile .price .sales .value",
+        "li.product-grid__item [data-test='price']"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1.product-name",
+        "h1[itemprop='name']",
+        "h1.c-product-name",
+        "h1.pdp-name"
+      ],
+      "price": [
+        "[itemprop='price']",
+        ".product-price .sales .value",
+        "span.price-sales",
+        "span.price .value"
+      ]
+    },
+    "consent": {
+      "accept": [
+        "#onetrust-accept-btn-handler",
+        "button[aria-label='Accept all cookies']",
+        "button[aria-label='Accept All']"
+      ],
+      "close_modal": [
+        "button[aria-label='Close']",
+        "button[data-test='close-button']"
+      ]
+    }
+  },
+  "rationale": "We landed on the Moncler homepage (/en-jp/) which is not a PLP, so no product tiles materialized. Moncler commonly gates content with OneTrust cookies and may show modals. The overrides force entry into a stable PLP (men/ready-to-wear/down-jackets), add cookie/modal handling, and broaden PLP/PDP selectors to match SFCC-style product grids. URL normalization prevents homepage loops and misroutes (e.g., monclergroup.com, editorial pages)."
+}

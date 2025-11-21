@@ -1,0 +1,87 @@
+{
+  "url_rules": {},
+  "overrides_patch": {
+    "start_url": "https://www.moncler.com/en-jp/men/outerwear/",
+    "headers": {
+      "Accept-Language": "en-JP,en;q=0.9"
+    },
+    "wait_for_selectors": [
+      "#onetrust-accept-btn-handler",
+      "ul[data-testid='product-grid'], section [data-testid='product-grid'], section [class*='product-grid']"
+    ],
+    "dismiss_selectors": [
+      "#onetrust-accept-btn-handler",
+      "button[aria-label*='Close']"
+    ],
+    "navigation": {
+      "max_redirects": 3,
+      "block_third_party_domains": [
+        "monclergroup.com"
+      ]
+    }
+  },
+  "rationale": "The scraper landed on the locale home (/en-jp/) which typically doesn’t show product tiles and may display cookie/locale overlays. The safest fix is to avoid the homepage and directly enter a stable PLP (men/outerwear), while handling OneTrust consent. We add resilient selectors for Moncler's common product grid/card structures and generic PDP price/title fallbacks. URL rules normalize to the en-jp locale, redirect homepage to a canonical PLP, and deny non-moncler domains to avoid corporate/locale traps. Minimal overrides add Accept-Language, consent dismissal, and explicit wait targets to ensure the PLP materializes.",
+  "code_hints": [
+    "After initial navigation, attempt to click consent: await clickIfVisible('#onetrust-accept-btn-handler', 2000).",
+    "If no PLP grid appears within 3s on /en-jp/, immediately navigate to /en-jp/men/outerwear/.",
+    "Guard against locale overlays; if a modal with a generic close button appears, dismiss via button[aria-label*='Close'] before scanning PLP.",
+    "Wait for PLP grid with: await page.waitForSelector(\"ul[data-testid='product-grid'], section [data-testid='product-grid'], section [class*='product-grid']\", { timeout: 12000 });",
+    "Extract product links by querying within product_card for anchors starting with '/en-'; resolve to absolute with current origin.",
+    "On PDP, prefer [itemprop='price'] for robust price extraction; fallback to [data-testid*='pdp-price'] or .product-price.",
+    "Set extra HTTP headers: Accept-Language: en-JP,en;q=0.9; use a modern desktop UA string.",
+    "If PLP still empty, try nav clicks: await clickIfVisible(\"a[href*='/en-jp/men']\", 2000); then await clickIfVisible(\"a[href*='/outerwear']\", 2000).",
+    "Scroll PLP to load more (incremental scroll) and wait for network idle before extraction."
+  ],
+  "selectors_patch": {
+    "plp": {
+      "container": [
+        "ul[data-testid='product-grid']",
+        "section [data-testid='product-grid']",
+        "section [class*='product-grid']"
+      ],
+      "product_card": [
+        "li[data-testid='product-grid-item']",
+        "article[data-testid*='product-card']",
+        ".product-grid .product-tile",
+        "article.product-card"
+      ],
+      "product_link": [
+        "a[href^='/en-'][href*='/']",
+        "a[data-testid*='product-card-link']",
+        "a.product-tile__link"
+      ],
+      "price": [
+        "[data-testid*='price']",
+        ".product-price [data-price]",
+        ".product-price",
+        "[class*='Price'] span",
+        "span[itemprop='price']"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[itemprop='name']",
+        "h1[data-testid*='pdp-title']",
+        "h1.product-name"
+      ],
+      "price": [
+        "[itemprop='price']",
+        "[data-testid*='pdp-price']",
+        ".product-price [data-price]",
+        ".product-price"
+      ]
+    },
+    "consent": {
+      "cookie_accept": [
+        "#onetrust-accept-btn-handler",
+        "button#onetrust-accept-btn-handler",
+        "button[aria-label*='Accept']"
+      ],
+      "locale_close": [
+        "button[data-testid*='close']",
+        "button[aria-label*='Close']"
+      ]
+    }
+  },
+  "risk": "medium"
+}

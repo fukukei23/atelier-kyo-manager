@@ -1,0 +1,60 @@
+{
+  "rationale": "Crawler landed on a PDP (ends with .html), so PLP tiles never appeared. Normalizing any PDP URL to its parent category path reliably yields the PLP on moncler.com (e.g., .../short-down-jackets/<product>.html -> .../short-down-jackets). Adding consent click and a resilient tile wait selector increases the chance tiles render. Host/locale normalization prevents locale traps and corporate site misroutes.",
+  "url_rules": {
+    "allowed_hosts": [
+      "www.moncler.com"
+    ],
+    "deny_hosts": [
+      "monclergroup.com"
+    ],
+    "normalizations": [
+      {
+        "when": "any",
+        "pattern": "^https?://(?:www\\.)?moncler\\.com(/.*)$",
+        "replace": "https://www.moncler.com$1"
+      },
+      {
+        "when": "path",
+        "pattern": "^/(en-[a-z]{2})?/(.*)$",
+        "replace": "/en-de/$2"
+      },
+      {
+        "when": "path",
+        "pattern": "/[^/]+\\.html(?:\\?.*)?$",
+        "action": "parent_path"
+      },
+      {
+        "when": "query",
+        "drop_params": [
+          "utm_*",
+          "gclid",
+          "fbclid",
+          "mc_eid",
+          "mc_cid"
+        ]
+      }
+    ]
+  },
+  "risk": "medium",
+  "overrides_patch": {
+    "wait_for_selectors": {
+      "plp": [
+        ".product-grid a[href$=\".html\"], [data-testid=\"product-grid\"] a[href$=\".html\"]"
+      ]
+    },
+    "click": {
+      "consent": [
+        "#onetrust-accept-btn-handler",
+        "button[aria-label*=\"Accept all\" i]"
+      ]
+    }
+  },
+  "selectors_patch": {},
+  "code_hints": [
+    "Add a PDP-to-PLP fallback before PLP extraction:\n- If location.pathname.endsWith('.html') OR document.querySelector('meta[property=\"og:type\"][content=\"product\"]') OR JSON-LD contains \"@type\":\"Product\", then compute parent = url.replace(/\\/[^\\/]+\\.html(\\?.*)?$/, '/'); navigate to parent and retry PLP extraction.",
+    "On page load, attempt cookie consent: await page.$('#onetrust-accept-btn-handler').then(el => el?.click()).catch(()=>{});",
+    "After navigation to PLP, wait for tiles: await page.waitForSelector('.product-grid a[href$=\".html\"], [data-testid=\"product-grid\"] a[href$=\".html\"]', { timeout: 12000 }); Then incremental scroll to trigger lazy-load before reading tiles.",
+    "Guard against wrong domain: if new URL host ends with 'monclergroup.com', abort and revert to last good PLP.",
+    "Only treat links ending with '.html' under /en-de/ as PDPs when collecting product links from PLP."
+  ]
+}

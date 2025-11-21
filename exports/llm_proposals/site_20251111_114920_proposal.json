@@ -1,0 +1,50 @@
+{
+  "overrides_patch": {
+    "entry_urls": [
+      "https://www.moncler.com/en-gb/men/outerwear/"
+    ],
+    "pre_actions": [
+      {
+        "name": "accept_cookies_if_present",
+        "selector": "#onetrust-accept-btn-handler",
+        "action": "click",
+        "wait_after": 500
+      }
+    ],
+    "wait_for_selectors": [
+      "a[href*='/product/']"
+    ],
+    "navigation_timeout_ms": 20000
+  },
+  "selectors_patch": {
+    "plp": {
+      "product_link": "a[href*='/product/']",
+      "product_card": "li a[href*='/product/'], div a[href*='/product/']"
+    },
+    "pdp": {
+      "title": [
+        "h1[data-testid='product-title']",
+        "h1.product-title",
+        "h1"
+      ],
+      "price": [
+        "[itemprop='price']",
+        "[data-testid='product-price'] [data-testid*='price']",
+        ".product-price .price",
+        ".price [data-price]",
+        ".price"
+      ]
+    }
+  },
+  "code_hints": [
+    "- After navigate, attempt to click the OneTrust accept button (#onetrust-accept-btn-handler) if present before querying PLP.",
+    "- If no a[href*='/product/'] found within ~3s on moncler.com, navigate to https://www.moncler.com/en-gb/men/outerwear/.",
+    "- On PLP, perform incremental scrolling (e.g., 6-10 viewport heights) and wait for network idle to load more items; collect unique anchors whose href contains '/product/'.",
+    "- Normalize any followed link to en-gb locale by rewriting the locale segment if needed before visiting the PDP.",
+    "- On PDP, wait for any of the price selectors provided; also capture title via h1 selectors.",
+    "- Consider a retry with a short wait if price is not immediately present, as Moncler pages are JS-rendered."
+  ],
+  "risk": "medium",
+  "url_rules": {},
+  "rationale": "The failure occurred on the homepage, which is not a PLP and is often blocked by a cookie banner. We prioritize non-code changes by setting a stable PLP entry URL, adding a cookie-accept pre-action, and broadening PLP detection to anchors pointing to '/product/' which are consistent across Moncler PLP tiles. URL normalization ensures we stay on en-gb and avoid geo/brand detours (e.g., monclergroup.com) and locale traps. PDP selectors include multiple robust fallbacks for dynamic rendering."
+}

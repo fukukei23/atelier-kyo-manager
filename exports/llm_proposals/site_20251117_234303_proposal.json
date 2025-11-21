@@ -1,0 +1,69 @@
+{
+  "rationale": "The failure occurred because we landed on the homepage (no product tiles) rather than a PLP, and likely encountered an EU cookie banner. We prioritize a non-invasive override: start directly on a stable PLP (men/new-in), enforce the en-de locale, and add cookie-accept handling. We also append broad but specific PLP/PDP selectors commonly used on Moncler/SFCC to improve robustness without replacing existing ones. URL normalization prevents locale traps and monclergroup.com misnavigation.",
+  "overrides_patch": {
+    "start_url": "https://www.moncler.com/en-de/men/new-in",
+    "consent?:append": [
+      "#onetrust-accept-btn-handler",
+      "button[aria-label='Accept all cookies']",
+      "button[aria-label='Accept All']"
+    ],
+    "wait_for_selectors?:append": [
+      "[data-component='ProductGrid']",
+      ".product-grid",
+      "[data-pid]"
+    ],
+    "block_domains?:append": [
+      "www.monclergroup.com",
+      "monclergroup.com"
+    ],
+    "enforce_locale": "en-de"
+  },
+  "url_rules": {},
+  "code_hints": [
+    "After initial navigation, race accept of the OneTrust cookie banner (#onetrust-accept-btn-handler) against PLP container detection; click consent if present, then proceed.",
+    "If no product tiles are found within 3–4s on any page that is not clearly a PLP, attempt a direct goto to the fallback PLP https://www.moncler.com/en-de/men/new-in.",
+    "On PLP, ensure tiles are visible by waiting for [data-pid] within .product-grid; if lazy-loaded, scroll a couple of viewports and re-query.",
+    "When extracting PDP URL from a tile, prefer anchors within the tile root (a.c-product-tile__link or a.product-tile__link) and ensure href stays under /en-de/.",
+    "On PDP, prefer [itemprop='price'] getAttribute('content') when present; fallback to visible .product-price/.price .sales .value text."
+  ],
+  "selectors_patch": {
+    "plp": {
+      "container?:append": [
+        "[data-component='ProductGrid']",
+        ".product-grid",
+        ".c-plp__listing"
+      ],
+      "item?:append": [
+        "[data-pid]",
+        ".product-tile",
+        "li.grid-tile",
+        "article.product-tile"
+      ],
+      "item_link?:append": [
+        "a.c-product-tile__link",
+        "a.product-tile__link",
+        "a.product-link",
+        "a.tile-link"
+      ],
+      "price?:append": [
+        ".product-price .value",
+        "[data-testid='price']",
+        ".price .sales .value"
+      ]
+    },
+    "pdp": {
+      "title?:append": [
+        "h1[data-testid='pdp-title']",
+        "h1.product-name",
+        "h1[itemprop='name']"
+      ],
+      "price?:append": [
+        "[itemprop='price']",
+        "[data-testid='pdp-price']",
+        ".product-price .value",
+        ".price .sales .value"
+      ]
+    }
+  },
+  "risk": "medium"
+}

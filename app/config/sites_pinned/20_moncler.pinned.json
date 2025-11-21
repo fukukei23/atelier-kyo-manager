@@ -1,0 +1,153 @@
+{
+  "MONCLER_OFFICIAL": {
+    "home_url": "https://www.moncler.com/en-int/",
+    "allowed_domain": "moncler.com",
+    "trap_domains": ["www.monclergroup.com","monclergroup.com"],
+
+    "consent": [
+      "#onetrust-accept-btn-handler",
+      ".ot-sdk-container #onetrust-accept-btn-handler"
+    ],
+    "plp_wait_for": [
+      "article[data-test='product-tile']",
+      "li[data-test='product-tile']",
+      "a[data-test='product-tile-link']"
+    ],
+    "plp_item_link": "a[data-test='product-tile-link']",
+    "cta_to_plp": [
+      "a:has-text('Shop the collection')",
+      "a:has-text('Shop now')",
+      "a[href*='/shop-genius/'][href*='frgmt']:not([href*='#'])"
+    ],
+    "pdp_title": [
+      "h1[data-test='product-name']",
+      "h1.product-name"
+    ],
+    "pdp_price": [
+      "[data-test='pdp-price'] [itemprop='price']",
+      "meta[itemprop='price']"
+    ],
+    "pdp_json_ld": "script[type='application/ld+json']",
+
+    "locale_profile": {
+      "domain": "moncler.com",
+      "prefix": "/en-int/",
+      "force_query": {
+        "forceLocale": "en-int",
+        "shipToCountry": "GB"
+      },
+      "cookies": [
+        {
+          "name": "moncler-shipping-country",
+          "value": "GB",
+          "domain": ".moncler.com",
+          "path": "/"
+        },
+        {
+          "name": "moncler-shipping-language",
+          "value": "en",
+          "domain": ".moncler.com",
+          "path": "/"
+        }
+      ]
+    },
+
+    "deny_paths_regex": [
+      ".*/en-jp/.*",
+      ".*/legal/.*",
+      ".*/client-service/.*",
+      ".*/children/.*"
+    ],
+    "deny_fragment_contains": [
+      "#search-field",
+      "#product-information-panel",
+      "#main"
+    ],
+
+    "error_signatures": {
+      "not_found": [
+        "It’s not here",
+        "It's not here",
+        "We cannot find the page",
+        "Page not found",
+        "404",
+        "ページが見つかりません",
+        "非表示または削除されました"
+      ]
+    },
+
+    "selectors": {
+      "pdp": {
+        "plp_container_selectors": [
+          "[data-qa='product-grid']",
+          ".product-grid",
+          ".search-grid"
+        ],
+        "pdp_link_selectors": [
+          "a[data-qa='product-card-link']",
+          "[data-qa='product-tile'] a[href*='/products/']",
+          "a[href][data-testid*='product']",
+          "a[href^='/en-int/'][href*='/products/']",
+          "a[href^='/en-int/'][href*='/p/']",
+          ".c-product-card__link",
+          ".c-product-tile a[href*='/products/']",
+          ".c-product-tile a[href*='/p/']"
+        ]
+      },
+      "ui": {
+        "cookie_accept": ["#onetrust-accept-btn-handler","[id^='onetrust-'] button"]
+      }
+    },
+
+    "discovery_settings": {
+      "enable_trace": true,
+      "enable_har": true,
+      "enable_video": true,
+      "accept_language": "en-GB,en;q=0.8",
+      "enable_locale_escape": true,
+      "timeout_sec": 45,
+      "plp_scroll_rounds": 8,
+
+      "plp_allowlist_regex": ["^https://www\\.moncler\\.com/en-int/.*"],
+      "hard_redirects": [
+        {
+          "if_url_regex": "https?://(www\\.)?monclergroup\\.com/.*",
+          "goto": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets?forceLocale=en-int&shipToCountry=GB"
+        },
+        {
+          "if_url_regex": "https?://www\\.moncler\\.com/en-jp/.*",
+          "goto": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets?forceLocale=en-int&shipToCountry=GB"
+        },
+        {
+          "if_url_regex": "https?://www\\.moncler\\.com/.*/(legal|client-service|children)/.*",
+          "goto": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets?forceLocale=en-int&shipToCountry=GB"
+        }
+      ],
+
+      "url_templates": {
+        "official_catalog": "/en-int/women/outerwear/all-down-jackets?forceLocale=en-int&shipToCountry=GB",
+        "official_catalog_alt": "/en-int/men/outerwear/all-down-jackets?forceLocale=en-int&shipToCountry=GB",
+        "search": "/en-int/search?q={query}&forceLocale=en-int&shipToCountry=GB",
+        "fallback_url": "/en-int/"
+      },
+      "extra_http_headers": {
+        "Accept-Language": "en-GB,en;q=0.8",
+        "DNT": "1",
+        "Referer": "https://www.moncler.com/en-int/"
+      },
+
+      "vrt": {
+        "scope": "none",
+        "baseline_dir": "app/visual_baselines/MONCLER_OFFICIAL",
+        "threshold": 0.02,
+        "hard_fail_threshold": 0.05,
+        "fail_on_hard_threshold": true,
+        "plp_selector": "full_page",
+        "pdp_selector": "full_page",
+        "auto_update_baseline": false,
+        "save_failed_diff_only": true
+      }
+    }
+  }
+}
+

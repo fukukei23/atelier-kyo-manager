@@ -1,0 +1,115 @@
+{
+  "url_rules": {
+    "allow_hosts": [
+      "www.moncler.com"
+    ],
+    "deny_hosts": [
+      "www.monclergroup.com",
+      "monclergroup.com"
+    ],
+    "normalize": [
+      {
+        "if": "^https://www\\.moncler\\.com/en-[a-z]{2}/",
+        "replace": [
+          {
+            "pattern": "^https://www\\.moncler\\.com/en-[a-z]{2}/",
+            "with": "https://www.moncler.com/en-gb/"
+          }
+        ]
+      }
+    ],
+    "deny_paths": [
+      "/magazine",
+      "/stories",
+      "/sustainability",
+      "/corporate"
+    ],
+    "start_fallbacks": [
+      "https://www.moncler.com/en-gb/men/ready-to-wear/down-jackets/",
+      "https://www.moncler.com/en-gb/men/outerwear/"
+    ]
+  },
+  "risk": "medium",
+  "code_hints": [
+    "Before any PLP wait, try clicking consent/geo elements if present: clickFirst(['#onetrust-accept-btn-handler','button:has-text(\"Accept All\")','button:has-text(\"Continue\")','button:has-text(\"Save and continue\")']). Ignore errors if not found.",
+    "If landing on homepage or no product tiles after 4-6s, navigate to the first entry_urls PLP, then wait for ['.product-grid','[data-test*=\"product-card\"]'] with a 10-12s timeout.",
+    "When extracting PLP, query product_card scope then resolve product_link within each card; de-duplicate absolute hrefs and keep only host www.moncler.com and locale /en-gb/ per url_rules.",
+    "On PDP, wait for either title or price selector; if price is loaded via XHR, add a short retry with networkidle or a 500-800ms delay before re-query.",
+    "Set Accept-Language header to en-GB to reduce locale gate prompts and unwanted locale redirects.",
+    "If redirected to a different locale (regex /en-[a-z]{2}/), rewrite URL to en-gb and reload once; then proceed."
+  ],
+  "rationale": "We landed on the Moncler homepage with no PLP tiles and likely hit a cookie/geo modal. The patch adds robust acceptance selectors for OneTrust and generic continue buttons, plus directs the crawler to known PLP category URLs under en-gb to avoid the non-PLP homepage. PLP/PDP selectors are broadened with data-test and class-based fallbacks commonly used on Moncler/SFCC, increasing chances to detect tiles and prices. URL rules constrain navigation to www.moncler.com, normalize any en-* locale to en-gb, and avoid monclergroup.com or editorial paths that are traps.",
+  "overrides_patch": {
+    "entry_urls": [
+      "https://www.moncler.com/en-gb/men/ready-to-wear/down-jackets/",
+      "https://www.moncler.com/en-gb/men/outerwear/"
+    ],
+    "wait_for_selectors": [
+      ".product-grid",
+      "[data-test*='plp-grid']",
+      "[data-test*='product-card']"
+    ],
+    "pre_click_selectors_once": [
+      "#onetrust-accept-btn-handler",
+      "button:has-text('Accept All')",
+      "button:has-text('Continue')",
+      "button:has-text('Save and continue')"
+    ],
+    "http_headers": {
+      "Accept-Language": "en-GB,en;q=0.8"
+    },
+    "navigation": {
+      "block_third_party": true
+    }
+  },
+  "selectors_patch": {
+    "plp": {
+      "container": [
+        ".product-grid",
+        "[data-test*='plp-grid']",
+        "[class*='PlpGrid']"
+      ],
+      "product_card": [
+        "[data-test*='product-card']",
+        "article[class*='product-card']",
+        "li[class*='product-card']",
+        ".product-grid [class*='product']"
+      ],
+      "product_link": [
+        "a[data-test*='product-link']",
+        "a[class*='product-card']",
+        "a[href*='/en-gb/'][href*='/']"
+      ],
+      "price": [
+        "[data-test*='price']",
+        "[class*='price']",
+        "[class*='Price']"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-test*='product-name']",
+        "h1[class*='product-name']",
+        "h1[itemprop='name']"
+      ],
+      "price": [
+        "[data-test*='price']",
+        "[class*='price']",
+        "[itemprop='price']"
+      ]
+    },
+    "modals": {
+      "consent_accept": [
+        "#onetrust-accept-btn-handler",
+        "button#onetrust-accept-btn-handler",
+        "button:has-text('Accept All')",
+        "button:has-text('I Accept')"
+      ],
+      "geo_continue": [
+        "button:has-text('Continue')",
+        "button:has-text('Save and continue')",
+        "[data-testid*='continue']"
+      ]
+    }
+  }
+}

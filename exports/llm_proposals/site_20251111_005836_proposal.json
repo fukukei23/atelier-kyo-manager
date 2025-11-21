@@ -1,0 +1,54 @@
+{
+  "code_hints": [
+    "Immediately after navigation, try to click the OneTrust cookie button if present: selector '#onetrust-accept-btn-handler' with a short timeout (e.g., 2-3s). Ignore errors if not found.",
+    "If a locale/country modal appears, attempt to close/confirm using any of: text buttons matching 'Continue', 'United Kingdom', 'Stay on this site', or a close 'X' button. Use a short best-effort pass and ignore if not found.",
+    "Ensure you are on a PLP: wait for any of selectors: 'main [data-testid*=\"product-grid\"]', 'main .product-grid', 'main ul.products' and at least 6 product cards before extracting.",
+    "Extract PDP links from product cards using the first matching link under each card that contains '/en-gb/' in href.",
+    "On PDP, wait for 'h1' title and a price selector from the provided list before reading textContent.",
+    "If at any point you are redirected to a different locale (href contains '/en-..../'), rewrite to '/en-gb/' and reload.",
+    "Use a realistic desktop UA and small random delays between actions to reduce anti-bot friction."
+  ],
+  "selectors_patch": {
+    "plp": {
+      "container": [
+        "main [data-testid*=\"product-grid\"]",
+        "main .product-grid",
+        "main ul.products"
+      ],
+      "product_card": [
+        "[data-pid]",
+        "li.product",
+        "article.product",
+        ".product-tile"
+      ],
+      "product_link": [
+        "[data-pid] a[href*=\"/en-gb/\"]",
+        ".product-tile a[href*=\"/en-gb/\"]",
+        "li.product a[href*=\"/en-gb/\"]"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-test*=\"product-name\"]",
+        "h1.product-name",
+        "h1[itemprop=\"name\"]",
+        "main h1"
+      ],
+      "price": [
+        "[data-test*=\"price\"] [data-price]",
+        "[data-test*=\"price\"]",
+        ".product-price [data-price]",
+        ".product-price",
+        "[itemprop=\"price\"]"
+      ]
+    }
+  },
+  "rationale": "The failure occurred because the crawler landed on the homepage, which has no PLP tiles and may show cookie/locale overlays. Prioritizing configuration, we set a stable category PLP start URL under en-gb to guarantee product tiles. We add URL normalization to keep locale anchored to en-gb and avoid corporate domains. Minimal, robust selectors target generic product grids and price/title elements commonly used on Moncler/SFCC builds. Code hints cover accepting OneTrust cookies and dismissing locale modals that can block rendering and extraction.",
+  "overrides_patch": {
+    "start_url": "https://www.moncler.com/en-gb/men/outerwear/",
+    "navigation_timeout_sec": 30,
+    "polite_wait_ms": 800
+  },
+  "url_rules": {},
+  "risk": "medium"
+}

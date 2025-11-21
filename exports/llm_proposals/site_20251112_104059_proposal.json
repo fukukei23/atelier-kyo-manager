@@ -1,0 +1,96 @@
+{
+  "selectors_patch": {
+    "wait_for_selectors": [
+      "#onetrust-accept-btn-handler",
+      "[aria-label*='Accept all'][role='button']",
+      "[data-testid='country'], [data-testid*='locale'], [class*='locale'] dialog, [class*='country'] dialog",
+      "[data-testid='plp-grid'], .plp-grid, .product-grid, [class*='product-grid']",
+      "[data-testid='product-tile'], li[data-component='ProductTile'], .product-grid [data-product-id]"
+    ],
+    "plp": {
+      "grid": [
+        "[data-testid='plp-grid']",
+        ".plp-grid",
+        ".product-grid",
+        "[class*='product-grid']"
+      ],
+      "product": [
+        "[data-testid='product-tile']",
+        "li[data-component='ProductTile']",
+        ".product-grid [data-product-id]"
+      ],
+      "product_link": [
+        "[data-testid='product-tile'] a[href*='/en-int/']",
+        "li[data-component='ProductTile'] a[href*='/en-int/']",
+        ".product-grid [data-product-id] a[href*='/en-int/']",
+        "[data-testid='product-tile'] a[href^='/en-']"
+      ]
+    },
+    "pdp": {
+      "title": [
+        "h1[data-testid='pdp-title']",
+        "h1[itemprop='name']",
+        "h1[class*='product-name']"
+      ],
+      "price": [
+        "[data-testid='price'] [data-testid*='value']",
+        "[itemprop='price']",
+        "[class*='price'] [class*='value']",
+        "meta[itemprop='price'][content]"
+      ],
+      "json_ld": [
+        "script[type='application/ld+json']"
+      ]
+    }
+  },
+  "overrides_patch": {
+    "pre_actions": [
+      {
+        "action": "click_if_present",
+        "selector": "#onetrust-accept-btn-handler",
+        "comment": "Accept cookie banner (OneTrust)"
+      },
+      {
+        "action": "click_if_present",
+        "selector": "button[aria-label*='Accept all'], [aria-label*='Accept all'][role='button']",
+        "comment": "Generic accept cookies fallback"
+      },
+      {
+        "action": "click_if_present",
+        "selector": "button:has-text('International'), a:has-text('International')",
+        "comment": "Choose International locale to avoid geo-redirect"
+      },
+      {
+        "action": "click_if_present",
+        "selector": "button:has-text('English'), a:has-text('English')",
+        "comment": "Ensure English language if locale modal appears"
+      }
+    ],
+    "plp": {
+      "scroll": {
+        "mode": "incremental",
+        "step_px": 1200,
+        "max_steps": 8,
+        "until_selector": "[data-testid='product-tile'], li[data-component='ProductTile'], .product-grid [data-product-id]"
+      },
+      "timeout_ms": 20000
+    },
+    "network": {
+      "headers": {
+        "Accept-Language": "en-GB,en;q=0.8"
+      }
+    }
+  },
+  "url_rules": {},
+  "code_hints": [
+    "After navigation, first try to click the cookie consent (#onetrust-accept-btn-handler) and any International/English locale button if present, then wait for network idle.",
+    "If PLP tiles are still missing, perform incremental scroll (e.g., window.scrollBy) until any of the product tile selectors becomes visible or until max steps reached.",
+    "When extracting product links, restrict to anchors under detected product tiles and normalize to absolute URLs; prefer those containing '/en-int/' to avoid locale flips.",
+    "On PDP, if price/title selectors fail, parse the first JSON-LD block (application/ld+json) for offers.price and name as a fallback.",
+    "Set Accept-Language header to en-GB to reduce locale modals; persist locale choice via cookies/localStorage only if your framework allows safe writes.",
+    "If a full-screen locale modal is detected (dialog with country/language content), attempt clicking a control containing 'International' then 'English'. Retry wait for grid afterward.",
+    "Use a longer initial wait for PLP (up to 20s or until grid selector appears) as the site lazy-loads content after hydration."
+  ],
+  "risk": "medium",
+  "rationale": "The failure likely stems from a locale/cookie gate and a malformed URL with duplicate locale segments (/en-gb/en-int/) that can trigger redirects and prevent the PLP grid from rendering. Adding robust wait selectors and pre-actions to accept cookies and pick the International/English locale should unblock rendering. The PLP on moncler commonly lazy-loads tiles; enabling incremental scroll and longer waits helps materialize product cards. PDP extraction includes flexible price/title selectors plus a JSON-LD fallback for resiliency. URL normalization ensures consistent use of /en-int/ and avoids misnavigation to monclergroup.com."
+}
