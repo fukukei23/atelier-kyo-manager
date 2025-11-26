@@ -1,0 +1,36 @@
+---
+alwaysApply: true
+---
+
+# Atelier-Kyo Project Firewall
+
+## 1. 触って良いディレクトリ
+
+AI が読み書き・編集・生成・削除してよいパスは：
+
+- /home/yn441611/atelier-kyo-manager 配下のみ
+
+## 2. 触ってはいけない領域
+
+以下のディレクトリ／ファイルには一切触れてはならない。
+
+- /home/yn441611/NexusCore
+- /home/yn441611/*
+- /etc /usr /var /root など OS ディレクトリ
+- WSL 全体の設定ファイル
+- Windows 側の C:\\Users\\… 配下
+
+## 3. 禁止操作
+
+- rm -rf（パス内容不問）
+- sudo を含むコマンド
+- systemctl / service 操作
+- git reset --hard / git clean -fdx
+- apt remove / apt install
+
+## 4. ファイル操作の鉄則
+
+- 破壊的操作は行わない
+- 上書き前に必ず diff を提示
+- 大量変更は **ユーザーに確認を取ること**
+---

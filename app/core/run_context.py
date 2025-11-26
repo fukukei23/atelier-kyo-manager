@@ -80,3 +80,15 @@ class RunContext:
         formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(formatter)
         return handler
+
+    # --- Utility: save arbitrary text content ---
+    def save_content(self, filename: str, content: str):
+        """
+        Save text content to a file under the current run directory.
+        """
+        path = self.get_path(filename)
+        try:
+            path.write_text(content, encoding='utf-8')
+            logging.debug(f"Content saved: {path}")
+        except Exception as e:
+            logging.error(f"Failed to save content to {path}: {e}")

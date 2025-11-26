@@ -76,9 +76,16 @@ async def write_fail_snapshot(run_context: "RunContext", page: Optional["Page"],
     """Saves a snapshot of failure information (DOM, screenshot, etc.)."""
     visible_counts: Dict[str, int] = {}
     note = f"Final URL: {final_url}\nError: {error}"
+    screenshot_path: Optional[str] = None
 
     if page and not page.is_closed():
         await save_dom(run_context, page, "failure_dom")
+        try:
+            # Best-effort screenshot on failure
+            screenshot_path = await run_context.take_screenshot(page, "99_failure")
+        except Exception as e:
+            _log(run_context).warning(f"Failed to take failure screenshot: {e}")
+
         try:
             pdp_cfg = (site_config.get("selectors") or {}).get("pdp", {}) or {}
             markers = list(dict.fromkeys((pdp_cfg.get("title_selectors") or []) + (pdp_cfg.get("price_selectors") or [])))
@@ -103,6 +110,7 @@ async def write_fail_snapshot(run_context: "RunContext", page: Optional["Page"],
 
 ## Available Artifacts
 - `failure_dom.html` (if page was available)
+- `{screenshot_path or '99_failure.png (if captured)'}`
 - `plp_dom_initial_materialized.html`
 - `plp_dom_search_fallback.html`
 - `selector_counts_plp_initial.json`
