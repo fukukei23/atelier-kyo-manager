@@ -1,0 +1,47 @@
+---
+alwaysApply: true
+---
+
+# Atelier-Kyo Safe Test Execution Rules
+
+## 1. 実行環境
+
+- すべての pytest / shell 実行は **WSL Ubuntu** 上を前提とする。
+- プロジェクトルートは `/home/yn441611/atelier-kyo-manager` とみなす。
+- venv は次の優先順で有効化する：
+
+```bash
+source venv/bin/activate 2>/dev/null || source myenv/Scripts/activate 2>/dev/null || true
+```
+
+## 2. pytest の実行方法（標準）
+
+特に指定がない場合、次の形式で tests/ 以下のみを対象として実行する：
+
+```bash
+cd /home/yn441611/atelier-kyo-manager
+source venv/bin/activate 2>/dev/null || source myenv/Scripts/activate 2>/dev/null || true
+python -m pytest tests/
+```
+
+- プロジェクトルート（`.`）に pytest を実行してはならない。
+- 個別のファイル指定がある場合はそれを優先する。
+
+例）orders まわりだけテストして
+→ `python -m pytest tests/api/test_orders.py`
+
+## 3. テスト前後の禁止行為
+
+- `git reset --hard` / `git clean -fdx` を実行してはならない。
+- `rm -rf` を含む破壊的操作を行わない。
+- 本番コードを大量に書き換える前に必ず diff を提示する。
+- テスト失敗時は「無限リトライ」を行わず、
+  1. 実行したコマンド
+  2. エラー要約
+  3. 修正方針
+  を返して終了する。
+
+## 4. ログの扱い
+
+- pytest 出力ログは必要部分のみ要約して提示する。
+- ログファイル全体を上書きしたり削除したりしない。
