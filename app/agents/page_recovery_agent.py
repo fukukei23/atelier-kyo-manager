@@ -30,7 +30,10 @@ from pathlib import Path
 from urllib.parse import urljoin
 
 from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
-from core.run_context import RunContext
+try:
+    from app.core.run_context import RunContext
+except Exception:
+    from core.run_context import RunContext
 
 logger = logging.getLogger(__name__)
 

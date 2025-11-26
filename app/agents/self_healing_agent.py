@@ -34,7 +34,10 @@ if str(APP_ROOT) not in sys.path:
 from playwright.async_api import Page
 from app.agents.page_recovery_agent import PageRecoveryAgent
 from app.agents.selector_repair_agent import SelectorRepairAgent
-from core.run_context import RunContext
+try:
+    from app.core.run_context import RunContext
+except Exception:
+    from core.run_context import RunContext
 
 logger = logging.getLogger(__name__)
 

@@ -29,7 +29,7 @@ except Exception:
 
 # --- アプリ本体 -------------------------------------------------------------
 try:
-    from app.utils.ai_research_orchestrator import ResearchOrchestrator
+    from app.utils.ai_research_orchestrator import AiResearchOrchestrator as ResearchOrchestrator
 except Exception as e:
     print("[FATAL] ResearchOrchestrator の import に失敗: ", e, file=sys.stderr)
     sys.exit(99)
@@ -99,9 +99,16 @@ def main(argv: list[str]) -> int:
                  args.brand, args.headless, args.items, args.timeout, args.retries)
 
     # Orchestrator を初期化（存在しない引数は渡さない）
-    orch = ResearchOrchestrator(headless=args.headless)
+    orch = ResearchOrchestrator()
 
     # 任意パラメータは「属性があればセット」
+    if hasattr(orch, "headless"):
+        try:
+            setattr(orch, "headless", bool(args.headless))
+            logging.debug("Set orch.headless=%s", args.headless)
+        except Exception:
+            logging.exception("Failed to set orch.headless")
+
     if hasattr(orch, "item_limit"):
         try:
             setattr(orch, "item_limit", int(args.items))
@@ -120,8 +127,13 @@ def main(argv: list[str]) -> int:
     last_err: Exception | None = None
     for attempt in range(1, args.retries + 1):
         try:
-            results = orch.run(args.brand)  # list を想定
-            logging.info("Runner: orchestrator finished with %d result(s).", len(results) if hasattr(results, "__len__") else -1)
+            # run() は coroutine を返すので必ず asyncio.run() で実行
+            results = asyncio.run(orch.run())
+
+            logging.info(
+                "Runner: orchestrator finished with %d result(s).",
+                len(results) if hasattr(results, "__len__") else -1,
+            )
             out_file = dump_result_json(args.out, args.brand, results, args.tag)
             logging.info("Runner: wrote result -> %s", out_file)
             print(str(out_file))  # 標準出力にも出す

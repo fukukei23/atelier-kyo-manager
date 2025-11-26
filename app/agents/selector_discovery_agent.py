@@ -30,7 +30,10 @@ from app.extractors.product_info_extractor import extract_product_info
 from app.agents.failure_analysis_agent import FailureAnalysisAgent
 from app.agents.self_healing_agent import SelfHealingAgent
 from app.models.result_models import DiscoveryResult
-from core.run_context import RunContext
+try:
+    from app.core.run_context import RunContext
+except Exception:
+    from core.run_context import RunContext
 
 logger = logging.getLogger(__name__)
 

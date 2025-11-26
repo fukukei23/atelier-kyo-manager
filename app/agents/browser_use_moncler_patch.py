@@ -25,9 +25,11 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional, Set, Tuple
 from urllib.parse import urljoin, urlparse
+from pathlib import Path
 
 import asyncio
 import re
+import time
 
 from playwright.async_api import Page
 
@@ -304,30 +306,38 @@ async def _select_preferred_locale(page: Page) -> bool:
 async def _handle_location_modal(page: Page) -> None:
     """
     Moncler の 「Select your location」 モーダルを閉じる軽量ハンドラ。
-    既に閉じていれば何もしない。
+    既に閉じていれば何もしない。最大10回/合計5秒で諦める（無限待ち防止）。
     """
+    start = time.monotonic()
+    attempts = 0
     try:
-        await page.wait_for_timeout(1000)
-        modal_title = page.locator("text=Select your location").first
-        if await modal_title.count() == 0 or not await modal_title.is_visible():
-            return
-
-        if await _select_preferred_locale(page):
-            return
-
-        close = page.locator(
-            "button[aria-label*='close' i], "
-            "button:has-text('Close'), "
-            "button:has-text('×'), "
-            ".modal__close, .c-modal__close"
-        ).first
-
-        if await close.count() > 0:
-            await close.click(timeout=3000)
+        while True:
+            attempts += 1
+            modal_title = page.locator("text=Select your location").first
+            if await modal_title.count() == 0 or not await modal_title.is_visible():
+                return
+            if await _select_preferred_locale(page):
+                return
+            close = page.locator(
+                "button[aria-label*='close' i], "
+                "button:has-text('Close'), "
+                "button:has-text('×'), "
+                ".modal__close, .c-modal__close"
+            ).first
+            if await close.count() > 0:
+                try:
+                    await close.click(timeout=2500)
+                    await page.wait_for_timeout(300)
+                    logger.info("[MonclerPatch] Location modal closed (close button).")
+                    return
+                except Exception:
+                    pass
+            if attempts >= 10 or (time.monotonic() - start) > 5:
+                raise RuntimeError("Locale modal not dismissed within 10 attempts/5s")
             await page.wait_for_timeout(300)
-            logger.info("[MonclerPatch] Location modal closed.")
     except Exception as e:
         logger.warning(f"[MonclerPatch] Location modal handling failed: {e}")
+        raise
 
 
 # ---------------- メイン: リカバリー ----------------
@@ -417,6 +427,19 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
         await _handle_location_modal(page)
     except Exception as e:
         logger.warning(f"[MonclerPatch] location modal handling failed: {e}")
+        # タイムアウト時は動画を確定させ、早期に落とす
+        try:
+            Path("instance/logs").mkdir(parents=True, exist_ok=True)
+            stuck_path = Path("instance/logs/moncler_gate_stuck.png")
+            await page.screenshot(path=str(stuck_path), full_page=True)
+            logger.warning(f"[MonclerPatch] Gate screenshot saved: {stuck_path}")
+        except Exception:
+            pass
+        try:
+            await page.context.close()
+        except Exception:
+            pass
+        raise RuntimeError("Gate dismissal failed -> aborting session")
 
 
     # --- 4. URL正規化 & リダイレクト脱出 ---
@@ -469,6 +492,36 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
     # --- 5. URL候補収集 ---
     urls = await _collect_candidate_urls(page)
     logger.info(f"[MonclerPatch] PLP prepared (tiles={len(urls)})")
+
+    # tiles=0 なら即 PDP直行を試みる
+    if not urls:
+        logger.warning("[MonclerPatch] tiles=0 -> direct PDP hop attempts")
+        # --- クリック強制 ---
+        if await _try_router_click(page):
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=8000)
+            except Exception:
+                pass
+            return
+        # --- DOM 断片直叩き ---
+        try:
+            pattern = _URL_RE.pattern
+            fragment = await page.evaluate("""
+              (pat) => {
+                try {
+                  const re = new RegExp(pat, 'g');
+                  const html = (document.body && document.body.innerHTML) || '';
+                  const m = html.match(re);
+                  return m ? m[0] : null;
+                } catch (e) { return null; }
+              }
+            """, pattern)
+            if fragment:
+                await page.goto(urljoin(page.url, fragment), wait_until="domcontentloaded", timeout=15000)
+                return
+        except Exception:
+            pass
+        raise RuntimeError("Moncler PLP recovery: no tiles and no fallback URL found.")
 
     # --- 6. 直接遷移 ---
     if urls:
