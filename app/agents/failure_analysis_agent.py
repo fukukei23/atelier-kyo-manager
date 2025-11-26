@@ -25,7 +25,10 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 # --- プロジェクトのモジュールをインポート ---
-from core.run_context import RunContext
+try:
+    from app.core.run_context import RunContext
+except Exception:
+    from core.run_context import RunContext
 # from app.utils.ai_llm_controller import AILlmController
 # from app.models.result_models import GenerateResult
 

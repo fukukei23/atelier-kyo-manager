@@ -1,0 +1,54 @@
+---
+alwaysApply: true
+---
+
+# Atelier-Kyo Auto Test Rule
+
+## 1. トリガーとなるユーザー発話
+
+次のような発話を検出したら「テスト実行モード」を開始する：
+
+- テストして
+- テスト回して
+- pytest 回して
+- テスト一通り流して
+- run tests
+- please run tests
+- test all
+
+表現が多少違っても「テスト実行依頼」と判断できる場合は同等と扱う。
+
+## 2. 実行内容
+
+ユーザー指定がなければ **tests/ 配下すべて** を実行する：
+
+```bash
+cd /home/yn441611/atelier-kyo-manager
+source venv/bin/activate 2>/dev/null || source myenv/Scripts/activate 2>/dev/null || true
+python -m pytest tests/
+```
+
+特定ファイルを指す言い回しがある場合はそれを優先。
+
+例）
+「orders だけテストして」
+→ `python -m pytest tests/api/test_orders.py`
+
+## 3. 実行手順（AI が行うこと）
+
+1. コマンド実行前に **必ず提示** してユーザーに確認を取る
+2. 仮想環境を有効化
+3. pytest 実行
+4. 結果を要約し、
+   - 失敗したテスト
+   - エラーメッセージの要約
+   - 修正の方向性
+   を簡潔に提示
+5. 無限ループで再試行しない
+
+## 4. 禁止事項
+
+- `python -m pytest .` （ルート全体を走らせる）
+- `git reset --hard` / `git clean -fdx`
+- `rm -rf`
+- `tests/` 以外を勝手にテスト対象に含める
