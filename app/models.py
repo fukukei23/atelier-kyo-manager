@@ -10,7 +10,7 @@
 from __future__ import annotations
 from datetime import datetime
 
-from sqlalchemy import Integer, String, Float, Boolean, DateTime
+from sqlalchemy import Integer, String, Float, Boolean, DateTime, Text
 from .extensions import db
 
 
@@ -60,3 +60,23 @@ class Product(db.Model):
 
     def __repr__(self) -> str:
         return f"<Product id={self.id} name={self.name!r}>"
+
+
+class ChatHistory(db.Model):
+    """
+    チャット履歴を永続化するモデル
+    再起動後もチャット履歴が保持されるようにする
+    """
+    __tablename__ = "chat_history"
+
+    id = db.Column(Integer, primary_key=True)
+    session_id = db.Column(String(255), nullable=False, index=True)  # セッション識別子
+    role = db.Column(String(50), nullable=False)  # "user" or "assistant"
+    content = db.Column(Text, nullable=False)  # メッセージ内容
+    model_family = db.Column(String(50), nullable=True)  # 使用したモデル（gemini, openai等）
+    tokens = db.Column(Integer, nullable=True)  # 使用トークン数
+    cost_usd = db.Column(Float, nullable=True)  # コスト（USD）
+    created_at = db.Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    def __repr__(self) -> str:
+        return f"<ChatHistory id={self.id} session_id={self.session_id!r} role={self.role!r}>"

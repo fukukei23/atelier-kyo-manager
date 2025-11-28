@@ -225,7 +225,7 @@ class BrowserExtractionService:
             if enriched:
                 return enriched
 
-        price_text = await self._extract_price_with_size_option(page, settings)
+        price_text = await self._extract_price_with_size_option(page, settings, site_config)
         if price_text:
             data = await extract_title_price(page) or {}
             data["price"] = price_text
@@ -244,8 +244,8 @@ class BrowserExtractionService:
 
         return None
 
-    async def _extract_price_with_size_option(self, page: Page, settings: Dict[str, Any]) -> Optional[str]:
-        price = await self._read_price_or_none(page)
+    async def _extract_price_with_size_option(self, page: Page, settings: Dict[str, Any], site_config: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        price = await self._read_price_or_none(page, site_config)
         if price:
             return price
 
@@ -254,16 +254,24 @@ class BrowserExtractionService:
             return None
 
         self.logger.debug("Price not found initially, attempting size selection...")
-        if await self._click_size_to_reveal_price(page, policy, settings):
-            price = await self._read_price_or_none(page)
+        if await self._click_size_to_reveal_price(page, policy, settings, site_config):
+            price = await self._read_price_or_none(page, site_config)
             if price:
                 self.logger.debug("Price found after size selection.")
                 return price
             self.logger.debug("Price NOT found even after size selection.")
         return None
 
-    async def _read_price_or_none(self, page: Page) -> Optional[str]:
-        for selector in PRICE_SELECTORS:
+    async def _read_price_or_none(self, page: Page, site_config: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        # Stage 3A-2-5: site_config["selectors"]["pdp"]["price"] から取得
+        pdp_selectors = (site_config or {}).get("selectors", {}).get("pdp", {}) or {}
+        price_selectors = pdp_selectors.get("price", [])
+        
+        # フォールバック: 空の場合はデフォルトセレクタを使用
+        if not price_selectors:
+            price_selectors = PRICE_SELECTORS
+        
+        for selector in price_selectors:
             try:
                 locator = page.locator(selector).first
                 if await locator.count() == 0:
@@ -284,9 +292,18 @@ class BrowserExtractionService:
         page: Page,
         policy: PDPSizeSelectPolicy,
         settings: Dict[str, Any],
+        site_config: Optional[Dict[str, Any]] = None,
     ) -> bool:
+        # Stage 3A-2-5: site_config["selectors"]["pdp"]["size_button"] から取得
+        pdp_selectors = (site_config or {}).get("selectors", {}).get("pdp", {}) or {}
+        size_button_selectors = pdp_selectors.get("size_button", [])
+        
+        # フォールバック: 空の場合はデフォルトセレクタを使用
+        if not size_button_selectors:
+            size_button_selectors = SIZE_BUTTON_SELECTORS
+        
         try:
-            buttons = page.locator(", ".join(SIZE_BUTTON_SELECTORS))
+            buttons = page.locator(", ".join(size_button_selectors))
             count = await buttons.count()
         except Exception:
             return False
@@ -343,7 +360,12 @@ class BrowserExtractionService:
                 self.logger.debug("networkidle timeout after size click.")
             try:
                 wait_ms = int(settings.get("pdp_price_wait_ms", 4000))
-                sel = ", ".join(VISIBLE_PRICE_SELECTORS) or "[itemprop=price],[class*=price],[data-testid*=price]"
+                # Stage 3A-2-5: site_config から visible_price_selectors を取得
+                pdp_selectors = (site_config or {}).get("selectors", {}).get("pdp", {}) or {}
+                visible_price_selectors = pdp_selectors.get("visible_price_selectors", [])
+                if not visible_price_selectors:
+                    visible_price_selectors = VISIBLE_PRICE_SELECTORS
+                sel = ", ".join(visible_price_selectors) or "[itemprop=price],[class*=price],[data-testid*=price]"
                 await page.wait_for_selector(sel, state="visible", timeout=wait_ms)
             except Exception:
                 self.logger.debug("Price selector did not become visible after size click.")
