@@ -88,3 +88,79 @@ app/models_backup.py
 # Chat records (auto-saved, excluded from GitHub)
 docs/chat_records/
 docs/chat_records/*.md
+
+# --- Organized Directories (整理されたディレクトリ) ---
+# 開発スクリプト（scripts/dev/ は Git に含めるが、生成物は除外）
+scripts/dev/*.log
+scripts/dev/*.tmp
+
+# レポート（docs/reports/ は Git に含めるが、一時レポートは除外）
+docs/reports/*.tmp
+
+# 生成されたログ・一時ファイル・データ（すべて除外）
+logs/generated/
+tmp/generated/
+data/generated/
+
+# --- Test & Development Scripts (テスト・開発用スクリプト) ---
+# ルートディレクトリに散在する一時的なテストスクリプト
+check_*.py
+execute_*.py
+run_*_test*.py
+test_*.py
+verify_*.py
+quick_*.py
+show_*.py
+move_*.py
+organize_*.py
+measure_*.py
+fix_*.py
+remove_*.py
+auto_*.py
+debug_*.py
+multi_*.py
+pricing_*.py
+buyma_*.py
+
+# --- Generated Data Files (生成されたデータファイル) ---
+# CSV、HTML、JSONなどの生成物
+*.csv
+!requirements.txt
+page_source.html
+sample.html
+output.csv
+catalog_*.csv
+
+# --- Coverage & Test Reports (カバレッジ・テストレポート) ---
+coverage.json
+.coverage
+htmlcov/
+.pytest_cache/
+test_output.log
+test_*.log
+browser_test_*.log
+
+# --- Backup & Archive Files (バックアップ・アーカイブ) ---
+*.zip
+!*.zip.example
+_backup/
+codex_history/
+
+# --- Generated Graph & Analysis Files (生成されたグラフ・分析ファイル) ---
+depgraph.json
+project_dependency_graph.json
+tree.txt
+git_status_check_result.txt
+
+# --- Local Configuration Overrides (ローカル設定のオーバーライド) ---
+overrides.local.json
+*.local.json
+!*.local.json.example
+
+# --- Temporary Directories (一時ディレクトリ) ---
+tmp/
+catalog_images/
+screenshots/
+images/
+debug_catalog/
+project-root/
