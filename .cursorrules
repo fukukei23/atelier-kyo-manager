@@ -58,14 +58,16 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 
 ## レポート形式
 
-完了レポートは `<作業識別子>_COMPLETION_REPORT.md` という命名規則で作成する。
+完了レポートは `docs/completion_reports/<作業識別子>_COMPLETION_REPORT.md` というパスと命名規則で作成する。
 
 例：
-- `STAGE_3A3_COMPLETION_REPORT.md`
-- `FEATURE_AUTHENTICATION_COMPLETION_REPORT.md`
-- `REFACTORING_DATABASE_LAYER_COMPLETION_REPORT.md`
+- `docs/completion_reports/STAGE_3A3_COMPLETION_REPORT.md`
+- `docs/completion_reports/FEATURE_AUTHENTICATION_COMPLETION_REPORT.md`
+- `docs/completion_reports/REFACTORING_DATABASE_LAYER_COMPLETION_REPORT.md`
 
 プロジェクト内に既存の完了レポートがある場合は、その形式を参考にする。
+
+**重要**: 完了レポートは必ず `docs/completion_reports/` ディレクトリに保存すること。
 
 ## 必須セクション
 
@@ -101,4 +103,50 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 ## 言語
 
 完了レポートは日本語で記述する（プロジェクトの言語設定に従う）。
+
+# チャット記録の自動保存ルール
+
+## チャット記録を作成するタイミング
+
+以下のタイミングで、自動的にチャット記録を作成する：
+
+- **ユーザーが「Chat記録して」と明示的に要求した場合**
+- **重要な作業セッションが完了した場合**（完了レポート作成時など）
+- **セッション終了時**（可能な場合）
+
+## レポート形式
+
+チャット記録は `docs/chat_records/CHAT_RECORD_YYYYMMDD_<概要>.md` という命名規則で作成する。
+
+例：
+- `docs/chat_records/CHAT_RECORD_20251128_MONCLER_DRISSION_DIAGNOSTICS.md`
+- `docs/chat_records/CHAT_RECORD_20251128_AUTO_FIX_AND_TESTS.md`
+
+**重要**: チャット記録は必ず `docs/chat_records/` ディレクトリに保存すること。
+
+## 必須セクション
+
+チャット記録には以下のセクションを含める：
+
+1. **日時**: セッションの日時
+2. **概要**: セッションで実施した内容の概要
+3. **実施内容**: 詳細な実施内容
+4. **主な問題と解決**: 発生した問題とその解決方法
+5. **重要な注意事項**: 重要な注意事項や制約
+6. **実行方法**: 実行方法やコマンド
+7. **作成・変更ファイル一覧**: 作成・変更したファイルの一覧
+8. **次のステップ**: 推奨されるフォローアップアクション
+9. **関連ファイル**: 関連するファイルのパス
+
+## GitHub除外
+
+チャット記録は `.gitignore` に追加されており、GitHubにはコミットされません。
+
+- プライバシー保護のため
+- リポジトリサイズの削減のため
+- 個人の作業記録としてローカルに保存するため
+
+## 言語
+
+チャット記録は日本語で記述する（プロジェクトの言語設定に従う）。
 

@@ -521,14 +521,22 @@ class NavigationDriver:
         Stage 3A-2-5: site_config から trap_url_patterns と legal_url_patterns を取得
         """
         try:
-            # V88.5.9: ローカルインポート (urllib.parse はグローバルで import 済)
-            sp = urlsplit(url)
-            path = sp.path or ""
-            # 二重ロケールの早期修正
-            path = path.replace("/en-jp/en-int/", "/en-int/").replace("/en-jp/", "/en-int/")
-            # "PDPアンカー"などのハッシュは評価前に捨てる
-            sp = sp._replace(path=path, fragment="")
-            url = urlunsplit(sp)
+            # Stage 4: 二重ロケールの早期修正（site_configに基づく）
+            locale_cfg = (site_config or {}).get("locale", {}) or {}
+            normalize_double_locale = locale_cfg.get("normalize_double_locale", False)
+            
+            if normalize_double_locale:
+                sp = urlsplit(url)
+                path = sp.path or ""
+                double_locale_patterns = locale_cfg.get("double_locale_patterns", [])
+                for pattern in double_locale_patterns:
+                    from_pattern = pattern.get("from", "")
+                    to_pattern = pattern.get("to", "")
+                    if from_pattern and to_pattern:
+                        path = path.replace(from_pattern, to_pattern)
+                # "PDPアンカー"などのハッシュは評価前に捨てる
+                sp = sp._replace(path=path, fragment="")
+                url = urlunsplit(sp)
         except Exception:
             pass  # 正規化に失敗しても、元のURLで判定を続行
 
@@ -543,58 +551,46 @@ class NavigationDriver:
             trap_patterns = nav_cfg.get("trap_url_patterns", [])
             legal_patterns = nav_cfg.get("legal_url_patterns", [])
             
-            # site_config から trap パターンをチェック
+            # Stage 4: site_config から trap パターンをチェック（Moncler固有ロジックを削除）
             if trap_patterns:
                 if any(pattern.lower() in full_lower for pattern in trap_patterns):
+                    logger.warning(f"[_looks_like_trap] Detected trap pattern: {url}")
                     return True
             
             if legal_patterns:
                 if any(pattern.lower() in path_lower for pattern in legal_patterns):
+                    logger.warning(f"[_looks_like_trap] Detected legal pattern: {url}")
                     return True
             
-            # フォールバック: 既存のハードコードされたパターン（互換性のため）
-            # V88.5.7: /en-jp (日本向け)
-            jp_locale = "moncler.com" in full_lower and "/en-jp" in path_lower
+            # trap_domains をチェック
+            trap_domains = nav_cfg.get("trap_domains", [])
+            if trap_domains:
+                if any(domain.lower() in host for domain in trap_domains):
+                    logger.warning(f"[_looks_like_trap] Detected trap domain: {url}")
+                    return True
+            
+            # locale_gate_detection をチェック
+            locale_gate_cfg = nav_cfg.get("locale_gate_detection", {}) or {}
+            if locale_gate_cfg.get("enabled", False):
+                target_locale = locale_gate_cfg.get("target_locale", "")
+                gate_paths = locale_gate_cfg.get("gate_paths", [])
+                if target_locale and gate_paths:
+                    # ホストがallowed_domainに一致し、パスがgate_pathsに一致する場合
+                    allowed_domain = site_config.get("allowed_domain", "")
+                    if allowed_domain and allowed_domain.lower() in host:
+                        if path_lower in [p.lower() for p in gate_paths]:
+                            logger.warning(f"[_looks_like_trap] Detected locale gate: {url}")
+                            return True
+            
+            # デフォルトのリーガルキーワード（site_configに定義がない場合のフォールバック）
+            # ただし、これは最小限に抑える
+            default_legal_keywords = ["/cookie-policy", "/privacy", "/legal", "/help", "/account", "/login"]
+            if not legal_patterns:  # site_configにlegal_patternsが定義されていない場合のみ
+                if any(kw in path_lower for kw in default_legal_keywords):
+                    logger.warning(f"[_looks_like_trap] Detected default legal keyword: {url}")
+                    return True
 
-            # V88.5.8: コーポレートサイト
-            corporate = "monclergroup.com" in host or "/brands/moncler" in path_lower
-
-            # V88.6.3: Moncler のロケーションゲート/トップページを trap とみなす
-            moncler_locale_gate = (
-                "moncler.com" in host
-                and path_lower in ("/en-int", "/en-int/", "/en-gb", "/en-gb/", "/en-us", "/en-us/")
-            )
-
-            # V88.5.6 以前のリーガルキーワード（フォールバック）
-            legal_kw = any(
-                k in path_lower
-                for k in (
-                    "/cookie-policy",
-                    "/cookies",
-                    "/privacy",
-                    "/legal",
-                    "/help",
-                    "/customer-service",
-                    "/customer_service",
-                    "/support",
-                    "/account",
-                    "/login",
-                    "/accessibility-statement",
-                    "/client-service/",
-                )
-            )
-
-            # V88.5.9: 簡潔な return 形式に統合
-            if jp_locale:
-                logger.warning(f"[_looks_like_trap] Detected /en-jp locale trap: {url}")
-            if corporate:
-                logger.warning(f"[_looks_like_trap] Detected corporate site redirect/path: {url}")
-            if legal_kw:
-                logger.warning(f"[_looks_like_trap] Detected legal/help keyword trap: {url}")
-            if moncler_locale_gate:
-                logger.warning(f"[_looks_like_trap] Detected Moncler locale gate/home: {url}")
-
-            return jp_locale or corporate or legal_kw or moncler_locale_gate
+            return False
 
         except Exception:
             return False
@@ -614,13 +610,20 @@ class NavigationDriver:
             return href
 
     async def safe_wait_selector(self, page: Page, selector: str, *, timeout_ms: int, state: str = "visible") -> bool:
-        """セレクタが出現するまで安全に待機する"""
+        """セレクタが出現するまで安全に待機する（Stage 4: タイムアウト処理改善）"""
         if not page or page.is_closed():
             return False
         try:
-            await page.wait_for_selector(selector, state=state, timeout=timeout_ms)
+            await asyncio.wait_for(
+                page.wait_for_selector(selector, state=state, timeout=timeout_ms),
+                timeout=(timeout_ms / 1000.0) + 0.5
+            )
             return True
-        except Exception:
+        except asyncio.CancelledError:
+            logger.debug(f"[safe_wait_selector] Cancelled for '{selector}'")
+            raise
+        except (asyncio.TimeoutError, Exception) as e:
+            logger.debug(f"[safe_wait_selector] Timeout/Error for '{selector}': {e}")
             return False
 
     async def _run_deep_extraction_phase2(self, page: Page, site_config: Dict[str, Any]) -> List[str]:
@@ -646,15 +649,29 @@ class NavigationDriver:
             pass
 
         # V86.0: Strict mode violation prevention + V88.2: Get ElementHandle
+        # Stage 4: タイムアウト処理改善（CancelledErrorを適切に処理）
         scope = page.locator("main, [role='main'], #main, #app")
         handle: Optional[ElementHandle] = None
         try:
-            await scope.first.wait_for(state="attached", timeout=4000)
-            handle = await scope.first.element_handle(timeout=4000)  # Get handle
-        except Exception as e_handle:
-            # (V88.6.2: ログレベルは warning のまま)
-            logger.warning(f"[Phase 2] Could not get element handle for scope: {e_handle}. Falling back to page evaluate.")
-            handle = None  # Ensure handle is None if getting it failed
+            # タイムアウトを短くして、CancelledErrorを避ける
+            # ただし、asyncio.wait_forでラップすると、タイムアウト時にCancelledErrorが発生する可能性がある
+            # そのため、直接wait_forを呼び出し、タイムアウトエラーをキャッチする
+            try:
+                await scope.first.wait_for(state="attached", timeout=4000)
+                handle = await scope.first.element_handle(timeout=4000)
+            except asyncio.CancelledError:
+                logger.debug("[Phase 2] Cancelled while waiting for scope")
+                raise
+            except Exception as e_handle:
+                # (V88.6.2: ログレベルは warning のまま)
+                logger.warning(f"[Phase 2] Could not get element handle for scope: {e_handle}. Falling back to page evaluate.")
+                handle = None  # Ensure handle is None if getting it failed
+        except asyncio.CancelledError:
+            logger.debug("[Phase 2] Cancelled in outer try block")
+            raise
+        except Exception as e_outer:
+            logger.warning(f"[Phase 2] Outer exception: {e_outer}. Falling back to page evaluate.")
+            handle = None
 
         # JS Script that takes an optional node context
         _js_script = """
@@ -766,23 +783,108 @@ class NavigationDriver:
         used = int((time.monotonic() - start_t) * 1000)
         return max(0, budget_ms - used)
 
-    def _normalize_to_en_int_url(self, url: str) -> str:
-        """URL を /en-int/ に正規化する"""
+    def _normalize_url(self, url: str, site_config: Dict[str, Any]) -> str:
+        """
+        Stage 4: URLを汎用的に正規化する
+        
+        site_config["locale"]["normalize_rules"] と force_query_params を使用して
+        ロケール正規化とクエリパラメータの追加を行う。
+        /en-int/ などのハードコードを排除。
+        """
         u = urlparse(url)
         path = (u.path or "/").replace("//", "/")
-        path = path.replace("/en-gb/", "/en-int/")
-        seg = [s for s in path.split("/") if s]
-        i = 0
-        while i < len(seg) and _LOCALE_SEG_RE.match(seg[i] or ""):
-            i += 1
-        seg = [s for s in seg[i:] if s.lower() != "en-int"]
-        norm = "/en-int/" + "/".join(seg)
-        if not norm.endswith("/"):
+        
+        # site_configからロケール設定を取得（既存設定との互換性を確保）
+        locale_cfg = (site_config.get("locale", {}) or {})
+        
+        # normalize_rules: locale.normalize_rules を優先、なければルートレベルの normalize_rules を参照
+        normalize_rules = locale_cfg.get("normalize_rules", [])
+        if not normalize_rules:
+            normalize_rules = site_config.get("normalize_rules", [])
+        
+        # replace_rules も normalize_rules として扱う（既存設定との互換性）
+        if not normalize_rules:
+            replace_rules = locale_cfg.get("replace_rules", [])
+            if replace_rules:
+                normalize_rules = [{"from": r.get("from", ""), "to": r.get("to", "")} for r in replace_rules]
+        
+        prefer_locale = locale_cfg.get("prefer", None)
+        
+        # normalize_double_locale: フラグがない場合は replace_rules の存在で判断
+        normalize_double_locale = locale_cfg.get("normalize_double_locale", False)
+        if not normalize_double_locale and locale_cfg.get("replace_rules"):
+            normalize_double_locale = True
+        
+        # 二重ロケールの正規化（例: /en-jp/en-int/ → /en-int/）
+        if normalize_double_locale:
+            double_locale_patterns = locale_cfg.get("double_locale_patterns", [])
+            # replace_rules を double_locale_patterns として扱う（既存設定との互換性）
+            if not double_locale_patterns:
+                replace_rules = locale_cfg.get("replace_rules", [])
+                if replace_rules:
+                    double_locale_patterns = [{"from": r.get("from", ""), "to": r.get("to", "")} for r in replace_rules]
+            
+            for pattern in double_locale_patterns:
+                from_pattern = pattern.get("from", "")
+                to_pattern = pattern.get("to", "")
+                if from_pattern and to_pattern:
+                    path = path.replace(from_pattern, to_pattern)
+        
+        # normalize_rules を適用
+        for rule in normalize_rules:
+            # 既存の normalize_rules 形式（if_url_contains/replace）にも対応
+            if "if_url_contains" in rule and "replace" in rule:
+                if_url_contains = rule.get("if_url_contains", "")
+                replace_dict = rule.get("replace", {})
+                if if_url_contains in path:
+                    for from_pattern, to_pattern in replace_dict.items():
+                        path = path.replace(from_pattern, to_pattern)
+            else:
+                # 標準形式（from/to）
+                from_pattern = rule.get("from", "")
+                to_pattern = rule.get("to", "")
+                if from_pattern and to_pattern:
+                    path = path.replace(from_pattern, to_pattern)
+        
+        # ロケールセグメントの処理
+        if prefer_locale:
+            seg = [s for s in path.split("/") if s]
+            i = 0
+            # 先頭のロケールセグメントをスキップ
+            while i < len(seg) and _LOCALE_SEG_RE.match(seg[i] or ""):
+                i += 1
+            # 既存のprefer_localeを削除してから追加
+            seg = [s for s in seg[i:] if s.lower() != prefer_locale.lower()]
+            norm = f"/{prefer_locale}/" + "/".join(seg)
+        else:
+            norm = path
+        
+        if not norm.endswith("/") and norm != "/":
             norm += "/"
+        
+        # クエリパラメータの処理
         q = dict(parse_qsl(u.query))
+        
+        # force_query_params を追加（既存設定との互換性を確保）
+        force_params = locale_cfg.get("force_query_params", {})
+        # discovery_settings.force_query_params も参照（既存設定との互換性）
+        if not force_params:
+            ds = (site_config.get("discovery_settings", {}) or {})
+            force_params = ds.get("force_query_params", {})
+        if force_params:
+            q.update(force_params)
+        
+        # ensure_params の処理（normalize_rules内のensure_params）
+        for rule in normalize_rules:
+            ensure_params = rule.get("ensure_params", {})
+            if ensure_params:
+                q.update(ensure_params)
+        
+        # URLを再構築
         if q:
             from urllib.parse import urlencode
             norm += "?" + urlencode(q)
+        
         return f"{u.scheme}://{u.netloc}{norm}"
 
     async def _accept_cookies_if_present(self, page: Page, site_config: Dict[str, Any]) -> bool:
@@ -858,36 +960,64 @@ class NavigationDriver:
                 logger.debug(f"[GeoModal] Click failed ({desc}): {e}")
                 return False
 
-        async def _wait_for_en_int(timeout_ms: int = 4000) -> bool:
+        async def _wait_for_target_locale(timeout_ms: int = 4000) -> bool:
+            """Stage 4: ターゲットロケールへの遷移を待つ（汎用化）"""
+            locale_cfg = (site_config or {}).get("locale", {}) or {}
+            prefer_locale = locale_cfg.get("prefer", "")
+            
+            if not prefer_locale:
+                # ロケール設定がない場合は常にTrueを返す
+                return True
+            
             try:
+                # ターゲットロケールがURLに含まれているかチェック
+                locale_path = f"/{prefer_locale}/"
                 await page.wait_for_function(
-                    "() => location.href.includes('/en-int/') && !location.href.includes('/en-gb/')",
+                    f"() => location.href.includes('{locale_path}')",
                     timeout=timeout_ms,
                 )
                 return True
             except Exception:
-                return "/en-int/" in (page.url or "").lower()
+                return locale_path in (page.url or "").lower()
 
         try:
+            # Stage 4: 汎用的なロケールゲートヘッダーの検出
             header = page.locator("text=Select your location").first
             header_visible = await header.count() > 0
             if header_visible:
-                logger.info("[GeoModal] Moncler locale gate header detected.")
+                logger.info("[GeoModal] Locale gate header detected.")
 
-            uk_candidates = [
-                page.get_by_text(re.compile(r"UNITED\s+KINGDOM\s*\|\s*ENGLISH", re.I)),
-                page.get_by_role("link", name=re.compile(r"UNITED\s+KINGDOM\s*\|\s*ENGLISH", re.I)),
-                page.get_by_role("button", name=re.compile(r"UNITED\s+KINGDOM\s*\|\s*ENGLISH", re.I)),
-                page.get_by_role("button", name=re.compile(r"United\s+Kingdom.*English", re.I)),
-                page.get_by_role("link", name=re.compile(r"United\s+Kingdom.*English", re.I)),
-                page.locator("[data-testid*='locale' i] button:has-text('United Kingdom')"),
-                page.locator("[data-component*='locale' i] button:has-text('United Kingdom')"),
-                page.locator("button:has-text('United Kingdom EN')"),
-                page.locator("text=/United\\s+Kingdom\\s*\\|\\s*English/i"),
-            ]
-            for loc in uk_candidates:
-                if await _click_first(loc, "United Kingdom / English selector"):
-                    if await _wait_for_en_int():
+            # Stage 4: site_configから優先ロケールを取得（汎用化）
+            geo_modal_preferred_locale = overlays_cfg.get("geo_modal_preferred_locale", "")
+            locale_cfg = (site_config or {}).get("locale", {}) or {}
+            prefer_locale = locale_cfg.get("prefer", geo_modal_preferred_locale)
+            
+            # 優先ロケールに基づく候補セレクタ（デフォルトはen-gb）
+            if prefer_locale and "gb" in prefer_locale.lower():
+                # United Kingdom / English の候補
+                preferred_candidates = [
+                    page.get_by_text(re.compile(r"UNITED\s+KINGDOM\s*\|\s*ENGLISH", re.I)),
+                    page.get_by_role("link", name=re.compile(r"UNITED\s+KINGDOM\s*\|\s*ENGLISH", re.I)),
+                    page.get_by_role("button", name=re.compile(r"UNITED\s+KINGDOM\s*\|\s*ENGLISH", re.I)),
+                    page.get_by_role("button", name=re.compile(r"United\s+Kingdom.*English", re.I)),
+                    page.get_by_role("link", name=re.compile(r"United\s+Kingdom.*English", re.I)),
+                    page.locator("[data-testid*='locale' i] button:has-text('United Kingdom')"),
+                    page.locator("[data-component*='locale' i] button:has-text('United Kingdom')"),
+                    page.locator("button:has-text('United Kingdom EN')"),
+                    page.locator("text=/United\\s+Kingdom\\s*\\|\\s*English/i"),
+                ]
+            else:
+                # その他のロケールの場合は、geo_modal_selectorsを使用
+                preferred_candidates = []
+                for sel in geo_selectors:
+                    try:
+                        preferred_candidates.append(page.locator(sel).first)
+                    except Exception:
+                        continue
+            
+            for loc in preferred_candidates:
+                if await _click_first(loc, f"Preferred locale selector ({prefer_locale})"):
+                    if await _wait_for_target_locale():
                         return
                     break
 
@@ -900,7 +1030,7 @@ class NavigationDriver:
             ]
             for loc in close_candidates:
                 if await _click_first(loc, "locale gate close button"):
-                    if await _wait_for_en_int():
+                    if await _wait_for_target_locale():
                         return
                     break
         except Exception as e:
@@ -938,22 +1068,39 @@ class NavigationDriver:
 
     async def _force_plp_recover(self, page: Page, site_config: Dict[str, Any], target_url: Optional[str]) -> None:
         """
-        Stage 3A-2-2: PLP 回復（最小限の実装）
-        詳細な実装は Step 2-3 で行う
+        Stage 4: PLP 回復（汎用化）
+        site_config["navigation"]["plp_recovery"] と discovery_settings.fallback_url を使用
         """
         try:
+            # site_configからPLP回復設定を取得
+            nav_cfg = (site_config.get("navigation", {}) or {})
+            plp_recovery_cfg = nav_cfg.get("plp_recovery", {}) or {}
+            recovery_enabled = plp_recovery_cfg.get("enabled", True)
+            
+            if not recovery_enabled:
+                logger.debug("[recover] PLP recovery is disabled in site_config")
+                return
+            
+            # PLP URL候補の取得（優先順位: target_url > plp_hard_nav > seed_plp_url > fallback_url > discovery_settings.fallback_url > home_url）
             plp = (
                 target_url
                 or site_config.get("plp_hard_nav")
                 or site_config.get("seed_plp_url")
                 or site_config.get("fallback_url")
+                or (site_config.get("discovery_settings", {}) or {}).get("fallback_url")
+                or plp_recovery_cfg.get("fallback_url")
                 or site_config.get("home_url")
             )
+            
             if not plp:
                 logger.debug("[recover] no PLP candidate found; skip")
                 return
-            # ロケール強制
-            plp = self._normalize_to_en_int_url(plp)
+            
+            # ロケール正規化（site_configに基づく）
+            normalize_locale = plp_recovery_cfg.get("normalize_locale", True)
+            if normalize_locale:
+                plp = self._normalize_url(plp, site_config)
+            
             logger.info("[recover] Forcing PLP navigation: %s", plp)
             await page.goto(url=plp, wait_until="domcontentloaded")
         except Exception as e:
@@ -1023,17 +1170,28 @@ class NavigationDriver:
             except Exception:
                 pass
 
+            # Stage 4: ロケールリダイレクトの検出（汎用化）
             current_url = (page.url or "").lower()
-            if "moncler.com/en-gb" in current_url:
-                logger.warning("[Materialize] Detected EN-GB redirect mid-attempt.")
-                if locale_recover_attempts >= locale_recover_max:
-                    logger.error("[Materialize] Locale recovery exceeded max attempts. Aborting.")
-                    return False
-                locale_recover_attempts += 1
-                if target_url:
-                    await self._force_plp_recover(page, site_config, target_url)
-                    await page.wait_for_timeout(800)
-                    continue
+            locale_cfg = (site_config.get("locale", {}) or {})
+            prefer_locale = locale_cfg.get("prefer", "")
+            allowed_domain = site_config.get("allowed_domain", "")
+            
+            # ターゲットロケール以外のロケールにリダイレクトされた場合を検出
+            if prefer_locale and allowed_domain:
+                # 現在のURLがターゲットロケールを含まない場合
+                target_locale_path = f"/{prefer_locale}/"
+                if allowed_domain.lower() in current_url and target_locale_path not in current_url:
+                    # ロケールセグメントが含まれているかチェック
+                    if _LOCALE_SEG_RE.search(current_url):
+                        logger.warning(f"[Materialize] Detected locale redirect away from {prefer_locale} mid-attempt: {current_url}")
+                        if locale_recover_attempts >= locale_recover_max:
+                            logger.error("[Materialize] Locale recovery exceeded max attempts. Aborting.")
+                            return False
+                        locale_recover_attempts += 1
+                        if target_url:
+                            await self._force_plp_recover(page, site_config, target_url)
+                            await page.wait_for_timeout(800)
+                            continue
 
             if run_ctx is not None and hasattr(run_ctx, "take_screenshot") and attempt < 3:
                 try:
@@ -1056,7 +1214,7 @@ class NavigationDriver:
                 logger.warning(f"[Materialize] Scroll failed on attempt {attempt + 1}: {e}")
                 break
 
-            # Moncler locale gate が途中で出た場合に備えて閉じておく
+            # Stage 4: ロケールゲートが途中で出た場合に備えて閉じておく（汎用化）
             try:
                 modal_title = page.locator("text=Select your location").first
                 if await modal_title.count() > 0:
@@ -1233,16 +1391,27 @@ class NavigationDriver:
         # フォールバック: 既存の ui 構造もサポート
         ui = (site_config.get("selectors", {}) or {}).get("ui", {}) or {}
         
+        # Stage 4: 文字列とリストの両方に対応（site_configで文字列が設定されている場合がある）
+        def _ensure_list(value):
+            """文字列をリストに変換、リストはそのまま、None/空は空リスト"""
+            if value is None:
+                return []
+            if isinstance(value, str):
+                return [value] if value.strip() else []
+            if isinstance(value, list):
+                return value
+            return []
+        
         sel_open = _dedupe_keep_order(
-            (hs_cfg.get("search_open_selector", []) or []) +
-            (ui.get("search_open", []) or []) + [
+            _ensure_list(hs_cfg.get("search_open_selector")) +
+            _ensure_list(ui.get("search_open")) + [
                 "button[aria-label='Search']",
                 "[aria-label*='Search' i]",
             ]
         )
         sel_input = _dedupe_keep_order(
-            (hs_cfg.get("search_input_selector", []) or []) +
-            (ui.get("search_input", []) or []) + [
+            _ensure_list(hs_cfg.get("search_input_selector")) +
+            _ensure_list(ui.get("search_input")) + [
                 "form[role='search'] input",
                 "input[type='search']",
                 "input[name='q']",
@@ -1252,8 +1421,8 @@ class NavigationDriver:
             ]
         )
         sel_submit = _dedupe_keep_order(
-            (hs_cfg.get("submit_selector", []) or []) +
-            (ui.get("search_submit", []) or []) + 
+            _ensure_list(hs_cfg.get("submit_selector")) +
+            _ensure_list(ui.get("search_submit")) + 
             ["form[role='search'] button[type='submit']"]
         )
         clear_before_type = hs_cfg.get("clear_before_type", True)
@@ -1313,7 +1482,57 @@ class NavigationDriver:
         except Exception:
             logger.warning("[Fallback] UI search failed. Trying direct search URL.")
             try:
-                search_url = f"https://www.moncler.com/en-int/search?q={quote_plus(query)}&forceLocale=en-int"
+                # Stage 4: site_configから検索URLテンプレートを取得（既存設定との互換性を確保）
+                url_template = hs_cfg.get("url_template", "")
+                base_url_key = hs_cfg.get("base_url", "home_url")
+                
+                # url_templateがリストの場合は最初の要素を使用
+                if isinstance(url_template, list):
+                    url_template = url_template[0] if url_template else ""
+                
+                if not url_template:
+                    # フォールバック: discovery_settingsから取得（既存設定との互換性）
+                    ds = (site_config.get("discovery_settings", {}) or {})
+                    url_templates = ds.get("url_templates", {}) or {}
+                    url_template = url_templates.get("search", "")
+                    # リストの場合は最初の要素を使用
+                    if isinstance(url_template, list):
+                        url_template = url_template[0] if url_template else ""
+                
+                if not url_template or not isinstance(url_template, str):
+                    logger.warning("[Fallback] No valid search URL template found in site_config")
+                    return False
+                
+                # ベースURLを取得
+                if base_url_key == "home_url":
+                    base_url = site_config.get("home_url", "")
+                else:
+                    base_url = site_config.get(base_url_key, site_config.get("home_url", ""))
+                
+                # base_urlがリストの場合は最初の要素を使用
+                if isinstance(base_url, list):
+                    base_url = base_url[0] if base_url else ""
+                
+                if not base_url or not isinstance(base_url, str):
+                    logger.warning("[Fallback] No valid base URL found in site_config")
+                    return False
+                
+                # URLテンプレートのプレースホルダを置換
+                # {query} を置換
+                search_url = url_template.replace("{query}", quote_plus(query))
+                
+                # {locale} を置換（locale.preferを使用）
+                locale_cfg = (site_config.get("locale", {}) or {})
+                prefer_locale = locale_cfg.get("prefer", "")
+                if "{locale}" in search_url and prefer_locale:
+                    search_url = search_url.replace("{locale}", prefer_locale)
+                
+                # 相対URLの場合はbase_urlと結合
+                if not search_url.startswith("http"):
+                    from urllib.parse import urljoin
+                    search_url = urljoin(base_url, search_url)
+                
+                logger.info(f"[Fallback] Using search URL from site_config: {search_url}")
                 await page.goto(url=search_url, wait_until="domcontentloaded", timeout=30000)
                 await self._click_continue_shopping_if_present(page, site_config)
                 try:
@@ -1403,7 +1622,8 @@ class NavigationDriver:
                 # 要素が存在するか確認（タイムアウトを短く設定）
                 try:
                     await card.wait_for(state="attached", timeout=2000)
-                except Exception:
+                except Exception as e:
+                    logger.debug(f"[Fallback:click-card] wait_for failed for '{tile_sel}': {e}")
                     continue
                 
                 count = await card.count()
@@ -1427,9 +1647,21 @@ class NavigationDriver:
                     card = page.locator(selector).first
                     
                     # 要素が存在するか確認（タイムアウトを短く設定）
+                    # Stage 4: タイムアウトエラーを適切に処理（CancelledErrorを避ける）
                     try:
-                        await card.wait_for(state="attached", timeout=2000)
-                    except Exception:
+                        count = await card.count()
+                        if count == 0:
+                            continue
+                        # 短いタイムアウトで確認（要素が存在する場合のみ）
+                        await asyncio.wait_for(card.wait_for(state="attached", timeout=2000), timeout=2.5)
+                    except asyncio.CancelledError:
+                        logger.debug(f"[Fallback:click-card] Cancelled for '{tile_sel}'")
+                        raise
+                    except asyncio.TimeoutError:
+                        logger.debug(f"[Fallback:click-card] Timeout for '{tile_sel}'")
+                        continue
+                    except Exception as e:
+                        logger.debug(f"[Fallback:click-card] wait_for failed for '{tile_sel}': {e}")
                         continue
                     
                     count = await card.count()
