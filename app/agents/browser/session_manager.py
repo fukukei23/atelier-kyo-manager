@@ -311,10 +311,13 @@ class SessionManager:
 
         if self.settings.get("enable_har"):
             ctx_opts["record_har_path"] = str(self.run_context.get_path("network.har"))
+        # Stage 4: record_trace_dir は Playwright のバージョンによってはサポートされていない
+        # 代わりに、context.tracing.start() を使用する（_ensure_open() 内で既に実装済み）
+        # そのため、ここでは record_trace_dir を設定しない
         if self.settings.get("enable_trace"):
             trace_dir = self.run_context.get_path("trace")
             Path(trace_dir).mkdir(parents=True, exist_ok=True)
-            ctx_opts["record_trace_dir"] = str(trace_dir)
+            # record_trace_dir は削除（context.tracing.start() で代用）
         if self.settings.get("enable_video"):
             videos_dir = self.run_context.get_path("videos")
             Path(videos_dir).mkdir(parents=True, exist_ok=True)
