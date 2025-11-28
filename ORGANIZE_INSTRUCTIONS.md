@@ -1,0 +1,94 @@
+# プロジェクトルートファイル整理手順
+
+## 📋 概要
+
+プロジェクトルートに散在しているファイルを適切なフォルダに整理します。
+
+## 🚀 実行手順
+
+### 1. フォルダ構造の確認
+
+以下のフォルダが作成されていることを確認：
+```bash
+ls -d scripts/dev docs/reports tmp/generated logs/generated data/generated
+```
+
+### 2. ファイルの移動（Dry Run で確認）
+
+まず、どのファイルが移動されるか確認：
+```bash
+python3 organize_project_root.py
+```
+
+### 3. ファイルの移動（実際に実行）
+
+確認後、実際にファイルを移動：
+```bash
+# 方法1: Pythonスクリプト
+python3 organize_project_root.py --execute
+
+# 方法2: シェルスクリプト
+bash organize_files.sh
+```
+
+## 📁 フォルダ構造
+
+整理後のフォルダ構造：
+
+```
+atelier-kyo-manager/
+├── scripts/
+│   └── dev/              # 開発用スクリプト
+│       ├── check_*.py
+│       ├── execute_*.py
+│       ├── run_*_test*.py
+│       └── ...
+├── docs/
+│   └── reports/           # レポート・ドキュメント
+│       ├── *_REPORT.md
+│       ├── STAGE_*.md
+│       └── ...
+├── logs/
+│   └── generated/        # ログファイル
+│       └── *.log
+├── tmp/
+│   └── generated/        # 一時ファイル
+│       ├── *.json
+│       ├── *.html
+│       └── ...
+└── data/
+    └── generated/        # データファイル
+        └── *.csv
+```
+
+## 🔧 今後のファイル生成
+
+新しいファイルを生成する際は、`app/config/paths.py` のパス定義を使用してください：
+
+```python
+from app.config.paths import (
+    SCRIPTS_DEV_DIR,
+    DOCS_REPORTS_DIR,
+    LOGS_GENERATED_DIR,
+    TMP_GENERATED_DIR,
+    DATA_GENERATED_DIR,
+)
+
+# 例: レポートを保存
+report_path = DOCS_REPORTS_DIR / "my_report.md"
+report_path.write_text(content)
+```
+
+## ⚠️ 注意事項
+
+- 移動後、既存のスクリプトやツールが正しく動作するか確認してください
+- 必要に応じて、インポートパスや実行パスを更新してください
+- `.gitignore` は既に更新済みです
+
+## 📝 関連ファイル
+
+- `organize_project_root.py` - Python版整理スクリプト
+- `organize_files.sh` - シェル版整理スクリプト
+- `app/config/paths.py` - 標準パス定義
+- `PROJECT_ORGANIZATION.md` - フォルダ構造の詳細説明
+
