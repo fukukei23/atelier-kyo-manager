@@ -84,3 +84,7 @@ Thumbs.db
 
 # Misc generated backups
 app/models_backup.py
+
+# Chat records (auto-saved, excluded from GitHub)
+docs/chat_records/
+docs/chat_records/*.md

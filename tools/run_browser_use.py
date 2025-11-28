@@ -14,7 +14,9 @@ Example:
 from __future__ import annotations
 import argparse
 import asyncio
+import json
 import logging
+from dataclasses import asdict
 from pathlib import Path
 
 import sys
@@ -27,13 +29,23 @@ from app.core.run_context import RunContext
 from app.models.result_models import DiscoveryResult
 from app.utils.observability import write_fail_snapshot
 
+# Stage 4: site_configを正しく読み込む
+try:
+    from app.config.loader import load_full_config, get_site_config
+except ImportError:
+    load_full_config = None
+    get_site_config = None
+
 
 def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="Direct runner for BrowserUseAgent (single site/URL).")
     p.add_argument("--site", required=True, help="Site key (e.g., MONCLER_OFFICIAL)")
     p.add_argument("--url", required=True, help="Target URL to open (PLP/PDP).")
     p.add_argument("--query", default="", help="Query/brand label (for logging).")
-    p.add_argument("--headful", action="store_true", help="Run with headful browser (default: headless).")
+    head = p.add_mutually_exclusive_group()
+    head.add_argument("--headless", dest="headful", action="store_false", help="Run with headless browser (default).")
+    head.add_argument("--headful", dest="headful", action="store_true", help="Run with headful browser.")
+    p.set_defaults(headful=False)  # デフォルトはヘッドレス
     p.add_argument("--enable-video", action="store_true", help="Enable Playwright video recording.")
     p.add_argument("--timeout", type=int, default=60, help="Timeout seconds (default: 60).")
     p.add_argument("--use-proxy", action="store_true", help="Enable proxy usage if configured.")
@@ -50,19 +62,62 @@ async def main() -> int:
         handlers=[logging.StreamHandler()]
     )
 
-    # Minimal site_config; discovery_settings can be expanded if needed.
-    site_config = {
-        "id": args.site,
-        "name": args.site,
-        "discovery_settings": {
-            "timeout_sec": args.timeout,
-            "enable_video": args.enable_video,
-            "enable_har": False,
-            "enable_trace": False,
-            "enable_human_like": args.human_like,
-        },
-        "selectors": {},
-    }
+    # Stage 4: site_configを正しく読み込む（MONCLER_OFFICIAL等の設定を使用）
+    if get_site_config and load_full_config:
+        try:
+            site_config = get_site_config(args.site)
+            if not site_config:
+                logging.warning(f"[runner] Site config not found for {args.site}, using minimal config.")
+                site_config = {
+                    "id": args.site,
+                    "name": args.site,
+                    "discovery_settings": {
+                        "timeout_sec": args.timeout,
+                        "enable_video": args.enable_video,
+                        "enable_har": False,
+                        "enable_trace": False,
+                        "enable_human_like": args.human_like,
+                    },
+                    "selectors": {},
+                }
+            else:
+                # コマンドライン引数で上書き
+                if "discovery_settings" not in site_config:
+                    site_config["discovery_settings"] = {}
+                site_config["discovery_settings"]["timeout_sec"] = args.timeout
+                if args.enable_video:
+                    site_config["discovery_settings"]["enable_video"] = True
+                if args.human_like:
+                    site_config["discovery_settings"]["enable_human_like"] = True
+                logging.info(f"[runner] Loaded site_config for {args.site}")
+        except Exception as e:
+            logging.warning(f"[runner] Failed to load site_config: {e}, using minimal config.")
+            site_config = {
+                "id": args.site,
+                "name": args.site,
+                "discovery_settings": {
+                    "timeout_sec": args.timeout,
+                    "enable_video": args.enable_video,
+                    "enable_har": False,
+                    "enable_trace": False,
+                    "enable_human_like": args.human_like,
+                },
+                "selectors": {},
+            }
+    else:
+        # フォールバック: 最小限の設定
+        site_config = {
+            "id": args.site,
+            "name": args.site,
+            "discovery_settings": {
+                "timeout_sec": args.timeout,
+                "enable_video": args.enable_video,
+                "enable_har": False,
+                "enable_trace": False,
+                "enable_human_like": args.human_like,
+            },
+            "selectors": {},
+        }
 
     run_ctx = RunContext()
     runtime_kwargs = {
@@ -120,7 +175,14 @@ async def main() -> int:
         result = run_task.result()
 
     # Save result JSON to the run directory for inspection
-    (run_ctx.get_path("result.json")).write_text(result.json(exclude_none=True, indent=2), encoding="utf-8")
+    # Stage 4: DiscoveryResult.to_dict()を使用してJSONに変換
+    if hasattr(result, 'to_dict'):
+        result_dict = result.to_dict()
+    elif hasattr(result, '__dict__'):
+        result_dict = asdict(result)
+    else:
+        result_dict = {"ok": getattr(result, 'ok', False), "site": getattr(result, 'site', ''), "query": getattr(result, 'query', '')}
+    (run_ctx.get_path("result.json")).write_text(json.dumps(result_dict, ensure_ascii=False, indent=2), encoding="utf-8")
     print(f"[runner] Run finished. result.ok={getattr(result,'ok',None)} run_dir={run_ctx.run_path}")
     return 0
 
