@@ -1,0 +1,46 @@
+{
+  "include": [
+    "app",
+    "tests",
+    "dev_tools",
+    "scripts",
+    "tools"
+  ],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.venv",
+    "**/venv",
+    "**/.git",
+    "**/dist",
+    "**/build",
+    "**/logs",
+    "**/data",
+    "**/tmp",
+    "**/instance",
+    "**/catalog_images",
+    "**/codex_history",
+    "**/export",
+    "**/exports",
+    "**/exports_atelier",
+    "**/output",
+    "**/screenshots",
+    "**/images",
+    "**/debug_catalog",
+    "**/project-root",
+    "**/migrations",
+    "**/stage1_proposed",
+    "**/stage2_proposed",
+    "**/*.zip",
+    "**/*.csv",
+    "**/*.html",
+    "**/*.jpg",
+    "**/*.png",
+    "**/*.old",
+    "**/Development Policy"
+  ],
+  "reportMissingImports": true,
+  "reportMissingTypeStubs": false,
+  "pythonVersion": "3.10"
+}
+

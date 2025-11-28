@@ -88,7 +88,61 @@
   "MONCLER_OFFICIAL": {
     "home_url": "https://www.moncler.com/en-int",
     "navigation": {
-      "strip_url_fragments": true
+      "strip_url_fragments": true,
+      "trap_url_patterns": [
+        "/client-service",
+        "/terms-and-conditions",
+        "/privacy-policy",
+        "/cookie-policy",
+        "/legal",
+        "/help",
+        "/contact"
+      ],
+      "legal_url_patterns": [
+        "/legal",
+        "/privacy",
+        "/cookies"
+      ],
+      "header_search": {
+        "search_input_selector": "input[data-test='search-input'], input[name='q']",
+        "submit_selector": "button[data-test='search-submit'], form button[type='submit']",
+        "clear_before_type": true
+      },
+      "overlays": {
+        "cookie_banner_selectors": [
+          "button#onetrust-accept-btn-handler",
+          "button[data-test='accept-all']",
+          ".cookie-accept button"
+        ],
+        "geo_modal_selectors": [
+          "div[data-test='geo-modal'] button[data-test='close']",
+          ".geo-selector button.close"
+        ],
+        "generic_close_buttons": [
+          "button[aria-label='Close']",
+          "button.close",
+          ".modal button.icon-close"
+        ]
+      },
+      "fallback": {
+        "click_first_card": {
+          "enabled": true,
+          "card_selectors": [
+            "div[data-test='product-card'] a",
+            "li.product-grid__item a.product-tile__link",
+            ".product-cell a"
+          ]
+        }
+      },
+      "plp": {
+        "supports_header_search": true,
+        "supports_card_click_fallback": true,
+        "supports_locale_normalization": true,
+        "min_pdp_links": 12,
+        "max_scroll_iterations": 12,
+        "scroll_pause_ms": 350,
+        "plp_timeout_ms": 35000
+      }
     },
     "locale": {
       "prefer": "en-int",
@@ -233,6 +287,44 @@
       }
     },
     "selectors": {
+      "plp": {
+        "container_selectors": [
+          "div[data-test='product-grid']",
+          "ul.products-grid",
+          "div.plp-grid"
+        ],
+        "card_selectors": [
+          "div[data-test='product-card']",
+          "li.product-grid__item",
+          ".product-cell"
+        ],
+        "pdp_link_selectors": [
+          "a[href*=\"/products/\"]",
+          "a[href*='/products/']",
+          "a[href*='/product/']",
+          "a[href*='/p-']",
+          "div[data-test='product-card'] a",
+          "li.product-grid__item a.product-tile__link",
+          ".product-cell a",
+          "[data-qa='product-tile'] a",
+          "main [data-qa='product-tile'] a"
+        ],
+        "price_selectors": [
+          "[data-test='price']",
+          ".product-price",
+          ".price"
+        ],
+        "visible_price_selectors": [
+          "[data-test='price']",
+          ".product-price"
+        ],
+        "tile_selectors": [
+          "a[href*='/products/']",
+          "div:has(a[href*='/products/'])",
+          "a[href*='/product/']",
+          "a[href*='/p-']"
+        ]
+      },
       "ui": {
         "continue_shopping": [
           "a:has-text('CONTINUE SHOPPING')",

@@ -35,3 +35,8 @@ pyoxipng
 # --- Generative AI Libs ---
 google-generativeai
 openai
+Flask-SQLAlchemy
+Flask-WTF
+flask_migrate
+playwright
+Flask-WTF

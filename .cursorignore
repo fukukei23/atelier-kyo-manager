@@ -1,0 +1,101 @@
+# ================================
+# Python 仮想環境 / キャッシュ類
+# ================================
+.venv/
+venv/
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+
+# ================================
+# Git / VSCode / Node
+# ================================
+.git/
+.gitignore
+.vscode/
+node_modules/
+
+# ================================
+# Flask / Webアプリ特有の出力物
+# ================================
+dist/
+build/
+*.log
+logs/
+tmp/
+temp/
+cache/
+sessions/
+uploads/
+
+# ================================
+# BUYMA 自動化ツール特有の重い領域
+# ================================
+# 画像バッチ処理で生成されるファイル
+processed_images/
+image_cache/
+image_output/
+thumbnails/
+optimized_images/
+
+# Selenium / WebDriver
+webdriver/
+chromedriver/
+geckodriver/
+
+# ================================
+# 画像・データ・ダンプ類
+# ================================
+data/
+datasets/
+downloads/
+raw_images/
+raw_data/
+csv/
+exports/
+backup/
+screenshots/
+
+# ================================
+# AI モジュール系フォルダ（重い）
+# ================================
+models/
+vector_store/
+chroma_db/
+embeddings/
+tokenizers/
+
+# ================================
+# テスト生成物
+# ================================
+coverage/
+htmlcov/
+.coverage*
+
+# ================================
+# Docs / build artifacts
+# ================================
+docs/_build/
+docs/.vitepress/
+site/
+*.zip
+*.tar
+*.tar.gz
+
+# ================================
+# プロジェクト特有（BUYMA 自動化）
+# ================================
+# 商品データキャッシュ
+product_cache/
+brand_cache/
+scraping_cache/
+
+# 仕入れレポートや取引データ
+transactions/
+reports/
+analytics/
+
+# NexusCore 連携時（任意）
+.nexus/
+

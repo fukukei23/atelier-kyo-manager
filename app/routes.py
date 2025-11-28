@@ -279,3 +279,68 @@ def api_warehouses():
     except Exception as e:
         # 依存（playwright など）未導入や認証失敗時にここへ
         return jsonify({"error": f"failed to fetch warehouses: {e}"}), 500
+
+# ---- API: チャット履歴 ---------------------------------------
+@bp.get("/api/chat/history")
+def api_chat_history():
+    """
+    GET /api/chat/history?session_id=xxx&limit=100
+    - 成功: JSON (list of chat messages)
+    - エラー: 400 (session_id未指定) / 500 (その他例外)
+    """
+    try:
+        from app.models import ChatHistory
+        
+        session_id = request.args.get("session_id", "default")
+        limit = int(request.args.get("limit", 100))
+        
+        messages = (
+            ChatHistory.query
+            .filter_by(session_id=session_id)
+            .order_by(ChatHistory.created_at.asc())
+            .limit(limit)
+            .all()
+        )
+        
+        result = [
+            {
+                "id": msg.id,
+                "role": msg.role,
+                "content": msg.content,
+                "model_family": msg.model_family,
+                "tokens": msg.tokens,
+                "cost_usd": msg.cost_usd,
+                "created_at": msg.created_at.isoformat() if msg.created_at else None,
+            }
+            for msg in messages
+        ]
+        
+        return jsonify({"session_id": session_id, "messages": result, "count": len(result)})
+    except ImportError:
+        return jsonify({"error": "ChatHistory model not available"}), 503
+    except Exception as e:
+        return jsonify({"error": f"failed to fetch chat history: {e}"}), 500
+
+@bp.get("/api/chat/sessions")
+def api_chat_sessions():
+    """
+    GET /api/chat/sessions
+    - 成功: JSON (list of session IDs)
+    - エラー: 500 (その他例外)
+    """
+    try:
+        from app.models import ChatHistory
+        from sqlalchemy import distinct
+        
+        sessions = (
+            db.session.query(distinct(ChatHistory.session_id))
+            .order_by(ChatHistory.session_id.asc())
+            .all()
+        )
+        
+        session_ids = [s[0] for s in sessions]
+        return jsonify({"sessions": session_ids, "count": len(session_ids)})
+    except ImportError:
+        return jsonify({"error": "ChatHistory model not available"}), 503
+    except Exception as e:
+        return jsonify({"error": f"failed to fetch sessions: {e}"}), 500
