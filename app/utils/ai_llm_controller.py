@@ -19,7 +19,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Callable, Literal
 from dataclasses import asdict
-from datetime import timedelta
+from datetime import timedelta, datetime
 
 # --- 共通データモデルをインポート ---
 from app.models.result_models import GenerateResult
@@ -143,7 +143,12 @@ class AILlmController:
                 return GenerateResult(**cached, cached=True)
 
             result = self._generate_with_retry(family, prompt, tools, stream, chunk_callback)
-            CACHE.set(cache_key, result.to_dict(), expire=300)  # 5分TTL
+            # キャッシュのTTLを30日間に延長（再起動後も保持）
+            CACHE.set(cache_key, result.to_dict(), expire=2592000)  # 30日TTL
+            
+            # チャット履歴をデータベースに保存
+            self._save_chat_history(prompt, result)
+            
             return result
 
     # ---- キックロジック（リトライ＋フォールバック） ----
@@ -226,6 +231,62 @@ class AILlmController:
                 return "POSITIVE" if label == "POSITIVE" else "NEGATIVE"
             except Exception: pass
         return "NEUTRAL"
+
+    def _save_chat_history(self, prompt: str, result: GenerateResult) -> None:
+        """
+        チャット履歴をデータベースに保存
+        再起動後も履歴が保持されるようにする
+        """
+        try:
+            from app import db
+            from app.models import ChatHistory
+            import uuid
+            import os
+            
+            # セッションIDを取得（環境変数から、またはデフォルト）
+            session_id = os.getenv("CHAT_SESSION_ID", "default")
+            
+            # トークン数の計算
+            total_tokens = None
+            if result.tokens:
+                if isinstance(result.tokens, dict):
+                    total_tokens = result.tokens.get("input", 0) + result.tokens.get("output", 0)
+                    if total_tokens == 0:
+                        total_tokens = result.tokens.get("prompt_tokens", 0) + result.tokens.get("completion_tokens", 0)
+                elif isinstance(result.tokens, (int, float)):
+                    total_tokens = int(result.tokens)
+            
+            # ユーザーのメッセージを保存
+            user_msg = ChatHistory(
+                session_id=session_id,
+                role="user",
+                content=prompt,
+                created_at=datetime.utcnow()
+            )
+            db.session.add(user_msg)
+            
+            # アシスタントのレスポンスを保存
+            assistant_msg = ChatHistory(
+                session_id=session_id,
+                role="assistant",
+                content=result.text,
+                model_family=result.model_family,
+                tokens=total_tokens,
+                cost_usd=result.cost_usd,
+                created_at=datetime.utcnow()
+            )
+            db.session.add(assistant_msg)
+            
+            db.session.commit()
+            logger.info(f"Chat history saved for session {session_id}")
+        except ImportError:
+            logger.debug("ChatHistory model not available, skipping database save")
+        except Exception as e:
+            logger.warning(f"Failed to save chat history: {e}")
+            try:
+                db.session.rollback()
+            except:
+                pass
 
     # ---- クラスメソッド：簡易呼び出し ----
     @classmethod
