@@ -64,15 +64,45 @@ except Exception:
 
 # ---------- 設定ローダ ----------
 def _load_config() -> Dict[str, Any]:
+    """
+    設定を読み込む（Flask > AppConfig > Secrets > 環境変数）
+    
+    注意: 機密情報は Secrets クラスから直接取得することを推奨
+    """
+    config_dict: Dict[str, Any] = {}
+    
+    # 1) Flaskアプリの設定（最優先）
     try:
         from flask import current_app
-        return dict(current_app.config)
+        config_dict.update(dict(current_app.config))
+        return config_dict
     except Exception:
-        try:
-            from app.config.config import Config
-            return {k: getattr(Config, k) for k in dir(Config) if not k.startswith("_")}
-        except Exception:
-            return dict(os.environ)
+        pass
+    
+    # 2) AppConfig（非機密設定）
+    try:
+        from app.config.config import AppConfig
+        for k in dir(AppConfig):
+            if not k.startswith("_") and not callable(getattr(AppConfig, k)):
+                config_dict[k] = getattr(AppConfig, k)
+    except Exception:
+        pass
+    
+    # 3) Secrets（機密情報）
+    try:
+        from app.config.secrets import Secrets
+        for k in dir(Secrets):
+            if not k.startswith("_") and not callable(getattr(Secrets, k)):
+                val = getattr(Secrets, k)
+                if val:  # 空でない値のみ
+                    config_dict[k] = val
+    except Exception:
+        pass
+    
+    # 4) 環境変数（フォールバック）
+    config_dict.update(dict(os.environ))
+    
+    return config_dict
 
 # ---------- ポリシー ----------
 TASK_TO_MODEL_FAMILY: Dict[str, Literal["gemini", "deepseek", "openai", "local"]] = {
