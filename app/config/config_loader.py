@@ -1,12 +1,12 @@
 # ==============================================================================
 # File: app/config/config_loader.py
-# Date (JST): 2025-10-26 19:05
-# Version: 1.0 (Compat shim for legacy import path)
+# Date (JST): 2025-12-01
+# Version: 2.0 (NexusCore-style separation)
 #
 # 目的:
-# - 既存コードが "app.config.config_loader" を import する前提を満たすための互換レイヤ。
-# - 本来の設定ローダは app/config/loader.py にあるため、必要最小限のAPIを委譲提供する。
-# - さらに、Secrets/.env/環境変数から任意キーを取得できる Config.get() を提供。
+# - 既存コードが "app.config.config_loader" を import する前提を満たすための互換レイヤ
+# - サイト設定ローダ（loader.py）のAPIを委譲提供
+# - Secrets/.env/環境変数から任意キーを取得できる Config.get() を提供（後方互換性）
 # ==============================================================================
 
 from __future__ import annotations
@@ -35,11 +35,19 @@ except Exception:
 class Config:
     """
     互換API: Config.get("KEY", default)
-      優先順位: secrets.py > .env > OS環境変数
+    
+    優先順位: secrets.py > .env > OS環境変数
+    
+    注意: 機密情報は Secrets クラスから直接取得することを推奨
     """
     @staticmethod
     def get(key: str, default: str | None = None) -> str | None:
-        # 1) secrets.py
+        """
+        設定値を取得（後方互換性のため維持）
+        
+        推奨: 機密情報は `from app.config.secrets import Secrets` から直接取得
+        """
+        # 1) secrets.py（最優先）
         if Secrets is not None and hasattr(Secrets, key):
             val = getattr(Secrets, key)
             if isinstance(val, str) and val != "":
