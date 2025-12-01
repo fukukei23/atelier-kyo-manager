@@ -40,3 +40,7 @@ Flask-WTF
 flask_migrate
 playwright
 Flask-WTF
+
+# --- Testing ---
+pytest
+pytest-asyncio
