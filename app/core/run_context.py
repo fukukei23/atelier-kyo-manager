@@ -88,7 +88,59 @@ class RunContext:
         """
         path = self.get_path(filename)
         try:
+            path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding='utf-8')
             logging.debug(f"Content saved: {path}")
         except Exception as e:
             logging.error(f"Failed to save content to {path}: {e}")
+
+    def save_bytes(self, filename: str, data: bytes):
+        """
+        Save binary data (e.g., PNG screenshots, ZIP files) to a file under the current run directory.
+        
+        Args:
+            filename: Relative path from run_path (e.g., "screenshots/image.png" or "artifacts/data.zip")
+            data: Binary data to save
+        """
+        path = self.get_path(filename)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            logging.debug(f"Bytes saved: {path} ({len(data)} bytes)")
+        except Exception as e:
+            logging.error(f"Failed to save bytes to {path}: {e}")
+
+    def build_upload_bundle(self, bundle_name: str = "upload_bundle.zip") -> Optional[str]:
+        """
+        Create a ZIP bundle containing all artifacts in the run directory.
+        This is useful for diagnostics, debugging, and sharing run results.
+        
+        Args:
+            bundle_name: Name of the ZIP file to create (relative to run_path parent)
+            
+        Returns:
+            Path to the created ZIP file, or None if creation failed
+        """
+        try:
+            import shutil
+            import zipfile
+            
+            # Create ZIP in parent directory (instance/runs/)
+            bundle_path = self.run_path.parent / bundle_name
+            
+            # Remove existing bundle if it exists
+            if bundle_path.exists():
+                bundle_path.unlink()
+            
+            # Create ZIP archive
+            shutil.make_archive(
+                str(bundle_path.with_suffix("")),
+                "zip",
+                self.run_path
+            )
+            
+            logging.info(f"Upload bundle created: {bundle_path}")
+            return str(bundle_path)
+        except Exception as e:
+            logging.error(f"Failed to build upload bundle: {e}")
+            return None

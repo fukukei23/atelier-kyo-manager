@@ -54,6 +54,7 @@ except Exception:
 # --- Session manager (Stage 1 extraction) ---
 from app.agents.browser.session_manager import SessionManager, EXTERNAL_BLOCKLIST_HOSTS
 from app.agents.browser.navigation_driver import NavigationContext, NavigationDriver
+from app.agents.browser.plp_driver import PlpDriver, PlpNavigationResult
 from app.agents.browser.extractor import (
     BrowserExtractionService,
     PDPSizeSelectPolicy,
@@ -1980,13 +1981,86 @@ class BrowserUseAgent:
                         pdp_links = nav_outcome.pdp_links if nav_outcome else []
 
                     # --- V88.5.5: 早期失敗ロジック ---
+                    # Task C: PlpDriver を使用してタイルクリック → PDP遷移
+                    # Stage 4: 拡張版 PlpDriver に対応
                     if not pdp_links:
-                        self.logger.warning("[Fallback] No hrefs after search. Clicking first card...")
-                        new_page = await self._click_first_card_or_link(page, site_config, settings, context)
-                        if new_page:
-                            return await self._run_pdp_flow(new_page or page, site, query, settings, run_context, site_config)
-                        # new_page も取れなかった → ここで即ギブアップ (V88.5.5)
-                        raise ValueError("No PDP links and click fallback failed (gave up early for speed).")
+                        self.logger.warning("[Fallback] No hrefs after search. Clicking first card using PlpDriver...")
+                        try:
+                            plp_driver = PlpDriver(
+                                page=page,
+                                context=context,
+                                site_config=site_config,
+                                run_context=run_context,
+                                logger=self.logger,
+                                telemetry=self._ensure_telemetry(),
+                            )
+                            # Stage 4: 新しいシグネチャを使用（target_url, timeout_ms を優先）
+                            # Task 1: budget_ms = None 対応で安全化
+                            default_timeout_ms = int(settings.get("timeout_sec", 60)) * 1000
+                            if budget_ms is not None:
+                                timeout_ms = min(budget_ms, default_timeout_ms)
+                            else:
+                                timeout_ms = default_timeout_ms
+                            nav_result = await plp_driver.navigate_to_pdp(
+                                target_url=target_url,
+                                timeout_ms=timeout_ms,
+                                # 後方互換性のため、旧パラメータも渡す（内部で fallback として使用）
+                                start_t=start_t,
+                                budget_ms=budget_ms,
+                            )
+                            
+                            # Stage 4: 新しいフィールドを RunContext に保存
+                            run_context.save_json("plp_navigation_result.json", {
+                                "pdp_url": nav_result.pdp_url,
+                                "plp_url": nav_result.plp_url,
+                                "tiles_seen": nav_result.tiles_seen,
+                                "trap_detected": nav_result.trap_detected,
+                                "trap_reason": nav_result.trap_reason,
+                                "recovery_attempted": nav_result.recovery_attempted,
+                                "recovery_successful": nav_result.recovery_successful,
+                                "overlays_handled": nav_result.overlays_handled,
+                                "navigation_method": nav_result.navigation_method,
+                                "errors": nav_result.errors,
+                                "pdp_opened_in_new_tab": nav_result.pdp_opened_in_new_tab,
+                            })
+                            
+                            # Stage 4: 詳細なログ出力
+                            if nav_result.trap_detected:
+                                if nav_result.recovery_successful:
+                                    self.logger.info(
+                                        f"[PlpDriver] Trap detected and recovered: {nav_result.trap_reason} "
+                                        f"(overlays: {nav_result.overlays_handled}, method: {nav_result.navigation_method})"
+                                    )
+                                else:
+                                    self.logger.warning(
+                                        f"[PlpDriver] Trap detected but recovery failed: {nav_result.trap_reason} "
+                                        f"(errors: {nav_result.errors})"
+                                    )
+                            else:
+                                self.logger.info(
+                                    f"[PlpDriver] Successfully navigated to PDP: {nav_result.pdp_url} "
+                                    f"(tiles_seen: {nav_result.tiles_seen}, "
+                                    f"overlays: {nav_result.overlays_handled}, "
+                                    f"method: {nav_result.navigation_method})"
+                                )
+                            
+                            # エラーがある場合は警告
+                            if nav_result.errors:
+                                for error in nav_result.errors:
+                                    self.logger.warning(f"[PlpDriver] Error: {error}")
+                            
+                            # PlpDriver が PDP に遷移した場合、そのページで PDP 抽出を実行
+                            # PlpDriver 内で既にページ遷移が完了しているので、plp_driver.page を使用
+                            pdp_page = plp_driver.page
+                            return await self._run_pdp_flow(pdp_page, site, query, settings, run_context, site_config)
+                        except Exception as plp_e:
+                            self.logger.warning(f"[Fallback] PlpDriver failed: {plp_e}", exc_info=True)
+                            # フォールバック: 既存の _click_first_card_or_link を使用
+                            new_page = await self._click_first_card_or_link(page, site_config, settings, context)
+                            if new_page:
+                                return await self._run_pdp_flow(new_page or page, site, query, settings, run_context, site_config)
+                            # new_page も取れなかった → ここで即ギブアップ (V88.5.5)
+                            raise ValueError("No PDP links and click fallback failed (gave up early for speed).")
                     # --- V88.5.5: 修正ここまで ---
 
             except Exception as _e:
@@ -2240,6 +2314,14 @@ class BrowserUseAgent:
             "selectors_tried_hint": "See site_config['selectors']['pdp'] and wait_for_selectors in settings.",
         }
 
+        # Task B: Build upload bundle for diagnostics
+        try:
+            bundle_path = run_context.build_upload_bundle()
+            if bundle_path:
+                logger.info(f"[Failure Handler] Upload bundle created: {bundle_path}")
+        except Exception as bundle_e:
+            logger.warning(f"[Failure Handler] Failed to build upload bundle: {bundle_e}")
+
         return DiscoveryResult(
             ok=False,
             site=site,
@@ -2298,5 +2380,19 @@ class BrowserUseAgent:
         for key in all_keys:
             merged_list = _dedupe_keep_order(new_selectors.get(key, []) + existing_selectors.get(key, []))
             if merged_list: merged_selectors[key] = merged_list
-        learned_path.write_text(json.dumps(merged_selectors, indent=2, ensure_ascii=False), encoding="utf-8")
-        self.logger.info(f"[LEARN] Saved merged selectors to: {learned_path}")
+        
+        # Task B: Use RunContext to save learned selectors
+        # Save to run_context for this run, and also save to instance/sites/ for persistence
+        try:
+            # Save to run_context for this run
+            run_context.save_json("learned_selectors.json", merged_selectors)
+            self.logger.info(f"[LEARN] Saved learned selectors to run_context: {run_context.get_path('learned_selectors.json')}")
+        except Exception as e:
+            self.logger.warning(f"[LEARN] Failed to save to run_context: {e}")
+        
+        # Also save to instance/sites/ for persistence across runs
+        try:
+            learned_path.write_text(json.dumps(merged_selectors, indent=2, ensure_ascii=False), encoding="utf-8")
+            self.logger.info(f"[LEARN] Saved merged selectors to: {learned_path}")
+        except Exception as e:
+            self.logger.warning(f"[LEARN] Failed to save to instance/sites/: {e}")
