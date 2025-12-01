@@ -16,6 +16,7 @@ from app.models.result_models import DiscoveryResult
 from app.extractors.product_info_extractor import extract_title_price
 from app.extractors.moncler_extractor import MonclerPDPExtractor
 from app.agents.browser.session_manager import EXTERNAL_BLOCKLIST_HOSTS
+from app.agents.browser.product_extractor import ProductExtractor, ProductInfo
 from app.utils.observability import save_dom
 
 logger = logging.getLogger(__name__)
@@ -112,6 +113,7 @@ class BrowserExtractionService:
             settings=settings,
             site_config=site_config,
             prepare_page=prepare_page,
+            run_context=run_context,  # Task D: run_context を渡す
         )
         if not item:
             raise ValueError("Price not found on PDP.")
@@ -173,6 +175,7 @@ class BrowserExtractionService:
                         site_config=site_config,
                         timeout_override=worker_timeout,
                         prepare_page=prepare_page,
+                        run_context=run_context,  # Task D: run_context を渡す
                     )
             except Exception as e:
                 self.logger.warning(f"[PDP Worker] Failed for {u}: {e}")
@@ -209,22 +212,57 @@ class BrowserExtractionService:
         site_config: Dict[str, Any],
         timeout_override: Optional[int] = None,
         prepare_page: PreparePageCallable = None,
+        run_context: Optional[RunContext] = None,
     ) -> Optional[Dict[str, Any]]:
+        """
+        Task D: ProductExtractor を使用して PDP から商品情報を抽出する。
+        既存の Moncler 専用抽出やフォールバックロジックも維持。
+        """
         goto_timeout = timeout_override or int(settings.get("timeout_sec", 60)) * 1000
         if page.url != url:
             await page.goto(url=url, wait_until="domcontentloaded", timeout=goto_timeout)
 
-        if prepare_page:
-            try:
-                await prepare_page(page)
-            except Exception as prep_e:
-                self.logger.debug(f"[Extractor] prepare_page skipped: {prep_e}")
+        # Task D: ProductExtractor を使用
+        try:
+            product_extractor = ProductExtractor(
+                site_config=site_config,
+                run_context=run_context,
+                logger=self.logger,
+            )
+            product_info = await product_extractor.extract(
+                page=page,
+                context=context,
+                prepare_page=prepare_page,
+            )
+            
+            # Stage 5: ProductInfo を Dict に変換（すべてのフィールドを含む、price が None でも返す）
+            data = {
+                "title": product_info.title,
+                "price": product_info.price,  # float or None
+                "currency": product_info.currency,
+                "url": product_info.url or page.url,
+                "images": product_info.images,
+                "sizes": product_info.sizes,
+                "colors": product_info.colors,
+                "description": product_info.description,
+                "brand": product_info.brand,
+                "list_price": product_info.list_price,  # float or None
+                "discount_pct": product_info.discount_pct,
+                "raw_html_path": product_info.raw_html_path,  # Stage 5: HTML パス
+                "metadata": product_info.metadata,  # Stage 5: metadata
+            }
+            self.logger.debug(f"[Extractor] ProductExtractor succeeded for {url} (price: {product_info.price})")
+            return data
+        except Exception as pe_e:
+            self.logger.warning(f"[Extractor] ProductExtractor failed, falling back to legacy: {pe_e}")
 
+        # フォールバック: 既存の Moncler 専用抽出
         if site.upper() == "MONCLER_OFFICIAL":
             enriched = await self.moncler_extractor.extract(page=page, context=context)
             if enriched:
                 return enriched
 
+        # フォールバック: 既存の価格抽出ロジック
         price_text = await self._extract_price_with_size_option(page, settings, site_config)
         if price_text:
             data = await extract_title_price(page) or {}
@@ -234,6 +272,7 @@ class BrowserExtractionService:
 
         self.logger.warning(f"[PDP] Price not found (even after size attempts) at: {url}")
 
+        # フォールバック: JSON-LD / Meta タグ
         ld_json_fallback = await self._extract_ld_json_price(page)
         if ld_json_fallback:
             return ld_json_fallback
