@@ -164,3 +164,6 @@ screenshots/
 images/
 debug_catalog/
 project-root/
+
+# Secrets file
+app/config/secrets.py
