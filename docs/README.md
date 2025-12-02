@@ -2,6 +2,16 @@
 
 このディレクトリには、プロジェクトの各種ドキュメントが格納されています。
 
+## 公式ドキュメント
+
+Atelier Kyo Manager の正式な設計書は `docs/official/` 配下にあります。
+
+- [system_design.md](official/system_design.md)
+- [db_schema.md](official/db_schema.md)
+- [n8n_integration.md](official/n8n_integration.md)
+- [saas_design.md](official/saas_design.md)
+- [architecture_overview.mmd](official/architecture_overview.mmd)
+
 ## ディレクトリ構成
 
 ### `completion_reports/`
