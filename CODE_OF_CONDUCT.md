@@ -1,0 +1,30 @@
+# Code of Conduct
+
+
+
+## 1. Respect
+
+
+
+All contributors are expected to treat each other with respect and professionalism.
+
+
+
+## 2. Unacceptable Behavior
+
+
+
+- Discriminatory or harassing language
+
+- Personal attacks
+
+- Publishing others' private information without permission
+
+
+
+## 3. Reporting
+
+
+
+If you experience or witness unacceptable behavior, please contact the maintainer directly.
+
