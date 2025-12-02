@@ -14,6 +14,12 @@ Atelier Kyo Manager の正式な設計書は `docs/official/` 配下にありま
 
 ## ディレクトリ構成
 
+### `official/refactoring/`
+公式のリファクタリング完了レポートを格納するディレクトリです。重要なリファクタリング作業の完了レポートが保存されます。
+
+例:
+- `BROWSER_USE_AGENT_EXCEPTION_RETRY_REFACTOR.md`
+
 ### `completion_reports/`
 完了レポートを格納するディレクトリです。各作業完了時に自動的に作成されるレポートが保存されます。
 
@@ -93,4 +99,40 @@ python3 move_all_reports.py
 プロジェクトルール（`.cursorrules`）に従い、今後作成される完了レポートは自動的に `docs/completion_reports/` ディレクトリに保存されます。
 
 チャット記録は `docs/chat_records/` ディレクトリに保存することを推奨します。
+
+## リファクタリング完了レポート
+
+公式のリファクタリング完了レポートは `docs/official/refactoring/` 配下に格納されています。
+
+- [BrowserUseAgent 例外処理・Retry ロジック統一](official/refactoring/BROWSER_USE_AGENT_EXCEPTION_RETRY_REFACTOR.md)
+
+## TODO / フォローアップタスク
+
+### BrowserUseAgent リファクタリング関連
+
+以下のタスクは、BrowserUseAgent 例外処理・retry ロジック統一リファクタリングのフォローアップとして実施予定です。
+
+1. **BrowserUseAgent のモジュール分割**
+   - UI操作ヘルパー（`_accept_cookies_if_present`, `_dismiss_geo_modal` 等）を別モジュールに分離
+   - ナビゲーション関連（`_bootstrap_session_page`, `_force_plp_recover` 等）を別モジュールに分離
+   - PDP抽出関連を別モジュールに分離
+
+2. **timeout の site_config.discovery_settings.timeout_sec への完全委譲**
+   - ハードコードされた timeout 値を `site_config.discovery_settings.timeout_sec` に統一
+   - すべての Playwright 操作で設定値を使用するように変更
+
+3. **Playwright 生呼び出しの safe_* への全置換**
+   - 既存のコードで直接 `page.goto()` などを呼び出している箇所を、新しい `safe_goto()` などに置き換え
+   - `page.wait_for_selector()` → `safe_wait_selector()` への置き換え
+   - `locator.click()` → `safe_click()` への置き換え
+
+4. **stealth.py の共通化と browser_use_moncler_patch.py との統合**
+   - サイト固有のパッチロジックを共通化
+   - `browser_use_moncler_patch.py` の機能を `stealth.py` に統合または共通モジュール化
+
+### Phase 1 ロードマップ関連
+
+**注意**: BrowserUseAgent レベルでの例外処理・retry ロジックの統一は完了しましたが、上位エージェント側（FailureAnalysisAgent / SelfHealingAgent / SelectorDiscoveryAgent）での例外分類情報の活用は、各エージェントのリファクタリングタスクとして別途実施予定です。
+
+詳細は [BrowserUseAgent 例外処理・Retry ロジック統一リファクタリング完了レポート](official/refactoring/BROWSER_USE_AGENT_EXCEPTION_RETRY_REFACTOR.md) を参照してください。
 
