@@ -136,6 +136,8 @@
 | Phase 3 | 監視/通知（成功率、最終成功ラン ID）をダッシュボード化 | Infra/AI 共通 |
 | Phase 4 | 完全無人化（Cron + 自動リリース + rollback ガード） | 組織承認後 |
 
+**注意**: Phase 1-1 / Phase 1-2 の BrowserUseAgent レベルでの例外処理・retry ロジックの統一は完了しましたが、上位エージェント側（FailureAnalysisAgent / SelfHealingAgent / SelectorDiscoveryAgent）での例外分類情報の活用は、各エージェントのリファクタリングタスクとして別途実施予定です。詳細は `docs/official/refactoring/BROWSER_USE_AGENT_EXCEPTION_RETRY_REFACTOR.md` を参照してください。
+
 ---
 
 この仕様書に従って運用すれば、Moncler PLP スクレイピングの失敗→自己修復ループを着実に回し、実運用レベルまで引き上げられる。
