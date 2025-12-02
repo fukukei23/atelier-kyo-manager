@@ -1,0 +1,69 @@
+flowchart LR
+
+    subgraph UI["UI Layer"]
+
+        ST[Streamlit UI<br/>Dashboard & CSV Import]
+
+    end
+
+
+
+    subgraph API["Backend API Layer"]
+
+        FA[Flask/FastAPI<br/>REST / Business Logic]
+
+    end
+
+
+
+    subgraph Async["Async Task Layer (Celery)"]
+
+        CE[Celery Workers<br/>stock check / pricing / AI generation]
+
+    end
+
+
+
+    subgraph Scrape["Scraping Layer"]
+
+        PW[Playwright / DrissionPage<br/>Stealth / Proxy]
+
+    end
+
+
+
+    subgraph Data["Data Layer"]
+
+        DB[(PostgreSQL / SQLite)]
+
+        FS[(File Storage<br/>images / CSV / logs)]
+
+    end
+
+
+
+    subgraph Orchestrator["Optional: n8n"]
+
+        N8N[n8n<br/>Slack / Sheets / Gmail]
+
+    end
+
+
+
+    ST --> FA
+
+    FA --> CE
+
+    CE --> PW
+
+    CE --> DB
+
+    CE --> FS
+
+    FA --> DB
+
+
+
+    CE -->|events (stock_alert, etc)| N8N
+
+    N8N -->|hooks| FA

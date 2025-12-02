@@ -1,0 +1,36 @@
+# Security Policy
+
+
+
+## Reporting a Vulnerability
+
+
+
+If you discover a security vulnerability, please report it privately to the maintainer.
+
+Do not open a public issue with sensitive details.
+
+
+
+## Scope
+
+
+
+The following are in scope:
+
+
+
+- API endpoints
+
+- Authentication and authorization flows
+
+- Secrets and environment variable handling
+
+
+
+## Supported Versions
+
+
+
+Only the latest version on the `main` branch is actively supported.
+
