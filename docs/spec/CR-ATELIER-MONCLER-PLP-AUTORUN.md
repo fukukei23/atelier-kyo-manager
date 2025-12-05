@@ -1,3 +1,10 @@
+- **Project:** atelier-kyo-manager
+- **CreatedAt:** 2025-11-15
+- **SourcePath:** docs/moncler_plp_autorun_spec.md
+- **MovedAt:** 2025-12-04
+
+---
+
 # Moncler PLP 自動回復フロー仕様書
 
 - **作成日**: 2025-11-15  
@@ -175,3 +182,4 @@
 ---
 
 この仕様書に従って運用すれば、Moncler PLP スクレイピングの失敗→自己修復ループを着実に回し、実運用レベルまで引き上げられる。
+

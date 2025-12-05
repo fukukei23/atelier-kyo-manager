@@ -2,15 +2,28 @@
 # ==============================================================================
 # ファイル名 (File Name): browser_use_moncler_patch.py
 # レジストリ (Registry): app/agents/browser_use_moncler_patch.py
-# バージョン (Version): 2.1.0 (Robust Locale & Cookie Injection)
-# 更新日時 (Date & Time JST): 2025年11月20日 20:45
+# バージョン (Version): 2.2.0 (Stealth 共通化対応)
+# 更新日時 (Date & Time JST): 2025年12月3日
 #
 # 変更要旨:
+# - (v2.2.0) ★ Stealth 共通化対応: UA / viewport / navigator.webdriver などの
+#   指紋対策は scraping/stealth.py に移行。このパッチは Moncler サイト固有の
+#   UI 操作（Cookie注入、ロケールモーダル処理、URL正規化）のみを担当。
 # - (v2.1.0) ★ 強化: `moncler-shipping-country` / `moncler-shipping-language` Cookieを
 #   overrides.local.json の設定値に基づいて強制的に注入するロジックを強化。
 # - (v2.1.0) ★ 強化: `en-de` (ドイツ) などの意図しないロケールへのリダイレクトを検知し、
 #   Cookie再設定後に `en-int` へ強制送還するループを追加。
 # - (v2.1.0) ★ 修正: `moncler_plp_recovery` の引数 `query` の型ヒントを `Any` に維持。
+#
+# 役割分担:
+# - scraping/stealth.py: UA / viewport / navigator.webdriver / permissions.query など
+#   汎用的な Bot 検知回避（すべてのサイトで共通）
+# - browser_use_moncler_patch.py: Moncler サイト固有の UI 操作
+#   - Cookie 注入（moncler-shipping-country, moncler-shipping-language）
+#   - LocalStorage 設定
+#   - OneTrust バナーのクリック
+#   - ロケーションモーダルの処理
+#   - URL 正規化（en-de → en-int など）
 #
 # 使い方 (Usage):
 # browser_use_agent.py (v85+) の PLP 突入前に以下のように1回呼ぶ:

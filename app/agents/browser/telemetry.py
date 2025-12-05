@@ -115,12 +115,18 @@ class TelemetryService:
             )
         
         try:
-            # DOM保存
-            await self._save_dom(page, name)
+            # DOM保存（ファイル名を固定: plp_dom_initial_materialized.html）
+            if name == "plp_dom_initial" or name == "plp_dom_initial_materialized":
+                await self._save_dom(page, "plp_dom_initial_materialized")
+            else:
+                await self._save_dom(page, name)
             
-            # セレクタカウント（指定がある場合）
+            # セレクタカウント（指定がある場合、ファイル名を固定: selector_counts_plp_initial.json）
             if selectors:
-                await self._count_selectors(page, selectors, name=f"selector_counts_{name}")
+                if name == "plp_dom_initial" or name == "plp_dom_initial_materialized":
+                    await self._count_selectors(page, selectors, name="selector_counts_plp_initial")
+                else:
+                    await self._count_selectors(page, selectors, name=f"selector_counts_{name}")
             
             # スクリーンショット（RunContextがサポートしている場合）
             if hasattr(self.run_context, "take_screenshot"):
@@ -477,6 +483,37 @@ class TelemetryClient:
                 self.logger.warning(f"[TelemetryClient] Failed to save screenshot '{name}': {e}")
         else:
             self.logger.debug(f"[TelemetryClient] RunContext does not support take_screenshot")
+    
+    async def record_plp_state(
+        self,
+        page: Any,
+        *,
+        name: str = "plp_dom_initial_materialized",
+        selectors: Optional[List[str]] = None,
+        site_config: Optional[Dict[str, Any]] = None,
+    ) -> None:
+        """
+        PLP 初期状態の DOM とセレクタカウントを保存するための共通 API（Phase1 Moncler 診断用）
+        
+        Args:
+            page: Playwright Page オブジェクト
+            name: 保存ファイル名のベース（デフォルト: "plp_dom_initial_materialized"）
+            selectors: セレクタカウント対象（オプション）
+            site_config: サイト設定（selectors が None の場合、ここから自動取得）
+        
+        保存されるファイル:
+        - plp_dom_initial_materialized.html（DOM スナップショット）
+        - selector_counts_plp_initial.json（セレクタカウント、selectors が指定された場合のみ）
+        """
+        try:
+            await self._service.record_plp_state(
+                page=page,
+                name=name,
+                selectors=selectors,
+                site_config=site_config,
+            )
+        except Exception as e:
+            self.logger.warning(f"[TelemetryClient] Failed to record PLP state '{name}': {e}", exc_info=True)
     
     async def write_fail_snapshot(
         self,
