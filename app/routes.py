@@ -63,6 +63,10 @@ def manage_products():
     商品登録/更新 + 一覧
     - POST: 新規登録（最小実装。編集は /products/<id>/edit）
     - GET : フォーム + 一覧
+    
+    注意: テンプレート側で product.calculate_profit() を呼び出すため、
+    ここでは products をそのまま渡すだけでOK。
+    calculate_profit() 内部で新しい pricing モジュールが使われる。
     """
     form = ProductForm()
 
@@ -94,7 +98,13 @@ def manage_products():
 
 @bp.get("/products")
 def product_list():
-    """登録データ一覧（シンプル）"""
+    """
+    登録データ一覧（シンプル）
+    
+    注意: テンプレート側で product.calculate_profit() を呼び出すため、
+    ここでは products をそのまま渡すだけでOK。
+    calculate_profit() 内部で新しい pricing モジュールが使われる。
+    """
     products = Product.query.order_by(Product.id.desc()).all()
     # シンプル版テンプレは templates/list.html を想定
     return render_template("list.html", products=products)

@@ -197,6 +197,8 @@ class NavigationDriver:
                 logger.debug("[NavigationDriver] trap_checker/recover failed: %s", e)
         
         # --- Stage 3A-2-2: ensure_plp_materialized を呼び出し ---
+        materialized = False
+        tiles_detected = False
         try:
             materialized = await self.ensure_plp_materialized(ctx)
             outcome.plp_materialized = materialized
@@ -205,6 +207,60 @@ class NavigationDriver:
         except Exception as e:
             logger.error(f"[NavigationDriver] ensure_plp_materialized failed: {e}")
             outcome.plp_materialized = False
+        
+        # materialized == False の場合（例外または False 返却）でも、タイルが検出されているか確認
+        if not materialized:
+            try:
+                # ensure_plp_materialized 内で使用されているのと同じロジックで tile_selector_str を構築
+                settings = ctx.settings or {}
+                plp_cfg = (ctx.site_config.get("selectors", {}) or {}).get("plp", {}) or {}
+                pdp_cfg = (ctx.site_config.get("selectors", {}) or {}).get("pdp", {}) or {}
+                tile_selectors = _dedupe_keep_order(
+                    (plp_cfg.get("tile_selectors", []) or []) +
+                    (plp_cfg.get("pdp_link_selectors", []) or []) +
+                    (pdp_cfg.get("pdp_link_selectors", []) or []) + [
+                        # Moncler 用フォールバック（.html で終わるリンク）
+                        "a[href$='.html']",
+                        "[data-testid='product-card']",
+                        "[data-test='product-card']",
+                        "div[class*='product-card' i]",
+                        "div[class*='product-tile' i]",
+                    ]
+                )
+                if tile_selectors:
+                    tile_selector_str = ", ".join(tile_selectors)
+                    tile_count = await self.page.locator(tile_selector_str).count()
+                    if tile_count > 0:
+                        tiles_detected = True
+                        logger.info(f"[NavigationDriver] Tiles detected ({tile_count}) despite materialization failure")
+                        logger.info(f"[NavigationDriver] tiles_detected set to True, will attempt to record PLP state")
+            except Exception as check_e:
+                logger.warning(f"[NavigationDriver] Failed to check tile count: {check_e}")
+        
+        # PLP materialization が成功した場合、または例外で失敗したがタイルが検出された場合に DOM snapshot を保存
+        condition_result = materialized or tiles_detected
+        if condition_result and self.telemetry:
+            try:
+                # site_config からセレクタを取得
+                pdp_cfg = (ctx.site_config.get("selectors") or {}).get("pdp", {}) or {}
+                selectors = (
+                    (pdp_cfg.get("pdp_link_selectors") or []) +
+                    (pdp_cfg.get("plp_container_selectors") or [])
+                )
+                logger.info(f"[NavigationDriver] Recording PLP state: materialized={materialized}, tiles_detected={tiles_detected}")
+                await self.telemetry.record_plp_state(
+                    self.page,
+                    name="plp_dom_initial_materialized",
+                    selectors=selectors if selectors else None,
+                    site_config=ctx.site_config,
+                )
+                logger.info("[NavigationDriver] Saved PLP DOM snapshot and selector counts")
+            except Exception as e:
+                logger.warning(f"[NavigationDriver] Failed to record PLP state: {e}", exc_info=True)
+        elif not condition_result:
+            logger.debug(f"[NavigationDriver] Skipping PLP state recording: materialized={materialized}, tiles_detected={tiles_detected}")
+        elif not self.telemetry:
+            logger.warning("[NavigationDriver] Telemetry not available, skipping PLP state recording")
         
         # --- Stage 3A-2-3: materialize 後の trap 再チェック ---
         if outcome.plp_materialized and trap_check_fn:
@@ -248,7 +304,17 @@ class NavigationDriver:
 
         # PDP リンクが不足している場合の fallback
         if not pdp_links:
-            logger.warning("[NavigationDriver] No PDP links found, trying fallback strategies...")
+            log_file_path = None
+            if ctx.run_context:
+                log_file_path = ctx.run_context.get_path("system.log")
+            logger.error(
+                f"[NavigationDriver] No PDP links found (collected {len(pdp_links)} links), "
+                "trying fallback strategies..."
+            )
+            if log_file_path and log_file_path.exists():
+                logger.error(f"[NavigationDriver] Full error log available at: {log_file_path}")
+            elif ctx.run_context:
+                logger.error(f"[NavigationDriver] Error log will be saved to: {ctx.run_context.get_path('system.log')}")
             
             # Fallback 1: ヘッダ検索
             try:
@@ -366,16 +432,37 @@ class NavigationDriver:
                 if not nodes:
                     continue
                 matched_count = 0
+                rejected_count = 0
+                rejection_reasons = []
                 for n in nodes:
                     href = await n.get_attribute("href") or await n.get_attribute("data-href") or await n.get_attribute("data-product-url") or await n.get_attribute("data-url")
                     if not href:
+                        rejected_count += 1
+                        if rejected_count == 1:  # 最初の1件のみ詳細を記録
+                            rejection_reasons.append(f"no href/data-href/data-product-url/data-url attribute")
                         continue
                     norm_url = self._normalize_abs_url(target_url, href)
-                    if is_same_origin(norm_url, target_url) and looks_like_product_url(norm_url):
-                        found_links.add(norm_url)
-                        matched_count += 1
+                    if not is_same_origin(norm_url, target_url):
+                        rejected_count += 1
+                        if rejected_count == 1:
+                            rejection_reasons.append(f"different origin: {norm_url}")
+                        continue
+                    if not looks_like_product_url(norm_url):
+                        rejected_count += 1
+                        if rejected_count == 1:
+                            rejection_reasons.append(f"not product URL: {norm_url}")
+                        continue
+                    found_links.add(norm_url)
+                    matched_count += 1
                 if matched_count > 0:
                     logger.info(f"[PLP→PDP][1b] selector='{sel}' added {matched_count} links.")
+                elif nodes and rejected_count > 0:
+                    # 要素は見つかったが、リンク抽出に失敗した場合
+                    logger.warning(
+                        f"[PLP→PDP][1b] selector='{sel}' found {len(nodes)} elements, "
+                        f"but {rejected_count} were rejected. "
+                        f"Reasons: {', '.join(rejection_reasons[:3])}"
+                    )
             except Exception as e:
                 logger.warning(f"[PLP→PDP][1b] selector='{sel}' failed: {e}")
 
@@ -395,8 +482,50 @@ class NavigationDriver:
 
         links = sorted(list(found_links))
         if not links:
-            logger.warning("[PLP→PDP] No PDP hrefs found after all phases.")
-        return []
+            # 詳細な診断情報をログに出力
+            log_file_path = None
+            if ctx and ctx.run_context:
+                log_file_path = ctx.run_context.get_path("system.log")
+            logger.error(
+                f"[PLP→PDP] No PDP hrefs found after all phases. "
+                f"Found {len(found_links)} links total. "
+                f"Target URL: {target_url}. "
+                "This indicates a selector mismatch or URL validation failure."
+            )
+            if log_file_path and log_file_path.exists():
+                logger.error(f"[PLP→PDP] Full error log available at: {log_file_path}")
+            elif ctx and ctx.run_context:
+                logger.error(f"[PLP→PDP] Error log will be saved to: {ctx.run_context.get_path('system.log')}")
+            # Phase 1b で見つかった要素数を診断用に出力
+            try:
+                total_elements_found = 0
+                for sel in PLP_PDP_LINK_SELECTORS:
+                    try:
+                        nodes = await page.query_selector_all(sel)
+                        if nodes:
+                            total_elements_found += len(nodes)
+                            # 最初の要素の属性をサンプルとして取得
+                            if total_elements_found == len(nodes):
+                                sample_node = nodes[0]
+                                sample_attrs = {
+                                    "tag": await sample_node.evaluate("el => el.tagName"),
+                                    "href": await sample_node.get_attribute("href"),
+                                    "data-href": await sample_node.get_attribute("data-href"),
+                                    "data-product-url": await sample_node.get_attribute("data-product-url"),
+                                    "class": await sample_node.get_attribute("class"),
+                                }
+                                logger.debug(
+                                    f"[PLP→PDP] Sample element from selector '{sel}': {sample_attrs}"
+                                )
+                    except Exception:
+                        pass
+                if total_elements_found > 0:
+                    logger.warning(
+                        f"[PLP→PDP] Found {total_elements_found} elements matching selectors, "
+                        "but none passed URL validation or product URL check."
+                    )
+            except Exception as e:
+                logger.debug(f"[PLP→PDP] Diagnostic info collection failed: {e}")
 
         # Phase 3: Noise Filtering & Saving
         cleaned: List[str] = []
@@ -888,7 +1017,7 @@ class NavigationDriver:
         return f"{u.scheme}://{u.netloc}{norm}"
 
     async def _accept_cookies_if_present(self, page: Page, site_config: Dict[str, Any]) -> bool:
-        """Cookie 同意バナーがあればクリックする"""
+        """Cookie 同意バナーがあればクリックする（強化版）"""
         # Stage 3A-2-5: site_config["navigation"]["overlays"]["cookie_banner_selectors"] から取得
         nav_cfg = (site_config.get("navigation", {}) or {})
         overlays_cfg = nav_cfg.get("overlays", {}) or {}
@@ -897,24 +1026,77 @@ class NavigationDriver:
         # フォールバック: 既存の ui 構造もサポート
         ui = (site_config.get("selectors", {}) or {}).get("ui", {}) or {}
         
+        # Moncler OneTrust バナーのセレクタを優先的に追加
         candidates = _dedupe_keep_order(
             (cookie_selectors or []) +
             (ui.get("cookie_accept", []) or []) + [
+                # OneTrust バナーのセレクタ（優先順位順）
                 "#onetrust-accept-btn-handler",
+                "button#onetrust-accept-btn-handler",
+                "button[aria-label*='Accept'][id*='onetrust']",
+                "button[aria-label*='Accept all']",
+                "button[aria-label*='agree']",
+                "[id^='onetrust-'] button",
+                "button.ot-pc-refuse-all-handler",  # REFUSE ALL ボタンも試す
+                "button.save-preference-btn-handler.onetrust-close-btn-handler",  # SAVE MY SETTINGS ボタン
+                # 汎用セレクタ
                 "button:has-text('ACCEPT ALL')",
+                "button:has-text('ACCEPT')",
                 "button:has-text('CONTINUE WITHOUT ACCEPTING')",
                 "button[aria-label*='Accept' i]",
             ]
         )
-        for sel in candidates:
-            try:
-                node = page.locator(sel).first
-                if await node.count() > 0 and await node.is_visible():
-                    await node.click(timeout=3000)
-                    await asyncio.sleep(0.2)
+        
+        # 最大3回試行（バナーが再表示される可能性があるため）
+        for attempt in range(3):
+            clicked = False
+            for sel in candidates:
+                try:
+                    node = page.locator(sel).first
+                    count = await node.count()
+                    if count > 0:
+                        is_visible = await node.is_visible()
+                        if is_visible:
+                            await node.click(timeout=2000)
+                            await asyncio.sleep(0.3)  # クリック後の待機時間を延長
+                            clicked = True
+                            logger.debug(f"[CookieBanner] Clicked selector: {sel} (attempt {attempt + 1})")
+                            break
+                except Exception as e:
+                    continue
+            
+            if clicked:
+                # バナーが閉じられたか確認（OneTrust バナーのコンテナが非表示になったか）
+                try:
+                    banner_container = page.locator("#onetrust-banner-sdk, #onetrust-pc-sdk")
+                    if await banner_container.count() > 0:
+                        # バナーがまだ表示されている場合は少し待って再確認
+                        await asyncio.sleep(0.5)
+                        is_visible = await banner_container.first.is_visible()
+                        if not is_visible:
+                            logger.debug("[CookieBanner] Banner closed successfully")
+                            return True
+                    else:
+                        # バナーコンテナ自体が存在しない場合は成功とみなす
+                        logger.debug("[CookieBanner] Banner container not found (already closed)")
+                        return True
+                except Exception:
+                    # 確認に失敗した場合は成功とみなす（クリックは成功している）
                     return True
-            except Exception:
-                continue
+            
+            # バナーが見つからない場合は成功とみなす
+            if attempt == 0:
+                # 最初の試行でバナーが見つからない場合は、バナーが存在しない可能性
+                try:
+                    banner_container = page.locator("#onetrust-banner-sdk, #onetrust-pc-sdk")
+                    if await banner_container.count() == 0:
+                        logger.debug("[CookieBanner] No banner found")
+                        return True
+                except Exception:
+                    pass
+            
+            await asyncio.sleep(0.2)
+        
         return False
 
     async def _dismiss_geo_modal(self, page: Page, site_config: Optional[Dict[str, Any]] = None) -> None:
@@ -950,12 +1132,19 @@ class NavigationDriver:
                 if await loc.count() == 0:
                     return False
                 target = loc.first
-                if not await target.is_visible():
-                    await target.scroll_into_view_if_needed()
-                await target.click(timeout=5000)
-                logger.info(f"[GeoModal] Clicked {desc}")
-                await page.wait_for_timeout(300)
-                return True
+                try:
+                    if not await target.is_visible(timeout=2000):
+                        await target.scroll_into_view_if_needed(timeout=3000)
+                except Exception as scroll_e:
+                    logger.debug(f"[GeoModal] scroll_into_view failed ({desc}): {scroll_e}, skipping")
+                try:
+                    await target.click(timeout=5000)
+                    logger.info(f"[GeoModal] Clicked {desc}")
+                    await page.wait_for_timeout(300)
+                    return True
+                except Exception as click_e:
+                    logger.debug(f"[GeoModal] Click failed ({desc}): {click_e}")
+                    return False
             except Exception as e:
                 logger.debug(f"[GeoModal] Click failed ({desc}): {e}")
                 return False
@@ -1155,14 +1344,34 @@ class NavigationDriver:
                 return False
 
             # v88.6.x: Attemptごとに遅延表示ゲート/バナーを掃除する
-            try:
-                await self._accept_cookies_if_present(page, site_config)
-            except Exception:
-                pass
+            # 最初の試行では特に Cookie バナーを確実に閉じる
+            if attempt == 0:
+                try:
+                    cookie_closed = await self._accept_cookies_if_present(page, site_config)
+                    if cookie_closed:
+                        logger.info("[Materialize] Cookie banner closed, waiting for content to load...")
+                        # Cookie バナーを閉じた後、コンテンツが読み込まれるまで待機
+                        await page.wait_for_timeout(1000)
+                except Exception as e:
+                    logger.debug(f"[Materialize] Cookie banner handling failed: {e}")
+            else:
+                try:
+                    await self._accept_cookies_if_present(page, site_config)
+                except Exception:
+                    pass
+            
             try:
                 # Stage 3A-2-5: site_config を渡す
-                await self._dismiss_geo_modal(page, site_config)
-            except Exception:
+                # タイムアウトを避けるため、asyncio.wait_for でラップ
+                import asyncio
+                try:
+                    await asyncio.wait_for(self._dismiss_geo_modal(page, site_config), timeout=10.0)
+                except asyncio.TimeoutError:
+                    logger.debug("[Materialize] Geo modal dismissal timed out (non-fatal), continuing")
+                except Exception as geo_e:
+                    logger.debug(f"[Materialize] Geo modal dismissal failed (non-fatal): {geo_e}")
+            except Exception as geo_e:
+                logger.debug(f"[Materialize] Geo modal dismissal failed (non-fatal): {geo_e}")
                 pass
             try:
                 # Stage 3A-2-5: site_config を渡す
@@ -1235,6 +1444,23 @@ class NavigationDriver:
             try:
                 count = await page.locator(tile_selector_str).count()
                 logger.info(f"[Materialize] Attempt {attempt + 1}/{max_scroll_attempts}, found {count} tiles.")
+                
+                # Cookie バナーがまだ表示されている場合は、閉じる処理を再試行
+                if count == 0 and attempt < 2:
+                    try:
+                        banner_container = page.locator("#onetrust-banner-sdk, #onetrust-pc-sdk")
+                        if await banner_container.count() > 0:
+                            is_visible = await banner_container.first.is_visible()
+                            if is_visible:
+                                logger.warning("[Materialize] Cookie banner still visible, attempting to close again...")
+                                await self._accept_cookies_if_present(page, site_config)
+                                await page.wait_for_timeout(1500)  # バナーを閉じた後、コンテンツが読み込まれるまで待機
+                                # タイル数を再カウント
+                                count = await page.locator(tile_selector_str).count()
+                                logger.info(f"[Materialize] After closing banner, found {count} tiles.")
+                    except Exception as e:
+                        logger.debug(f"[Materialize] Cookie banner check failed: {e}")
+                
                 if count >= target_min_tiles:
                     logger.info(f"[Materialize] Success: Found {count} tiles (>= {target_min_tiles}).")
                     return True

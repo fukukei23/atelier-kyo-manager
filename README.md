@@ -216,9 +216,17 @@ streamlit run app/streamlit_app.py
 
 
 
-## 7. 注意事項（規約）
+## 7. Specification (Spec) 管理ルール
 
+- このプロジェクトの仕様書（Spec）は `docs/spec/` に集約します。
 
+- 新しい CR や大きめの機能追加を行う場合は、必ず事前に Spec を作成します。
+
+- 新規 Spec は `docs/spec/SPEC_TEMPLATE.md` をコピーして作成します。
+
+- ファイル名は `CR-ATELIER-XXX_... .md` 形式を推奨します。
+
+## 8. 注意事項（規約）
 
 - BUYMA への自動ログイン・自動出品は禁止
 

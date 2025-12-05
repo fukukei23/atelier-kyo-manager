@@ -44,6 +44,15 @@ except ImportError:
     AILlmController = None
     LLM_AVAILABLE = False
 
+# --- Pricing Config（手数料率の一元管理）をインポート ---
+try:
+    from app.core.pricing.rules import load_pricing_config
+    PRICING_CONFIG_AVAILABLE = True
+except ImportError:
+    logging.warning("PricingConfig not found. Using hardcoded fee rates.")
+    load_pricing_config = None
+    PRICING_CONFIG_AVAILABLE = False
+
 try:
     from app.utils.shipping_agent import ShippingAgent
     SHIPPING_AGENT_AVAILABLE = True
@@ -124,7 +133,11 @@ class ProfitabilityAgent:
             return 30.0
 
     def _calculate_core_profit(self, market: MarketData, supplier: SupplierData) -> Dict[str, Any]:
-        """中核となる利益計算ロジック。"""
+        """
+        中核となる利益計算ロジック。
+        
+        手数料率は app/core/pricing/rules.py の PricingConfig から取得します。
+        """
         exchange_rate = self._get_exchange_rate_jpy(supplier.currency)
         shipping_cost = self._get_dynamic_shipping_cost(supplier.currency)
         customs_rate = self._resolve_customs_rate(supplier.category, supplier.material)
@@ -136,7 +149,21 @@ class ProfitabilityAgent:
         customs_duty = cost_before_customs * customs_rate
         total_cost_jpy = cost_before_customs + customs_duty
 
-        buyma_commission = market.buyma_price * 0.077
+        # ▼ 手数料率を PricingConfig から取得 ▼
+        if PRICING_CONFIG_AVAILABLE and load_pricing_config:
+            cfg = load_pricing_config()
+            # buyma_platform_fee_rate:
+            #   - 「プラットフォーム販売手数料」のみを表す簡易レート（デフォルト 7.7%）
+            #   - 市場分析・シミュレーション用の純粋なプラットフォーム手数料
+            #   - core/pricing 側で扱う buyma_effective_fee_rate (14.2%) とは役割が異なる
+            #     ※ 14.2%は販売手数料+決済手数料等を含む実運用での総負担率
+            platform_fee_rate = cfg.buyma_platform_fee_rate
+        else:
+            # フォールバック: PricingConfig が利用できない場合は 7.7% を使用
+            platform_fee_rate = 0.077
+        
+        buyma_commission = market.buyma_price * platform_fee_rate
+        # ▲ 修正ここまで ▲
 
         net_revenue = market.buyma_price - buyma_commission
         profit_estimate = net_revenue - total_cost_jpy

@@ -20,6 +20,14 @@ from playwright.async_api import (
 
 from app.core.run_context import RunContext
 
+# Stealth モジュールをインポート
+try:
+    from scraping.stealth import build_stealth_params_from_site_config, apply_stealth_to_context
+except ImportError:
+    # scraping/stealth.py が存在しない場合のフォールバック
+    build_stealth_params_from_site_config = None
+    apply_stealth_to_context = None
+
 logger = logging.getLogger(__name__)
 
 USER_AGENT_POOL = [
@@ -235,6 +243,27 @@ class SessionManager:
                 )
                 context_opts = self._build_context_options()
                 context = await browser.new_context(**context_opts)
+                
+                # Stealth を適用（context 作成後）
+                if apply_stealth_to_context is not None:
+                    stealth_params = build_stealth_params_from_site_config(
+                        self.site_config,
+                        settings=self.settings,
+                        enable_ua_rotation=self.settings.get("enable_ua_rotation", False),
+                        enable_viewport_rotation=self.settings.get("enable_viewport_rotation", False),
+                    )
+                    await apply_stealth_to_context(
+                        context,
+                        user_agent=stealth_params.get("user_agent"),
+                        viewport=stealth_params.get("viewport"),
+                        locale=stealth_params.get("locale"),
+                        timezone_id=stealth_params.get("timezone_id"),
+                        accept_language=stealth_params.get("accept_language"),
+                    )
+                else:
+                    # フォールバック: 既存の _setup_init_scripts を使用
+                    await self._setup_init_scripts(context)
+                
                 self._browser = browser
                 self._context = context
                 break
@@ -257,7 +286,9 @@ class SessionManager:
             )
 
         await self._setup_routes(context)
-        await self._setup_init_scripts(context)
+        # Stealth は既に context 作成時に適用済み（apply_stealth_to_context が None の場合は既存の _setup_init_scripts を使用）
+        if apply_stealth_to_context is None:
+            await self._setup_init_scripts(context)
 
         if self.settings.get("enable_trace"):
             await context.tracing.start(screenshots=True, snapshots=True, sources=True)
@@ -289,25 +320,55 @@ class SessionManager:
         return page
 
     def _build_context_options(self) -> Dict[str, Any]:
+        """
+        BrowserContext 作成時のオプションを構築する。
+        Stealth パラメータは build_stealth_params_from_site_config() から取得し、
+        context 作成後に apply_stealth_to_context() で適用する。
+        """
         ctx_opts: Dict[str, Any] = {}
-        viewport = self.settings.get("viewport")
-        if self.settings.get("enable_viewport_rotation"):
-            viewport = random.choice(VIEWPORT_POOL)
-        if viewport:
-            ctx_opts["viewport"] = viewport
+        
+        # Stealth パラメータを取得（context 作成時の基本設定として使用）
+        if build_stealth_params_from_site_config is not None:
+            stealth_params = build_stealth_params_from_site_config(
+                self.site_config,
+                settings=self.settings,
+                enable_ua_rotation=self.settings.get("enable_ua_rotation", False),
+                enable_viewport_rotation=self.settings.get("enable_viewport_rotation", False),
+            )
+            # context 作成時に設定可能な項目を設定
+            if stealth_params.get("viewport"):
+                ctx_opts["viewport"] = stealth_params["viewport"]
+            if stealth_params.get("locale"):
+                ctx_opts["locale"] = stealth_params["locale"]
+            if stealth_params.get("timezone_id"):
+                ctx_opts["timezone_id"] = stealth_params["timezone_id"]
+            if stealth_params.get("user_agent"):
+                ctx_opts["user_agent"] = stealth_params["user_agent"]
+            
+            # Accept-Language ヘッダー
+            headers = (self.settings.get("extra_http_headers") or {}).copy()
+            headers["Accept-Language"] = stealth_params.get("accept_language") or "en-GB,en;q=0.8"
+            ctx_opts["extra_http_headers"] = headers
+        else:
+            # フォールバック: 既存のロジックを使用
+            viewport = self.settings.get("viewport")
+            if self.settings.get("enable_viewport_rotation"):
+                viewport = random.choice(VIEWPORT_POOL)
+            if viewport:
+                ctx_opts["viewport"] = viewport
 
-        ctx_opts["locale"] = "en-GB"
-        ctx_opts["timezone_id"] = "UTC"
+            ctx_opts["locale"] = "en-GB"
+            ctx_opts["timezone_id"] = "UTC"
 
-        headers = (self.settings.get("extra_http_headers") or {}).copy()
-        headers["Accept-Language"] = self.settings.get("accept_language") or "en-GB,en;q=0.8"
-        ctx_opts["extra_http_headers"] = headers
+            headers = (self.settings.get("extra_http_headers") or {}).copy()
+            headers["Accept-Language"] = self.settings.get("accept_language") or "en-GB,en;q=0.8"
+            ctx_opts["extra_http_headers"] = headers
 
-        user_agent = self.settings.get("user_agent")
-        if self.settings.get("enable_ua_rotation") and USER_AGENT_POOL:
-            user_agent = random.choice(USER_AGENT_POOL)
-        if user_agent:
-            ctx_opts["user_agent"] = user_agent
+            user_agent = self.settings.get("user_agent")
+            if self.settings.get("enable_ua_rotation") and USER_AGENT_POOL:
+                user_agent = random.choice(USER_AGENT_POOL)
+            if user_agent:
+                ctx_opts["user_agent"] = user_agent
 
         if self.settings.get("enable_har"):
             ctx_opts["record_har_path"] = str(self.run_context.get_path("network.har"))

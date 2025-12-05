@@ -43,20 +43,28 @@ class Product(db.Model):
 
     def calculate_profit(self) -> float:
         """
-        利益の簡易計算:
-          販売価格 - (仕入れ + 取引手数料 + 送料 + 関税 + 買付代行料)
+        利益計算（BUYMA手数料を含む正確な計算）
+        
+        注意: この関数は後方互換性のために残していますが、
+        新しいコードでは app.core.pricing.calculator.calculate_pricing() を使用してください。
+        
         DBの profit カラムがあっても、表示は都度計算で返します。
         """
+        from app.core.pricing import calculate_pricing, PricingInput
+        
         nz = lambda x: float(x or 0.0)
-        selling = nz(self.selling_price)
-        costs = (
-            nz(self.purchase_price)
-            + nz(self.transaction_fee)
-            + nz(self.shipping_cost)
-            + nz(self.customs_duty)
-            + nz(self.procurement_fee)
+        
+        inp = PricingInput(
+            purchase_price=nz(self.purchase_price),
+            selling_price=nz(self.selling_price),
+            transaction_fee=nz(self.transaction_fee),
+            shipping_cost=nz(self.shipping_cost),
+            customs_duty=nz(self.customs_duty),
+            procurement_fee=nz(self.procurement_fee),
         )
-        return float(selling - costs)
+        
+        result = calculate_pricing(inp)
+        return float(result.profit)
 
     def __repr__(self) -> str:
         return f"<Product id={self.id} name={self.name!r}>"

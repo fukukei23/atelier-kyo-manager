@@ -23,11 +23,54 @@ dist/
 build/
 *.log
 logs/
+**/logs/
 tmp/
 temp/
 cache/
 sessions/
 uploads/
+
+# ================================
+# UI 層（Flask）は Cursor 編集禁止
+# ================================
+app/templates/
+app/forms/
+app/static/
+
+# ================================
+# Flask ルーティング層（編集禁止）
+# ================================
+# 注: app/routes.py は .cursorrules で個別制御
+
+# ================================
+# 実行時ファイル / 結果物
+# ================================
+instance/
+# ただし、初期化ファイル（last_run.json など）は許可
+# 注意: パターンの順序が重要。instance/ の後に ! で例外を指定
+!instance/**/last_run.json
+!instance/**/last_run.json.example
+export/
+exports/
+debug_catalog/
+screenshots/
+**/screenshots/
+**/network.har
+**/trace.zip
+
+# ================================
+# セキュリティ / 機密情報
+# ================================
+.env
+app/config/secrets.py
+
+# ================================
+# インフラ / Docker / n8n
+# ================================
+docker/
+n8n/
+compose/
+infrastructure/
 
 # ================================
 # BUYMA 自動化ツール特有の重い領域
@@ -53,9 +96,7 @@ downloads/
 raw_images/
 raw_data/
 csv/
-exports/
 backup/
-screenshots/
 
 # ================================
 # AI モジュール系フォルダ（重い）
@@ -98,4 +139,3 @@ analytics/
 
 # NexusCore 連携時（任意）
 .nexus/
-

@@ -27,22 +27,25 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
+from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Set
+from typing import Any, Dict, List, Optional, Tuple, Set, Callable, TypeVar, Awaitable
 from urllib.parse import urljoin, urlparse, urlunparse, urlencode, parse_qsl, quote_plus, urlsplit, urlunsplit
 
 # --- Playwright imports (robust) ---
 from playwright.async_api import Page, BrowserContext, Locator, ElementHandle
 try:
-    from playwright.async_api import Error as PlaywrightError
+    from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
 except Exception:
     try:
-        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
     except Exception:
         try:
-            from playwright._impl._errors import Error as PlaywrightError
+            from playwright._impl._errors import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
         except Exception:
             class PlaywrightError(Exception):
+                pass
+            class PlaywrightTimeoutError(Exception):
                 pass
 # === InteractiveRepairSession (Atlas-style guided loop) tentative import ===
 try:
@@ -156,6 +159,16 @@ except ImportError:
              async def save_json(self, name, payload, tctx): pass
              async def save_screenshot(self, page, name, tctx): pass
              async def write_fail_snapshot(self, page, reason, tctx, extra=None): pass
+             async def record_plp_state(
+                 self,
+                 page,
+                 *,
+                 name: str = "plp_dom_initial_materialized",
+                 selectors=None,
+                 site_config=None,
+             ):
+                 """Import が壊れている環境用なので no-op で良い"""
+                 pass
          def save_dom(*args, **kwargs): pass
          def count_selectors(*args, **kwargs): pass
          def save_raw_hrefs(*args, **kwargs): pass
@@ -168,6 +181,42 @@ _LOCALE_SEG_RE = re.compile(r"^[a-z]{2}-[a-z]{2}$", re.IGNORECASE)
 OVERALL_PLP_BUDGET_MS_DEFAULT = 120000  # 120s watchdog
 
 PLUGIN_REGISTRY: Dict[str, StrategyPlugin] = {}
+
+# ==============================================================================
+# Exception Classification & Retry Logic
+# ==============================================================================
+
+class BrowserErrorType(Enum):
+    """ブラウザ操作の例外タイプ分類"""
+    TIMEOUT = "timeout"  # PlaywrightTimeoutError, asyncio.TimeoutError
+    NAVIGATION = "navigation"  # ナビゲーション関連エラー（goto失敗、リダイレクトループ等）
+    SELECTOR = "selector"  # セレクタが見つからない（0件）
+    NETWORK = "network"  # ネットワークエラー（接続失敗、DNSエラー等）
+    UNKNOWN = "unknown"  # その他の例外
+
+
+@dataclass
+class BrowserOperationResult:
+    """ブラウザ操作の結果を保持するデータクラス"""
+    success: bool
+    error_type: Optional[BrowserErrorType] = None
+    error_message: Optional[str] = None
+    retry_count: int = 0
+    operation_name: str = ""
+    context: Optional[Dict[str, Any]] = None
+
+    def to_failure_context(self) -> Dict[str, Any]:
+        """FailureAnalysisAgent / SelfHealingAgent に渡す failure_context を生成"""
+        return {
+            "error_type": self.error_type.value if self.error_type else "unknown",
+            "error_message": self.error_message or "",
+            "operation": self.operation_name,
+            "retry_count": self.retry_count,
+            "context": self.context or {},
+        }
+
+
+T = TypeVar('T')
 
 # ==============================================================================
 # Helper Functions
@@ -208,6 +257,145 @@ class BrowserUseAgent:
 
     TODO: LocaleGateHandler などの共通クラスにロケーションゲート処理を抽象化予定。
     """
+    
+    # ==============================================================================
+    # Exception Classification & Retry Logic
+    # ==============================================================================
+    
+    @staticmethod
+    def _classify_exception(e: Exception, operation_name: str = "") -> BrowserErrorType:
+        """
+        例外を分類して BrowserErrorType を返す。
+        
+        Args:
+            e: 発生した例外
+            operation_name: 操作名（コンテキスト情報として使用）
+            
+        Returns:
+            BrowserErrorType: 分類された例外タイプ
+        """
+        # Playwright TimeoutError
+        if isinstance(e, PlaywrightTimeoutError):
+            return BrowserErrorType.TIMEOUT
+        
+        # asyncio TimeoutError
+        if isinstance(e, asyncio.TimeoutError):
+            return BrowserErrorType.TIMEOUT
+        
+        # PlaywrightError のサブクラス（ネットワークエラー等）
+        if isinstance(e, PlaywrightError):
+            error_msg = str(e).lower()
+            if "timeout" in error_msg or "timed out" in error_msg:
+                return BrowserErrorType.TIMEOUT
+            if "navigation" in error_msg or "redirect" in error_msg or "net::" in error_msg:
+                return BrowserErrorType.NAVIGATION
+            if "network" in error_msg or "connection" in error_msg or "dns" in error_msg:
+                return BrowserErrorType.NETWORK
+        
+        # セレクタ関連のエラー（メッセージから判定）
+        error_msg = str(e).lower()
+        if "selector" in error_msg or "locator" in error_msg or "element" in error_msg:
+            if "not found" in error_msg or "timeout" in error_msg:
+                return BrowserErrorType.SELECTOR
+        
+        # デフォルト: UNKNOWN
+        return BrowserErrorType.UNKNOWN
+    
+    async def _run_with_retry(
+        self,
+        operation: Callable[[], Awaitable[T]],
+        operation_name: str,
+        *,
+        max_retries: int = 3,
+        retry_delay_ms: int = 1000,
+        timeout_ms: Optional[int] = None,
+        run_context: Optional[RunContext] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ) -> BrowserOperationResult:
+        """
+        ブラウザ操作を retry ロジックでラップし、例外を分類して返す。
+        
+        Args:
+            operation: 実行する非同期操作（コルーチン関数）
+            operation_name: 操作名（ログ・エラー分類用）
+            max_retries: 最大リトライ回数（デフォルト: 3）
+            retry_delay_ms: リトライ間の待機時間（ミリ秒）
+            timeout_ms: 操作のタイムアウト（None の場合はデフォルトタイムアウトを使用）
+            run_context: RunContext（ログ保存用）
+            context: 追加のコンテキスト情報
+            
+        Returns:
+            BrowserOperationResult: 操作結果（成功/失敗、例外タイプ、リトライ回数等）
+        """
+        last_exception: Optional[Exception] = None
+        
+        for attempt in range(max_retries):
+            try:
+                # タイムアウトが指定されている場合は asyncio.wait_for でラップ
+                if timeout_ms is not None:
+                    result = await asyncio.wait_for(operation(), timeout=timeout_ms / 1000.0)
+                else:
+                    result = await operation()
+                
+                # 成功
+                if run_context:
+                    self.logger.debug(
+                        f"[Retry] {operation_name} succeeded (attempt {attempt + 1}/{max_retries}, RunID: {run_context.run_id})"
+                    )
+                
+                return BrowserOperationResult(
+                    success=True,
+                    retry_count=attempt,  # 成功時は試行回数（0-indexed）
+                    operation_name=operation_name,
+                    context=context,
+                )
+                
+            except Exception as e:
+                last_exception = e
+                retry_count = attempt + 1
+                error_type = self._classify_exception(e, operation_name)
+                
+                # ログ出力
+                if run_context:
+                    self.logger.warning(
+                        f"[Retry] {operation_name} failed (attempt {retry_count}/{max_retries}, "
+                        f"type={error_type.value}, RunID: {run_context.run_id}): {e}"
+                    )
+                    
+                    # RunContext にエラー情報を保存
+                    error_info = {
+                        "operation": operation_name,
+                        "attempt": retry_count,
+                        "error_type": error_type.value,
+                        "error_message": str(e),
+                        "context": context or {},
+                    }
+                    run_context.save_json(f"retry_error_{operation_name}_{retry_count}.json", error_info)
+                else:
+                    self.logger.warning(
+                        f"[Retry] {operation_name} failed (attempt {retry_count}/{max_retries}, "
+                        f"type={error_type.value}): {e}"
+                    )
+                
+                # 最後の試行でない場合は待機してリトライ
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay_ms / 1000.0)
+                    continue
+                else:
+                    # 最大リトライ回数に達した
+                    break
+        
+        # すべてのリトライが失敗
+        error_type = self._classify_exception(last_exception, operation_name) if last_exception else BrowserErrorType.UNKNOWN
+        
+        return BrowserOperationResult(
+            success=False,
+            error_type=error_type,
+            error_message=str(last_exception) if last_exception else "Unknown error",
+            retry_count=retry_count,
+            operation_name=operation_name,
+            context=context,
+        )
     # ★ V88.6.0: インスタンスメソッドに変更 (旧 v88.5.9J のグローバル関数)
     # Stage 4: _looks_like_trap_or_legal() を削除し、NavigationDriver._looks_like_trap_or_legal() を使用
     # このメソッドは NavigationDriver 経由で呼び出す
@@ -289,8 +477,21 @@ class BrowserUseAgent:
         if not target_url:
             raise ValueError("BrowserUseAgent: target_url が指定されていません。起点URLが必要です。")
 
-        # --- 初期ナビゲーション ---
-        await page.goto(url=target_url, wait_until="domcontentloaded")
+        # --- 初期ナビゲーション（retry ロジック付き） ---
+        goto_result = await self.safe_goto(
+            page,
+            target_url,
+            wait_until="domcontentloaded",
+            timeout_ms=int(settings.get("timeout_sec", 60)) * 1000,
+            max_retries=3,
+        )
+        if not goto_result.success:
+            self.logger.warning(
+                f"[Bootstrap] Initial navigation failed (type={goto_result.error_type.value}, "
+                f"RunID: {run_context.run_id}): {goto_result.error_message}"
+            )
+            # 失敗しても続行（後続の処理で回復を試みる）
+        
         await self._accept_cookies_if_present(page, site_config)
         await self._dismiss_geo_modal(page, site_config)
         await self._kill_overlays(page)
@@ -303,10 +504,14 @@ class BrowserUseAgent:
             except Exception as e:
                 self.logger.debug(f"[HumanLike] skipped: {e}")
 
-        try:
-            await page.wait_for_load_state("domcontentloaded", timeout=800)
-        except Exception:
-            pass
+        wait_result = await self.safe_wait_for_load_state(
+            page,
+            state="domcontentloaded",
+            timeout_ms=800,
+            max_retries=1,
+        )
+        if not wait_result.success:
+            self.logger.debug(f"[Bootstrap] wait_for_load_state failed: {wait_result.error_message}")
         await page.wait_for_timeout(120)
 
         # Stage 4: ロケールゲート検出と回復（汎用化）
@@ -861,13 +1066,148 @@ class BrowserUseAgent:
     def _slice_timeout_ms(left_ms: int, cap_ms: int) -> int:
         return max(500, min(left_ms, cap_ms))
 
-    # --- Safe Wait ---
+    # --- Safe Wait (with retry) ---
     async def safe_wait_selector(self, page: Page, selector: str, *, timeout_ms: int, state: str = "visible") -> bool:
-        if not page or page.is_closed(): return False
-        try:
-            await page.wait_for_selector(selector, state=state, timeout=timeout_ms)
-            return True
-        except Exception: return False
+        """
+        セレクタの待機を retry ロジックでラップ（後方互換性のため既存のシグネチャを維持）。
+        
+        Args:
+            page: Playwright Page オブジェクト
+            selector: 待機するセレクタ
+            timeout_ms: タイムアウト（ミリ秒）
+            state: 待機する状態（"visible", "attached", "hidden" 等）
+            
+        Returns:
+            bool: セレクタが見つかった場合 True、それ以外 False
+        """
+        if not page or page.is_closed():
+            return False
+        
+        result = await self._run_with_retry(
+            operation=lambda: page.wait_for_selector(selector, state=state, timeout=timeout_ms),
+            operation_name=f"wait_for_selector({selector})",
+            max_retries=1,  # safe_wait_selector は既に安全なラッパーなので、retry は1回のみ
+            timeout_ms=timeout_ms,
+            run_context=self.run_context,
+            context={"selector": selector, "state": state},
+        )
+        
+        return result.success
+    
+    async def safe_goto(
+        self,
+        page: Page,
+        url: str,
+        *,
+        wait_until: str = "domcontentloaded",
+        timeout_ms: Optional[int] = None,
+        max_retries: int = 3,
+    ) -> BrowserOperationResult:
+        """
+        ページ遷移を retry ロジックでラップ。
+        
+        Args:
+            page: Playwright Page オブジェクト
+            url: 遷移先URL
+            wait_until: 待機条件（"domcontentloaded", "load", "networkidle" 等）
+            timeout_ms: タイムアウト（ミリ秒、None の場合は Playwright のデフォルト）
+            max_retries: 最大リトライ回数
+            
+        Returns:
+            BrowserOperationResult: 操作結果
+        """
+        if not page or page.is_closed():
+            return BrowserOperationResult(
+                success=False,
+                error_type=BrowserErrorType.UNKNOWN,
+                error_message="Page is closed or not available",
+                operation_name="goto",
+                context={"url": url},
+            )
+        
+        async def goto_operation():
+            await page.goto(url=url, wait_until=wait_until, timeout=timeout_ms)
+        
+        return await self._run_with_retry(
+            operation=goto_operation,
+            operation_name=f"goto({url})",
+            max_retries=max_retries,
+            timeout_ms=timeout_ms,
+            run_context=self.run_context,
+            context={"url": url, "wait_until": wait_until},
+        )
+    
+    async def safe_click(
+        self,
+        locator: Locator,
+        *,
+        timeout_ms: int = 5000,
+        max_retries: int = 2,
+    ) -> BrowserOperationResult:
+        """
+        クリック操作を retry ロジックでラップ。
+        
+        Args:
+            locator: Playwright Locator オブジェクト
+            timeout_ms: タイムアウト（ミリ秒）
+            max_retries: 最大リトライ回数
+            
+        Returns:
+            BrowserOperationResult: 操作結果
+        """
+        async def click_operation():
+            await locator.click(timeout=timeout_ms)
+        
+        selector_str = str(locator) if hasattr(locator, '__str__') else "unknown"
+        return await self._run_with_retry(
+            operation=click_operation,
+            operation_name=f"click({selector_str})",
+            max_retries=max_retries,
+            timeout_ms=timeout_ms,
+            run_context=self.run_context,
+            context={"selector": selector_str},
+        )
+    
+    async def safe_wait_for_load_state(
+        self,
+        page: Page,
+        *,
+        state: str = "domcontentloaded",
+        timeout_ms: int = 5000,
+        max_retries: int = 2,
+    ) -> BrowserOperationResult:
+        """
+        ページのロード状態待機を retry ロジックでラップ。
+        
+        Args:
+            page: Playwright Page オブジェクト
+            state: 待機する状態（"domcontentloaded", "load", "networkidle" 等）
+            timeout_ms: タイムアウト（ミリ秒）
+            max_retries: 最大リトライ回数
+            
+        Returns:
+            BrowserOperationResult: 操作結果
+        """
+        if not page or page.is_closed():
+            return BrowserOperationResult(
+                success=False,
+                error_type=BrowserErrorType.UNKNOWN,
+                error_message="Page is closed or not available",
+                operation_name="wait_for_load_state",
+                context={"state": state},
+            )
+        
+        async def wait_operation():
+            await page.wait_for_load_state(state, timeout=timeout_ms)
+        
+        return await self._run_with_retry(
+            operation=wait_operation,
+            operation_name=f"wait_for_load_state({state})",
+            max_retries=max_retries,
+            timeout_ms=timeout_ms,
+            run_context=self.run_context,
+            context={"state": state},
+        )
 
     # --- UI Helpers ---
     async def _kill_overlays(self, page: Page) -> None:
@@ -1695,8 +2035,8 @@ class BrowserUseAgent:
                         entry_url=nav_url,
                         context=context,  # Stage 3A-2-4: BrowserContext を追加
                     )
-                    # Stage 3B: TelemetryService を NavigationDriver に渡す
-                    telemetry = self._ensure_telemetry()
+                    # Stage 3B: TelemetryClient を NavigationDriver に渡す
+                    telemetry = TelemetryClient(run_context=run_context)
                     # Stage 3A-3: trap_checker を NavigationDriver に渡す（観測用）
                     navigation_driver = NavigationDriver(
                         page=page,
@@ -1776,8 +2116,8 @@ class BrowserUseAgent:
         )
         
         # NavigationDriver を初期化
-        # Stage 3B: TelemetryService を NavigationDriver に渡す
-        telemetry = self._ensure_telemetry()
+        # Stage 3B: TelemetryClient を NavigationDriver に渡す
+        telemetry = TelemetryClient(run_context=run_context)
         # plugin が渡されていない場合は取得
         if plugin is None:
             from app.agents.browser.plugin_api import PluginAPI
@@ -1787,7 +2127,7 @@ class BrowserUseAgent:
         navigation_driver = NavigationDriver(
             page=page,
             trap_checker=lambda url: self._looks_like_trap_or_legal(url),
-            telemetry=telemetry,  # Stage 3B: TelemetryService を渡す
+            telemetry=telemetry,  # Stage 3B: TelemetryClient を渡す
             strategy=plugin,
         )
         
@@ -2234,6 +2574,7 @@ class BrowserUseAgent:
 
     # --- V88.1.0: Refined Failure Handling ---
     # --- V88.4.0: Add intent context ---
+    # --- V88.7.0: Exception classification & retry logic unification ---
     async def _handle_run_failure(self, e: Exception, site: str, query: str, site_config: Dict,
                                   run_context: RunContext, page: Optional[Page]) -> DiscoveryResult:
         logger.error(f"Browser task failed (RunID: {run_context.run_id}): {e}", exc_info=True)
@@ -2242,6 +2583,9 @@ class BrowserUseAgent:
         # V88.5.0: page は self._page (インスタンス変数) または引数で渡されたもの
         active_page = page or self._page
 
+        # V88.7.0: 例外を分類
+        error_type = self._classify_exception(e, "run_failure")
+        
         try:
             await self._pause_for_operator(active_page, run_context, "failure_inspection")
             if active_page and not active_page.is_closed():
@@ -2259,7 +2603,11 @@ class BrowserUseAgent:
                 active_page,
                 reason=str(e),
                 tctx=tctx,
-                extra={"site_config": site_config, "final_url": final_url_on_fail}
+                extra={
+                    "site_config": site_config,
+                    "final_url": final_url_on_fail,
+                    "error_type": error_type.value,  # V88.7.0: 例外タイプを追加
+                }
             )
             # Infer standard path used by write_fail_snapshot
             # ★ V88.6.1: (BugFix) ファイル名を failure_dom.html に修正
@@ -2275,7 +2623,11 @@ class BrowserUseAgent:
                     active_page,
                     reason=str(e),
                     tctx=tctx,
-                    extra={"site_config": site_config, "final_url": final_url_on_fail}
+                    extra={
+                        "site_config": site_config,
+                        "final_url": final_url_on_fail,
+                        "error_type": error_type.value,  # V88.7.0: 例外タイプを追加
+                    }
                 )
                 dom_guess = run_context.get_path("failure_dom.html")
                 if dom_guess and Path(dom_guess).exists():
@@ -2297,11 +2649,13 @@ class BrowserUseAgent:
             except Exception:
                 pass # Ignore if path finding fails
 
-
+        # V88.7.0: 例外分類情報を failure_context に追加
         failure_context = {
             "final_url": final_url_on_fail,
             "dom_snapshot_path": dom_path_str, # Use path obtained from write_fail_snapshot result
             "errors": [str(e)],
+            "error_type": error_type.value,  # V88.7.0: 例外タイプを追加
+            "error_class": type(e).__name__,  # V88.7.0: 例外クラス名を追加
             "screenshots": screenshots_list, # Use dynamically obtained list
             # high-level intent / expectation so LLM can reason:
             "intent_description": (
