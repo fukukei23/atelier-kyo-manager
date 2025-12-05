@@ -24,6 +24,167 @@ Modernize and extend this codebase into a "BUYMA Growth Hub / Multi-Agent Automa
 
 - **Formatting:** Use clear markdown with headers and bullet points.
 
+---
+
+# File/Directory Edit Policy (編集可否ポリシー)
+
+## 1. AI に積極的に編集させる領域 ✅
+
+以下のディレクトリは、AIによる改善・リファクタリング・修正を **許可** します：
+
+### `app/core/**` ✅
+- **説明:** ドメインロジックの中心（pricing, scraping, stock, selector など）
+- **編集方針:** リファクタリング・最適化・テスト追加を積極的に行う
+- **重要度:** 高（NexusCore連携の核となる部分）
+
+### `app/agents/**` ✅
+- **説明:** NexusCore連携エージェント（browser, selector_discovery, profitability など）
+- **編集方針:** AIによる改善・修正を許可
+- **重要度:** 高（マルチエージェントシステムの中核）
+
+### `app/extractors/**` ✅
+- **説明:** 商品情報抽出ロジック（moncler_extractor, product_info_extractor など）
+- **編集方針:** 変更頻度が高いため積極的な改善を許可
+- **重要度:** 中
+
+### `docs/**` ✅
+- **説明:** ドキュメント（README, completion_reports, chat_records など）
+- **編集方針:** ドキュメント追加・更新は常に許可
+- **重要度:** 中
+
+### `tests/**` ✅
+- **説明:** テストコード（pytest）
+- **編集方針:** テスト追加・改善を推奨
+- **重要度:** 高
+
+### `README.md` ✅
+- **説明:** プロジェクトREADME
+- **編集方針:** 常に最新状態に保つ
+- **重要度:** 中
+
+---
+
+## 2. UI層（Flask）は触らせない ❌
+
+以下のディレクトリは、既存の管理画面が壊れる可能性があるため **編集禁止** とします：
+
+### `app/templates/**` ❌
+- **説明:** Flask Jinjaテンプレート（HTML）
+- **理由:** 既存管理画面のため変更禁止
+- **例外:** ユーザーが明示的に指示した場合のみ
+
+### `app/forms/**` ❌
+- **説明:** WTForms定義
+- **理由:** UIフォームは壊れるので禁止
+- **例外:** ユーザーが明示的に指示した場合のみ
+
+### `app/static/**` ❌
+- **説明:** CSS, JavaScript, 画像ファイル
+- **理由:** UI崩れを防ぐため禁止
+- **例外:** ユーザーが明示的に指示した場合のみ
+
+---
+
+## 3. Flask ルーティング層 ❌
+
+### `app/routes.py` ❌
+- **説明:** Flaskルーティング定義
+- **理由:** ロジックを持たず `app/core` 呼び出し専用にしたいため編集禁止
+- **方針:** ビジネスロジックは `app/core` に移動し、routes.py は薄く保つ
+- **例外:** ユーザーが明示的に新規エンドポイント追加を指示した場合のみ
+
+---
+
+## 4. 実行時ファイル / 結果物 ❌
+
+以下は実行時に生成される一時ファイル・成果物のため **編集禁止** とします：
+
+### `instance/**` ❌
+- **説明:** 実行時データ（logs, sessions, browser_profiles, runs, screenshots）
+- **理由:** 自動生成されるため編集不要
+- **例外:** なし
+
+### `export/**` ❌
+### `exports/**` ❌
+- **説明:** エクスポート成果物（CSV, ZIP など）
+- **理由:** 自動生成されるため編集不要
+- **例外:** なし
+
+### `debug_catalog/**` ❌
+- **説明:** デバッグ出力
+- **理由:** 一時ファイルのため編集不要
+- **例外:** なし
+
+### `logs/**` ❌
+### `**/logs/**` ❌
+- **説明:** ログファイル
+- **理由:** 自動生成されるため編集不要
+- **例外:** なし
+
+### `screenshots/**` ❌
+### `**/screenshots/**` ❌
+- **説明:** スクリーンショット
+- **理由:** 自動生成されるため編集不要
+- **例外:** なし
+
+---
+
+## 5. モデル・DB層 ⚠️
+
+### `app/models.py` ⚠️
+- **説明:** SQLAlchemyモデル定義
+- **編集方針:** 慎重に編集（マイグレーションが必要な変更は避ける）
+- **重要度:** 高
+- **注意:** 既存カラムの削除・型変更は禁止。追加は可。
+
+### `app/extensions.py` ⚠️
+- **説明:** Flask拡張機能の初期化
+- **編集方針:** 必要な場合のみ編集
+- **重要度:** 高
+
+---
+
+## 6. 設定・スクリプト ⚠️
+
+### `app/config/**` ⚠️
+- **説明:** 設定ファイル（sites, integrations, llm_costs など）
+- **編集方針:** 慎重に編集（JSON構造を壊さない）
+- **重要度:** 高
+- **注意:** `app/config/secrets.py` は編集禁止（.cursorignoreに含まれる）
+
+### `scripts/**` ⚠️
+- **説明:** ユーティリティスクリプト
+- **編集方針:** 必要に応じて編集可
+- **重要度:** 中
+
+### `tools/**` ⚠️
+- **説明:** 開発ツール
+- **編集方針:** 必要に応じて編集可
+- **重要度:** 中
+
+---
+
+## 編集ポリシーまとめ
+
+| ディレクトリ/ファイル | 編集可否 | 理由 |
+|---------------------|---------|------|
+| `app/core/**` | ✅ 許可 | ドメインロジックの中心 |
+| `app/agents/**` | ✅ 許可 | NexusCore連携エージェント |
+| `app/extractors/**` | ✅ 許可 | 変更頻度が高い抽出ロジック |
+| `docs/**` | ✅ 許可 | ドキュメント |
+| `tests/**` | ✅ 許可 | テストコード |
+| `app/templates/**` | ❌ 禁止 | 既存UI（Flask） |
+| `app/forms/**` | ❌ 禁止 | 既存UI（Flask） |
+| `app/static/**` | ❌ 禁止 | 既存UI（Flask） |
+| `app/routes.py` | ❌ 禁止 | ロジックを持たせない方針 |
+| `instance/**` | ❌ 禁止 | 実行時ファイル |
+| `export/**` | ❌ 禁止 | 成果物 |
+| `logs/**` | ❌ 禁止 | ログファイル |
+| `app/models.py` | ⚠️ 慎重 | DB構造変更は避ける |
+| `app/config/**` | ⚠️ 慎重 | 設定ファイル |
+
+---
+
 # Custom Commands & Triggers
 
 If the user's input implies an intent to **analyze, scan, or understand the current codebase status** (e.g., "分析開始", "解析して", "分析頼む", "みてみて", "現状どう？", "/analyze", or similar nuances), you must execute the following process immediately:
@@ -43,6 +204,8 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
    - **Files with high coupling:** Which files are too entangled?
 
 3. **Output:** Provide a detailed report in Japanese based on the "BUYMA Growth Hub" architecture perspective.
+
+---
 
 # 完了レポート作成ルール
 
@@ -104,6 +267,8 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 
 完了レポートは日本語で記述する（プロジェクトの言語設定に従う）。
 
+---
+
 # チャット記録の自動保存ルール
 
 ## チャット記録を作成するタイミング
@@ -150,3 +315,92 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 
 チャット記録は日本語で記述する（プロジェクトの言語設定に従う）。
 
+---
+
+# --- Spec Kit Mode Configuration ---
+
+あなたは GitHub Spec Kit のメソッドに基づいて開発を行う AI エンジニアです。
+
+## 基本方針
+
+- 原則として、ユーザーから開発・変更の依頼があった場合、
+
+  **いきなりコードを書かず、必ず「仕様駆動開発（SDD）」サイクルを踏んでから実装すること。**
+
+- ただし、**影響範囲が極小な軽微修正（例: コメント修正、タイポ修正、ログメッセージの文言変更のみなど）** については、
+
+  ユーザーが明示した場合に限り、Spec なしで直接パッチ提案してよい。
+
+## 1. Specify (仕様策定)
+
+- ユーザーの要望を受けたら、まず `.spec/` フォルダに置く仕様書ファイル（Markdown）の内容を提案すること。
+
+- ファイル名規則: `.spec/CR-AKM-[番号]_[タイトル].md`
+
+- 仕様書には少なくとも以下のセクションを含めること:
+
+  - Overview & Context
+
+  - Scope (In-Scope / Out-of-Scope)
+
+  - Implementation Plan
+
+  - Testing Strategy
+
+## 2. Plan (計画)
+
+- 仕様書の中で、以下の観点を必ず具体的に書くこと:
+
+  - **Context:** 前回の完了レポートや現状のコードの理解・前提
+
+  - **Scope:** やること（In-Scope）、やらないこと（Out-of-Scope）
+
+  - **Plan:** 具体的な実装ステップ（Step-by-Step で列挙）
+
+  - **Testing:** どのテストを、どのコマンドで実行し、何を確認するか
+
+## 3. Implement (実装)
+
+- ユーザーが「仕様書OK」「このSpecで実装して」「Implementして」などと明示的に指示した場合にのみ、
+
+  `.spec/CR-AKM-...` の内容に従ってコーディングを行うこと。
+
+- コード提案時は、どのステップを実施しているのか（Planのどの項目か）を明示することが望ましい。
+
+## 4. Report (報告)
+
+- 実装・テストが完了したら、作業内容をまとめた完了レポートを作成すること。
+
+- レポートの出力先は原則として `docs/reports/` ディレクトリ（またはユーザーが別途指定した場所）とする。
+
+- レポートには、少なくとも以下を含めること:
+
+  - 対応した CR 番号 / タイトル
+
+  - 実施した変更の概要
+
+  - 実行したテストと結果
+
+  - 既知の制約・今後のToDo（あれば）
+
+# -----------------------------------
+
+# == Spec Storage Rules (atelier-kyo-manager) ==
+
+- 仕様書（Spec）、CR プロンプト、設計メモで長期的に参照するものは、必ず `docs/spec/` 以下に保存する。
+
+- ファイル名はできるだけ `CR-ATELIER-<ID>_... .md` 形式とし、このプロジェクトでは `<PROJECT>` に `ATELIER` を用いる（例: CR-ATELIER-001_xxx.md）。
+
+- 新しい CR や大きな実装タスクを開始する前に、仕様書が存在しない場合は `docs/spec/SPEC_TEMPLATE.md` をコピーして Spec を作成する。
+
+# == Spec Auto-Generate Rules (atelier-kyo-manager) ==
+
+- ユーザーからの自然文の「やりたいこと」が長文で与えられた場合、
+
+  いきなりコードを変更せず、まず `docs/spec/` に CR-ATELIER-XXX_... .md として Spec を起こすことを優先する。
+
+- Spec 作成後、その Spec を前提として CR プロンプト（Cursor 用指示書）を生成し、実装フェーズに進む。
+
+- Spec が無いまま大きな機能追加・リファクタリングを行うことは禁止。
+
+# -----------------------------------

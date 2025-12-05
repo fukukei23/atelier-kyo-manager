@@ -13,11 +13,11 @@ class MonclerPLPStrategy(StrategyPlugin):
     _DEFAULT_COUNTRY = "GB"
     _HARD_PLP_URL = "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
     _PLP_TILE_SELECTORS = (
-        # PDP/PLP href variants
-        "a[href*='/products/']",
-        "a[href*='/product/']",
-        "a[href*='/p/']",
-        "a[href*='/p-']",
+        # Moncler PDP リンクパターン（ロケール + カテゴリ + .html）
+        "a[href*='/en-jp/women/outerwear/'][href$='.html']",
+        "a[href*='/en-int/women/outerwear/'][href$='.html']",
+        "a[href*='/en-jp/men/outerwear/'][href$='.html']",
+        "a[href*='/en-int/men/outerwear/'][href$='.html']",
         # data-testid/data-test
         "[data-testid='product-card']",
         "[data-test='product-card']",
@@ -29,12 +29,12 @@ class MonclerPLPStrategy(StrategyPlugin):
         "div.product-tile",
         "div.c-product-tile",
         "div[data-component*='ProductCard']",
-        # list/article fallback
-        "li:has(a[href*='/products/'])",
-        "article:has(a[href*='/products/'])",
-        "div:has(a[href*='/products/'])",
+        # list/article fallback（.html で終わるリンクを含む要素）
+        "li:has(a[href$='.html'])",
+        "article:has(a[href$='.html'])",
+        "div:has(a[href$='.html'])",
         # region/list section fallback
-        "section[role='region'] .product-list a[href*='/products/']",
+        "section[role='region'] .product-list a[href$='.html']",
     )
 
     def before_navigate(self, url: str, ctx) -> str:

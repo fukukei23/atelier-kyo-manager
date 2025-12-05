@@ -1,0 +1,13 @@
+# atelier-kyo-manager 専用設定
+
+FLASK_APP ?= app
+FLASK_ENV ?= development
+
+.PHONY: run-server
+run-server: venv
+	. $(VENV_DIR)/bin/activate && flask run
+
+.PHONY: run-buyma-tests
+run-buyma-tests: venv
+	$(PYTHON) -m pytest -q tests/buyma
+
