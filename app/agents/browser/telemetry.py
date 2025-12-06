@@ -115,18 +115,18 @@ class TelemetryService:
             )
         
         try:
+            self.logger.info(f"[Telemetry] Starting record_plp_state: name={name}, selectors={selectors is not None}, run_context={self.run_context}")
             # DOM保存（ファイル名を固定: plp_dom_initial_materialized.html）
-            if name == "plp_dom_initial" or name == "plp_dom_initial_materialized":
-                await self._save_dom(page, "plp_dom_initial_materialized")
-            else:
-                await self._save_dom(page, name)
+            # CR-ATELIER-001: name パラメータに関係なく、常に固定ファイル名で保存
+            await self._save_dom(page, "plp_dom_initial_materialized")
             
             # セレクタカウント（指定がある場合、ファイル名を固定: selector_counts_plp_initial.json）
+            # CR-ATELIER-001: name パラメータに関係なく、常に固定ファイル名で保存
             if selectors:
-                if name == "plp_dom_initial" or name == "plp_dom_initial_materialized":
-                    await self._count_selectors(page, selectors, name="selector_counts_plp_initial")
-                else:
-                    await self._count_selectors(page, selectors, name=f"selector_counts_{name}")
+                self.logger.info(f"[Telemetry] Counting selectors: {len(selectors)} selectors")
+                await self._count_selectors(page, selectors, name="selector_counts_plp_initial")
+            else:
+                self.logger.info(f"[Telemetry] No selectors provided, skipping selector count")
             
             # スクリーンショット（RunContextがサポートしている場合）
             if hasattr(self.run_context, "take_screenshot"):
@@ -134,8 +134,9 @@ class TelemetryService:
                     await self.run_context.take_screenshot(page, f"30_{name}")
                 except Exception as e:
                     self.logger.debug(f"[Telemetry] Screenshot failed for {name}: {e}")
+            self.logger.info(f"[Telemetry] Completed record_plp_state: name={name}")
         except Exception as e:
-            self.logger.warning(f"[Telemetry] Failed to record PLP state '{name}': {e}")
+            self.logger.warning(f"[Telemetry] Failed to record PLP state '{name}': {e}", exc_info=True)
     
     async def record_success(
         self,
@@ -233,19 +234,26 @@ class TelemetryService:
     async def _save_dom(self, page: "Page", name: str) -> None:
         """DOM保存の内部実装"""
         if not page or page.is_closed():
+            self.logger.warning(f"[Telemetry] Cannot save DOM for '{name}': page is None or closed")
             return
         try:
             html = await page.content()
-            await self._maybe_await(self.run_context.save_content(f"{name}.html", html))
+            filepath = f"{name}.html"
+            self.logger.info(f"[Telemetry] Saving DOM to '{filepath}' (size: {len(html)} bytes)")
+            await self._maybe_await(self.run_context.save_content(filepath, html))
+            self.logger.info(f"[Telemetry] Successfully saved DOM to '{filepath}'")
         except Exception as e:
-            self.logger.warning(f"[Telemetry] Failed to save DOM for '{name}': {e}")
+            self.logger.warning(f"[Telemetry] Failed to save DOM for '{name}': {e}", exc_info=True)
     
     async def _save_json(self, data: Any, name: str) -> None:
         """JSON保存の内部実装"""
         try:
-            await self._maybe_await(self.run_context.save_json(f"{name}.json", data))
+            filepath = f"{name}.json"
+            self.logger.info(f"[Telemetry] Saving JSON to '{filepath}'")
+            await self._maybe_await(self.run_context.save_json(filepath, data))
+            self.logger.info(f"[Telemetry] Successfully saved JSON to '{filepath}'")
         except Exception as e:
-            self.logger.warning(f"[Telemetry] Failed to save JSON for '{name}': {e}")
+            self.logger.warning(f"[Telemetry] Failed to save JSON for '{name}': {e}", exc_info=True)
     
     async def _count_selectors(
         self,
