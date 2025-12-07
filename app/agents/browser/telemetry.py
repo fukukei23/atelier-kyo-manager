@@ -116,15 +116,23 @@ class TelemetryService:
         
         try:
             self.logger.info(f"[Telemetry] Starting record_plp_state: name={name}, selectors={selectors is not None}, run_context={self.run_context}")
-            # DOM保存（ファイル名を固定: plp_dom_initial_materialized.html）
-            # CR-ATELIER-001: name パラメータに関係なく、常に固定ファイル名で保存
-            await self._save_dom(page, "plp_dom_initial_materialized")
             
-            # セレクタカウント（指定がある場合、ファイル名を固定: selector_counts_plp_initial.json）
-            # CR-ATELIER-001: name パラメータに関係なく、常に固定ファイル名で保存
+            # CR-ATELIER-001: name が "plp_dom_initial" または "plp_dom_initial_materialized" の場合のみ固定ファイル名を使用
+            # それ以外の場合は name パラメータを使用（例: "plp_trap_page" → "plp_trap_page.html"）
+            if name in ("plp_dom_initial", "plp_dom_initial_materialized"):
+                dom_filename = "plp_dom_initial_materialized"
+                selector_filename = "selector_counts_plp_initial"
+            else:
+                dom_filename = name
+                selector_filename = f"selector_counts_{name}"
+            
+            # DOM保存
+            await self._save_dom(page, dom_filename)
+            
+            # セレクタカウント（指定がある場合）
             if selectors:
                 self.logger.info(f"[Telemetry] Counting selectors: {len(selectors)} selectors")
-                await self._count_selectors(page, selectors, name="selector_counts_plp_initial")
+                await self._count_selectors(page, selectors, name=selector_filename)
             else:
                 self.logger.info(f"[Telemetry] No selectors provided, skipping selector count")
             
@@ -510,8 +518,16 @@ class TelemetryClient:
             site_config: サイト設定（selectors が None の場合、ここから自動取得）
         
         保存されるファイル:
-        - plp_dom_initial_materialized.html（DOM スナップショット）
-        - selector_counts_plp_initial.json（セレクタカウント、selectors が指定された場合のみ）
+        - name が "plp_dom_initial" または "plp_dom_initial_materialized" の場合:
+          - plp_dom_initial_materialized.html（DOM スナップショット）
+          - selector_counts_plp_initial.json（セレクタカウント、selectors が指定された場合のみ）
+        - それ以外の場合:
+          - {name}.html（DOM スナップショット）
+          - selector_counts_{name}.json（セレクタカウント、selectors が指定された場合のみ）
+        
+        例:
+        - name="plp_trap_page" → plp_trap_page.html, selector_counts_plp_trap_page.json
+        - name="plp_dom_search_fallback" → plp_dom_search_fallback.html, selector_counts_plp_dom_search_fallback.json
         """
         try:
             await self._service.record_plp_state(

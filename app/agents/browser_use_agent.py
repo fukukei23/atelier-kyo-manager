@@ -56,7 +56,7 @@ except Exception:
 
 # --- Session manager (Stage 1 extraction) ---
 from app.agents.browser.session_manager import SessionManager, EXTERNAL_BLOCKLIST_HOSTS
-from app.agents.browser.navigation_driver import NavigationContext, NavigationDriver
+from app.agents.browser.navigation_driver import NavigationContext, NavigationDriver, TrapPageDetected
 from app.agents.browser.plp_driver import PlpDriver, PlpNavigationResult
 from app.agents.browser.extractor import (
     BrowserExtractionService,
@@ -2135,6 +2135,14 @@ class BrowserUseAgent:
         try:
             nav_outcome = await navigation_driver.run_plp_flow(nav_ctx)
             self.logger.debug(f"[_run_plp_flow] NavigationDriver.run_plp_flow called (stub): entry_url={nav_outcome.entry_url}")
+        except TrapPageDetected as trap_e:
+            # CR-ATELIER-002 Step 1: Trap ページ検出例外を処理
+            self.logger.warning(
+                f"[_run_plp_flow] Trap page detected by NavigationDriver: "
+                f"type={trap_e.trap_type}, reason={trap_e.reason}, URL={trap_e.url}"
+            )
+            # TrapPageDetected 例外をそのまま再スロー（上位の Self-Healing ロジックで扱えるようにする）
+            raise
         except Exception as nav_e:
             self.logger.debug(f"[_run_plp_flow] NavigationDriver.run_plp_flow failed (fallback to legacy): {nav_e}")
             nav_outcome = None
