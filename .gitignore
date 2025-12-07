@@ -107,7 +107,6 @@ data/generated/
 check_*.py
 execute_*.py
 run_*_test*.py
-test_*.py
 verify_*.py
 quick_*.py
 show_*.py
