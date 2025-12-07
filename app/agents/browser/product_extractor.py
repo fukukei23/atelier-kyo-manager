@@ -86,6 +86,29 @@ class ProductExtractor:
     site_config で定義されたセレクタと正規化ルールに基づいて抽出する。
     
     Stage 5: site_config 駆動に完全移行
+    
+    ==============================================================================
+    CR-ATELIER-002 Step 3: Moncler専用 PDP 抽出ロジック実装
+    ==============================================================================
+    # CR-ATELIER-002 Step3:
+    #   - Moncler 専用 PLP→PDP 抽出ロジックの実装
+    #   - 詳細は docs/spec/CR-ATELIER-002_MONCLER_PLP_PDP_EXTRACTION_FIX.md を参照
+    #
+    # 実装場所:
+    #   - extractor.py: extract_moncler_pdp_links() 関数として実装済み
+    #   - navigation_driver.py: NavigationDriver.collect_pdp_links() 内で呼び出し済み
+    #   - moncler_plp_v1.py: Moncler専用セレクタを定義・公開済み
+    #
+    # NavigationDriver.collect_pdp_links() 内での Moncler 分岐:
+    #   site_code = site_config.get("site_code") or site_config.get("site") or ""
+    #   if site_code == "MONCLER_OFFICIAL":
+    #       moncler_links = await extract_moncler_pdp_links(page, ctx, max_links=50)
+    #       if moncler_links:
+    #           return moncler_links
+    #       else:
+    #           # 汎用ロジックへフォールバック
+    #
+    ==============================================================================
     """
     
     def __init__(

@@ -26,6 +26,352 @@ PRODUCT_URL_ALLOW_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# ==============================================================================
+# CR-ATELIER-002 Step 3: Moncler専用 PDP 抽出ロジック実装
+# ==============================================================================
+# CR-ATELIER-002 Step3:
+#   - Moncler 専用 PLP→PDP 抽出ロジックの実装
+#   - 詳細は docs/spec/CR-ATELIER-002_MONCLER_PLP_PDP_EXTRACTION_FIX.md を参照
+# ==============================================================================
+
+from urllib.parse import urlparse, urljoin
+from typing import Optional, Dict, List, Any
+from app.agents.plugins.moncler_plp_v1 import (
+    MONCLER_PLP_CONTAINER_SELECTORS,
+    MONCLER_PLP_TILE_SELECTORS,
+    MONCLER_PLP_PDP_LINK_SELECTORS,
+)
+
+logger_extractor = logging.getLogger(__name__)
+
+
+async def extract_moncler_pdp_links(
+    page: Page,
+    ctx: Any,
+    *,
+    max_links: int = 50,
+) -> List[str]:
+    """
+    CR-ATELIER-002 Step 3:
+    MONCLER_OFFICIAL 専用の PLP→PDP 抽出ヘルパー。
+    
+    - DOM 構造は CR-ATELIER-002 Step3 の Spec / moncler_plp_v1.py のコメントに基づく。
+    - PLP コンテナを特定し、コンテナ内の tile を query して、tile 内の <a href> から '/products/' を含む URL を収集
+    - URL を正規化 / 重複排除 / バリデーション
+    - CR-ATELIER-002 Step 3-3: raw_hrefs を収集し、reject_reason を集計、accepted==0 の場合 Telemetry に保存
+    
+    Args:
+        page: Playwright Page オブジェクト
+        ctx: NavigationContext または RunContext を含むコンテキスト
+        max_links: 最大抽出リンク数
+    
+    Returns:
+        List[str]: 有効な PDP URL のリスト
+    """
+    urls: List[str] = []
+    target_url = page.url
+    
+    # site_config を取得（NavigationContext または dict から）
+    site_config = {}
+    run_context = None
+    if hasattr(ctx, "site_config"):
+        site_config = ctx.site_config or {}
+        run_context = getattr(ctx, "run_context", None)
+    elif isinstance(ctx, dict):
+        site_config = ctx.get("site_config", {})
+        run_context = ctx.get("run_context")
+    
+    logger_extractor.info(f"[PLP→PDP][Moncler] Starting extraction from URL: {target_url}")
+    
+    # CR-ATELIER-002 Step 3-3: raw_hrefs を収集
+    raw_hrefs: List[str] = []
+    rejection_stats: Dict[str, int] = {
+        "no_href": 0,
+        "url_normalization_failed": 0,
+        "external_domain": 0,
+        "blocked_domain": 0,
+        "no_en_int_path": 0,
+        "no_products_path": 0,
+        "trap_pattern": 0,
+        "other": 0,
+    }
+    
+    # 1) PLP コンテナを特定（オプション、ログ用）
+    container_found = False
+    for container_sel in MONCLER_PLP_CONTAINER_SELECTORS:
+        try:
+            container = await page.query_selector(container_sel)
+            if container:
+                container_found = True
+                logger_extractor.debug(f"[PLP→PDP][Moncler] Found container: {container_sel}")
+                break
+        except Exception:
+            continue
+    
+    # 2) コンテナ内の tile を query（直接リンクセレクタを使用）
+    raw_elements_count = 0
+    for link_sel in MONCLER_PLP_PDP_LINK_SELECTORS:
+        try:
+            nodes = await page.query_selector_all(link_sel)
+            if not nodes:
+                continue
+            
+            raw_elements_count += len(nodes)
+            matched_count = 0
+            rejected_count = 0
+            
+            for node in nodes:
+                # href を取得
+                href = (
+                    await node.get_attribute("href") or
+                    await node.get_attribute("data-href") or
+                    await node.get_attribute("data-product-url") or
+                    await node.get_attribute("data-url")
+                )
+                
+                if not href:
+                    rejection_stats["no_href"] += 1
+                    rejected_count += 1
+                    continue
+                
+                # raw_hrefs に追加
+                raw_hrefs.append(href)
+                
+                # 相対 URL は page.url から絶対 URL に変換
+                try:
+                    norm_url = urljoin(target_url, href)
+                except Exception:
+                    rejection_stats["url_normalization_failed"] += 1
+                    rejected_count += 1
+                    continue
+                
+                # URL のフィルタリングとreject理由の集計
+                reject_reason = _get_moncler_rejection_reason(norm_url, target_url)
+                if reject_reason:
+                    rejection_stats[reject_reason] = rejection_stats.get(reject_reason, 0) + 1
+                    rejected_count += 1
+                    continue
+                
+                urls.append(norm_url)
+                matched_count += 1
+            
+            if matched_count > 0:
+                logger_extractor.info(
+                    f"[PLP→PDP][Moncler] selector='{link_sel}' added {matched_count} links "
+                    f"(rejected {rejected_count})"
+                )
+        except Exception as e:
+            logger_extractor.debug(f"[PLP→PDP][Moncler] selector='{link_sel}' failed: {e}")
+    
+    # 3) 重複排除
+    urls = list(dict.fromkeys(urls))
+    
+    # 4) max_links までに制限
+    if len(urls) > max_links:
+        urls = urls[:max_links]
+    
+    # CR-ATELIER-002 Step 3-3: ログ出力とTelemetry保存
+    logger_extractor.info(
+        f"[PLP→PDP][Moncler] Extraction summary: raw={len(raw_hrefs)}, "
+        f"origin_rejected={rejection_stats.get('external_domain', 0) + rejection_stats.get('blocked_domain', 0)}, "
+        f"locale_rejected={rejection_stats.get('no_en_int_path', 0)}, "
+        f"path_rejected={rejection_stats.get('no_products_path', 0)}, "
+        f"accepted={len(urls)}"
+    )
+    
+    # accepted==0 の場合、Telemetry に保存
+    if not urls and run_context:
+        try:
+            from app.agents.browser.telemetry import TelemetryContext, TelemetryClient
+            # TelemetryClient を取得（ctx から、または新規作成）
+            telemetry = None
+            if hasattr(ctx, "telemetry"):
+                telemetry = ctx.telemetry
+            elif hasattr(ctx, "run_context") and hasattr(ctx.run_context, "telemetry"):
+                telemetry = ctx.run_context.telemetry
+            
+            if telemetry:
+                tctx = TelemetryContext(
+                    site=site_config.get("site_code") or site_config.get("site") or "MONCLER_OFFICIAL",
+                    query=getattr(ctx, "query", None) or "",
+                    run_id=getattr(run_context, "run_id", None),
+                    stage="plp"
+                )
+                await telemetry.save_json(
+                    "moncler_pdp_extraction_debug",
+                    {
+                        "raw_hrefs": raw_hrefs[:50],  # 最大50件
+                        "rejection_stats": rejection_stats,
+                        "url": target_url,
+                        "raw_elements_count": raw_elements_count,
+                    },
+                    tctx,
+                )
+                logger_extractor.warning(
+                    "[PLP→PDP][Moncler] No valid PDP links found, debug data saved to Telemetry"
+                )
+        except Exception as e:
+            logger_extractor.debug(f"[PLP→PDP][Moncler] Failed to save Telemetry: {e}")
+    
+    logger_extractor.info(
+        f"[PLP→PDP][Moncler] Collected {len(urls)} PDP links "
+        f"(from {raw_elements_count} raw elements)"
+    )
+    
+    return urls
+
+
+def _get_moncler_rejection_reason(url: str, base_url: str) -> Optional[str]:
+    """
+    CR-ATELIER-002 Step 3-3: Moncler URLバリデーションでrejectされた理由を取得
+    
+    Args:
+        url: 検証対象のURL
+        base_url: ベースURL
+        
+    Returns:
+        Optional[str]: reject理由（有効な場合はNone）
+    """
+    try:
+        parsed = urlparse(url)
+        
+        # スキームチェック
+        if parsed.scheme not in ("http", "https"):
+            return "other"
+        
+        # ホストチェック（Moncler本体のドメインのみ）
+        host = parsed.netloc.lower()
+        if not host.endswith("moncler.com"):
+            return "external_domain"
+        
+        # 外部ドメインの明示的な除外
+        blocked_domains = [
+            "onetrust.com",
+            "monclergroup.com",
+            "facebook.com",
+            "twitter.com",
+            "instagram.com",
+            "pinterest.com",
+        ]
+        for blocked in blocked_domains:
+            if blocked in host:
+                return "blocked_domain"
+        
+        # パスチェック
+        path = parsed.path or ""
+        
+        # ロケールパスが /en-int/ で始まること（/en-lt/, /en-de/, /en-jp/ は除外）
+        if not path.startswith("/en-int/"):
+            return "no_en_int_path"
+        
+        # path に /products/ を含むこと
+        if "/products/" not in path and "/product/" not in path:
+            return "no_products_path"
+        
+        # trap ページパターンの除外
+        trap_patterns = [
+            "/404",
+            "/not-found",
+            "/search",
+            "/legal/",
+            "/client-service",
+            "/collections/",
+            "/seasons/",
+            "/login",
+            "/cart",
+            "/wishlist",
+        ]
+        for trap_pattern in trap_patterns:
+            if trap_pattern in path.lower():
+                return "trap_pattern"
+        
+        return None  # 有効なURL
+    except Exception:
+        return "other"
+
+
+def _is_valid_moncler_pdp_url(url: str, base_url: str) -> bool:
+    """
+    CR-ATELIER-002 Step 3: Moncler専用のURLバリデーション
+    
+    Accept 条件（Moncler用）:
+    - origin: https://www.moncler.com
+    - path: /en-int/ で始まる（trap 判定と競合しない範囲で）
+    - path に /products/ を含む
+    
+    Reject 条件:
+    - onetrust.com などの外部ドメイン
+    - .../search や 404 など trap ページパターン（必要な範囲で）
+    
+    Args:
+        url: 検証対象のURL
+        base_url: ベースURL（同一オリジン判定用）
+    
+    Returns:
+        bool: 有効なMoncler PDP URLの場合True
+    """
+    try:
+        parsed = urlparse(url)
+        
+        # スキームチェック
+        if parsed.scheme not in ("http", "https"):
+            return False
+        
+        # ホストチェック（Moncler本体のドメインのみ）
+        host = parsed.netloc.lower()
+        if not host.endswith("moncler.com"):
+            return False
+        
+        # 外部ドメインの明示的な除外
+        blocked_domains = [
+            "onetrust.com",
+            "monclergroup.com",
+            "facebook.com",
+            "twitter.com",
+            "instagram.com",
+            "pinterest.com",
+        ]
+        for blocked in blocked_domains:
+            if blocked in host:
+                return False
+        
+        # パスチェック
+        path = parsed.path or ""
+        
+        # ロケールパスが /en-int/ で始まること（/en-lt/, /en-de/, /en-jp/ は除外）
+        if not path.startswith("/en-int/"):
+            return False
+        
+        # path に /products/ を含むこと
+        if "/products/" not in path and "/product/" not in path:
+            return False
+        
+        # trap ページパターンの除外
+        trap_patterns = [
+            "/404",
+            "/not-found",
+            "/search",
+            "/legal/",
+            "/client-service",
+            "/collections/",
+            "/seasons/",
+            "/login",
+            "/cart",
+            "/wishlist",
+        ]
+        for trap_pattern in trap_patterns:
+            if trap_pattern in path.lower():
+                return False
+        
+        # クエリパラメータのチェック（shipToCountry=GB が推奨されるが、必須ではない）
+        # ここではチェックしない（URLバリデーションの範囲外）
+        
+        return True
+    except Exception:
+        return False
+
+# ==============================================================================
+
 PRICE_SELECTORS = [
     "meta[property='product:price:amount']",
     "meta[itemprop='price']",

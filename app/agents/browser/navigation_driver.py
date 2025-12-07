@@ -32,7 +32,11 @@ if TYPE_CHECKING:
 
 # Stage 3A-2-1: extractor モジュールから looks_like_product_url を import
 try:
-    from app.agents.browser.extractor import looks_like_product_url, VISIBLE_PRICE_SELECTORS
+    from app.agents.browser.extractor import (
+        looks_like_product_url,
+        VISIBLE_PRICE_SELECTORS,
+        extract_moncler_pdp_links,
+    )
 except ImportError:
     # フォールバック: モジュールが見つからない場合の処理
     def looks_like_product_url(url: str) -> bool:
@@ -44,6 +48,16 @@ logger = logging.getLogger(__name__)
 
 # Stage 3A-2-2: ロケールセグメント判定用の正規表現
 _LOCALE_SEG_RE = re.compile(r"^[a-z]{2}-[a-z]{2}$", re.IGNORECASE)
+
+# CR-ATELIER-002 Step 1: Trap ページ検出用の例外クラス
+class TrapPageDetected(Exception):
+    """PLP ではなく trap ページ（404 / location gate / 想定外ロケール）が検出されたことを示す例外"""
+    def __init__(self, trap_type: str, reason: str, url: str):
+        self.trap_type = trap_type  # "404", "location_gate", "unexpected_locale_search"
+        self.reason = reason
+        self.url = url
+        message = f"Trap page detected: {trap_type} - {reason} (URL: {url})"
+        super().__init__(message)
 
 # Stage 3A-2-1: ヘルパー関数（BrowserUseAgent から移植）
 def is_same_origin(url: str, base: str) -> bool:
@@ -171,6 +185,14 @@ class NavigationDriver:
                     recovered = await self.recover_plp(ctx)
                     outcome.recovered = recovered
                     
+                    # CR-ATELIER-002 Step 2: Recovery 後のロケールチェック
+                    # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
+                    if recovered:
+                        try:
+                            await self._ensure_expected_locale(ctx)
+                        except Exception as e:
+                            logger.warning(f"[NavigationDriver] Locale Guard after recovery failed: {e}", exc_info=True)
+                    
                     if recovered:
                         # 回復後に再度 trap 判定
                         # Stage 3A-2-5: trap_check_fn が内部メソッドの場合は site_config を渡す
@@ -195,6 +217,15 @@ class NavigationDriver:
             except Exception as e:
                 # その他のエラーはログに記録して続行
                 logger.debug("[NavigationDriver] trap_checker/recover failed: %s", e)
+        
+        # --- CR-ATELIER-002 Step 2: Locale Guard - ロケール一貫性チェックと自動修正 ---
+        # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
+        # 初回PLPナビゲーション直後（home_urlからPLPへ飛んだ直後）にロケールチェック
+        try:
+            await self._ensure_expected_locale(ctx)
+        except Exception as e:
+            logger.warning(f"[NavigationDriver] Locale Guard failed: {e}", exc_info=True)
+            # Locale Guard は失敗しても続行（Guard なので壊さない）
         
         # --- Stage 3A-2-2: ensure_plp_materialized を呼び出し ---
         materialized = False
@@ -271,6 +302,13 @@ class NavigationDriver:
                         logger.warning("[NavigationDriver] trap-like url after materialize: %s", self.page.url)
                         recovered = await self.recover_plp(ctx)
                         outcome.recovered = recovered
+                        # CR-ATELIER-002 Step 2: Recovery 後のロケールチェック
+                        # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
+                        if recovered:
+                            try:
+                                await self._ensure_expected_locale(ctx)
+                            except Exception as e:
+                                logger.warning(f"[NavigationDriver] Locale Guard after recovery (post-materialize) failed: {e}", exc_info=True)
                         if recovered:
                             if trap_check_fn(self.page.url):
                                 raise ValueError(
@@ -291,6 +329,35 @@ class NavigationDriver:
                 raise
             except Exception as e:
                 logger.debug("[NavigationDriver] post-materialize trap check failed: %s", e)
+        
+        # --- CR-ATELIER-002 Step 1: Trap ページ検出（DOM ベース） ---
+        trap_info = await self._detect_trap_page(ctx)
+        if trap_info is not None:
+            # Telemetry に現在の PLP 状態を記録
+            if self.telemetry:
+                try:
+                    logger.warning(
+                        f"[TrapDetector] Trap page detected: type={trap_info['type']}, "
+                        f"reason={trap_info['reason']}, URL={self.page.url}"
+                    )
+                    await self.telemetry.record_plp_state(
+                        self.page,
+                        name="plp_trap_page",
+                        selectors=None,
+                        site_config=ctx.site_config,
+                    )
+                    logger.info("[TrapDetector] Saved trap page DOM snapshot to Telemetry")
+                except Exception as e:
+                    logger.warning(f"[TrapDetector] Failed to record trap-page PLP state: {e}", exc_info=True)
+            else:
+                logger.warning("[TrapDetector] Telemetry not available, skipping trap page recording")
+            
+            # 専用例外を投げる（上位の Self-Healing ロジックで扱えるようにする）
+            raise TrapPageDetected(
+                trap_type=trap_info["type"],
+                reason=trap_info["reason"],
+                url=self.page.url,
+            )
         
         # --- Stage 3A-2-4: PDP リンク収集と fallback ロジック ---
         pdp_links: List[str] = []
@@ -322,6 +389,12 @@ class NavigationDriver:
                 if did_search:
                     outcome.fallback_used = "header_search"
                     logger.info("[NavigationDriver] Header search fallback succeeded, collecting PDP links again...")
+                    # CR-ATELIER-002 Step 2: Header search fallback 後のロケールチェック
+                    # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
+                    try:
+                        await self._ensure_expected_locale(ctx)
+                    except Exception as e:
+                        logger.warning(f"[NavigationDriver] Locale Guard after header search failed: {e}", exc_info=True)
                     try:
                         pdp_links = await self.collect_pdp_links(ctx)
                         outcome.pdp_links = pdp_links
@@ -371,6 +444,11 @@ class NavigationDriver:
         Phase 2: Deep Extraction Fallback (only if Phase 1 failed)
         Phase 3: Noise Filtering & Saving
         
+        CR-ATELIER-002 Step 3: Moncler専用のPDP抽出ロジックを追加
+        # CR-ATELIER-002 Step3:
+        #   - Moncler 専用 PLP→PDP 抽出ロジックの実装
+        #   - 詳細は docs/spec/CR-ATELIER-002_MONCLER_PLP_PDP_EXTRACTION_FIX.md を参照
+        
         Args:
             ctx: ナビゲーションコンテキスト
             
@@ -383,6 +461,25 @@ class NavigationDriver:
         run_context = ctx.run_context
         target_url = page.url
         found_links: Set[str] = set()
+        
+        # CR-ATELIER-002 Step 3: Moncler専用のPDP抽出ロジック
+        site_code = site_config.get("site_code") or site_config.get("site") or ""
+        if site_code == "MONCLER_OFFICIAL":
+            try:
+                moncler_links = await extract_moncler_pdp_links(page, ctx, max_links=50)
+                if moncler_links:
+                    logger.info(
+                        f"[PLP→PDP][Moncler] collected {len(moncler_links)} PDP links via moncler-specific extractor"
+                    )
+                    return moncler_links
+                else:
+                    logger.warning(
+                        "[PLP→PDP][Moncler] moncler-specific extractor found 0 links, falling back to generic flow"
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"[PLP→PDP][Moncler] moncler-specific extractor failed: {e}, falling back to generic flow"
+                )
 
         # Phase 1a: Global <a href> sweep + Regex Filter
         try:
@@ -563,6 +660,305 @@ class NavigationDriver:
             pass
         return cleaned
 
+    async def _collect_moncler_pdp_links(self, ctx: NavigationContext) -> Set[str]:
+        """
+        CR-ATELIER-002 Step 3: Moncler専用のPDP抽出ロジック
+        
+        Monclerの実際のDOM構造に合わせたセレクタを使用してPDPリンクを抽出する。
+        - /products/ パターンを含むURLを優先
+        - 外部ドメイン（onetrust.com等）を明示的に除外
+        - Moncler本体のドメイン（moncler.com）のみを対象とする
+        
+        Args:
+            ctx: ナビゲーションコンテキスト
+            
+        Returns:
+            Set[str]: 抽出されたPDPリンクのセット
+        """
+        page = self.page
+        site_config = ctx.site_config
+        target_url = page.url
+        found_links: Set[str] = set()
+        
+        # Moncler専用のセレクタ（/products/ パターンを含む）
+        moncler_selectors = [
+            # ProductCardコンポーネント内のリンク
+            "article[data-component*='ProductCard'] a[href*='/products/']",
+            "article[data-component*='ProductCard'] a[href*='/product/']",
+            "[data-component*='ProductCard'] a[href*='/products/']",
+            "[data-component*='ProductCard'] a[href*='/product/']",
+            # data-testidベースのセレクタ
+            "[data-testid*='product-card'] a[href*='/products/']",
+            "[data-testid*='product-tile'] a[href*='/products/']",
+            "[data-test*='product-card'] a[href*='/products/']",
+            # classベースのセレクタ
+            ".product-card a[href*='/products/']",
+            ".c-product-card a[href*='/products/']",
+            ".product-tile a[href*='/products/']",
+            ".c-product-tile a[href*='/products/']",
+            # 汎用セレクタ（/products/ を含む）
+            "a[href*='/en-int/products/']",
+            "a[href*='/products/']",
+            # data-qaベース
+            "[data-qa='product-tile'] a[href*='/products/']",
+            "[data-qa*='product'] a[href*='/products/']",
+        ]
+        
+        logger.info(f"[PLP→PDP][Moncler] Starting Moncler-specific PDP extraction from URL: {target_url}")
+        
+        # Phase 1: Moncler専用セレクタで抽出
+        for sel in moncler_selectors:
+            try:
+                nodes = await page.query_selector_all(sel)
+                if not nodes:
+                    continue
+                matched_count = 0
+                rejected_count = 0
+                rejection_reasons = []
+                
+                for n in nodes:
+                    href = (
+                        await n.get_attribute("href") or 
+                        await n.get_attribute("data-href") or 
+                        await n.get_attribute("data-product-url") or 
+                        await n.get_attribute("data-url")
+                    )
+                    if not href:
+                        rejected_count += 1
+                        if rejected_count == 1:
+                            rejection_reasons.append("no href attribute")
+                        continue
+                    
+                    # URLを正規化
+                    norm_url = self._normalize_abs_url(target_url, href)
+                    
+                    # Moncler専用のURLバリデーション
+                    if not self._is_valid_moncler_pdp_url(norm_url, target_url):
+                        rejected_count += 1
+                        if rejected_count == 1:
+                            reason = self._get_moncler_rejection_reason(norm_url, target_url)
+                            rejection_reasons.append(f"{reason}: {norm_url}")
+                        continue
+                    
+                    found_links.add(norm_url)
+                    matched_count += 1
+                
+                if matched_count > 0:
+                    logger.info(f"[PLP→PDP][Moncler] selector='{sel}' added {matched_count} links")
+                elif nodes and rejected_count > 0:
+                    logger.debug(
+                        f"[PLP→PDP][Moncler] selector='{sel}' found {len(nodes)} elements, "
+                        f"but {rejected_count} were rejected. "
+                        f"Reasons: {', '.join(rejection_reasons[:2])}"
+                    )
+            except Exception as e:
+                logger.debug(f"[PLP→PDP][Moncler] selector='{sel}' failed: {e}")
+        
+        # Phase 2: グローバルsweep（Moncler専用フィルタリング）
+        if not found_links:
+            logger.debug("[PLP→PDP][Moncler] Selector-based extraction found no links, trying global sweep...")
+            try:
+                raw_hrefs: List[str] = await page.evaluate(
+                    "() => Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(Boolean)"
+                )
+                pdp_rx = re.compile(r"/products?/", re.I)
+                for href in raw_hrefs:
+                    if pdp_rx.search(href):
+                        norm_url = self._normalize_abs_url(target_url, href)
+                        if self._is_valid_moncler_pdp_url(norm_url, target_url):
+                            found_links.add(norm_url)
+                if found_links:
+                    logger.info(f"[PLP→PDP][Moncler] Global sweep found {len(found_links)} links")
+            except Exception as e:
+                logger.warning(f"[PLP→PDP][Moncler] Global sweep failed: {e}")
+        
+        # デバッグ用ログ
+        if found_links:
+            sample_urls = list(found_links)[:5]
+            logger.debug(f"[PLP→PDP][Moncler] Sample PDP URLs: {sample_urls}")
+        else:
+            logger.warning(f"[PLP→PDP][Moncler] No valid PDP links found after Moncler-specific extraction")
+        
+        return found_links
+    
+    def _is_valid_moncler_pdp_url(self, url: str, base_url: str) -> bool:
+        """
+        CR-ATELIER-002 Step 3: Moncler専用のURLバリデーション
+        
+        MonclerのPDP URLとして有効かどうかを判定する。
+        
+        Args:
+            url: 検証対象のURL
+            base_url: ベースURL（同一オリジン判定用）
+            
+        Returns:
+            bool: 有効なMoncler PDP URLの場合True
+        """
+        try:
+            parsed = urlparse(url)
+            
+            # スキームチェック
+            if parsed.scheme not in ("http", "https"):
+                return False
+            
+            # ホストチェック（Moncler本体のドメインのみ）
+            host = parsed.netloc.lower()
+            if not host.endswith("moncler.com"):
+                return False
+            
+            # 外部ドメインの明示的な除外（onetrust.com等）
+            blocked_domains = [
+                "onetrust.com",
+                "monclergroup.com",
+                "facebook.com",
+                "twitter.com",
+                "instagram.com",
+                "pinterest.com",
+            ]
+            for blocked in blocked_domains:
+                if blocked in host:
+                    return False
+            
+            # パスチェック（/products/ または /product/ を含む）
+            path = parsed.path or ""
+            if not re.search(r"/products?/", path, re.I):
+                return False
+            
+            # 404やtrapページのパターンを除外
+            trap_patterns = [
+                r"/404",
+                r"/not-found",
+                r"/search\?",
+                r"/legal/",
+                r"/client-service",
+            ]
+            for pattern in trap_patterns:
+                if re.search(pattern, path, re.I):
+                    return False
+            
+            # 同一オリジン判定
+            if not is_same_origin(url, base_url):
+                return False
+            
+            # looks_like_product_url のチェックも実行
+            if not looks_like_product_url(url):
+                return False
+            
+            return True
+        except Exception as e:
+            logger.debug(f"[PLP→PDP][Moncler] URL validation failed for {url}: {e}")
+            return False
+    
+    def _get_moncler_rejection_reason(self, url: str, base_url: str) -> str:
+        """
+        Moncler URLバリデーションでrejectされた理由を取得
+        
+        Args:
+            url: 検証対象のURL
+            base_url: ベースURL
+            
+        Returns:
+            str: reject理由
+        """
+        try:
+            parsed = urlparse(url)
+            host = parsed.netloc.lower()
+            path = parsed.path or ""
+            
+            # ホストチェック
+            if not host.endswith("moncler.com"):
+                return "external_domain"
+            
+            # ブロックドメイン
+            if "onetrust.com" in host:
+                return "blocked_domain_onetrust"
+            if "monclergroup.com" in host:
+                return "blocked_domain_monclergroup"
+            
+            # パスチェック
+            if not re.search(r"/products?/", path, re.I):
+                return "no_products_path"
+            
+            # 同一オリジン
+            if not is_same_origin(url, base_url):
+                return "different_origin"
+            
+            # looks_like_product_url
+            if not looks_like_product_url(url):
+                return "not_product_url_pattern"
+            
+            return "unknown"
+        except Exception:
+            return "validation_error"
+
+    # ==============================================================================
+    # CR-ATELIER-002 Step 3: Moncler専用 PDP 抽出ロジック設計案（実装済み）
+    # ==============================================================================
+    #
+    # 【実装済みのMoncler専用ロジック】
+    #
+    # NavigationDriver.collect_pdp_links() 内で、MONCLER_OFFICIAL の場合に
+    # _collect_moncler_pdp_links() を優先的に呼び出す分岐が実装済み。
+    #
+    # 分岐案（実装済み）:
+    # ```python
+    # site_code = site_config.get("site_code") or site_config.get("site") or ""
+    # if site_code == "MONCLER_OFFICIAL":
+    #     moncler_links = await self._collect_moncler_pdp_links(ctx)
+    #     if moncler_links:
+    #         # Moncler専用ロジックで見つかった場合は、それを返す
+    #         return cleaned_moncler_links
+    # # フォールバック: 汎用ロジック
+    # ```
+    #
+    # 【Moncler専用抽出ロジックの実装済み機能】
+    # - _collect_moncler_pdp_links(): Moncler専用セレクタで抽出
+    # - _is_valid_moncler_pdp_url(): Moncler専用URLバリデーション
+    # - _get_moncler_rejection_reason(): reject理由の取得（デバッグ用）
+    #
+    # 【改善案: ログ・Telemetryの強化】
+    # 以下の情報をログ／Telemetryに残す案:
+    #
+    # 1. Moncler専用抽出を試したかどうか
+    #    logger.info("[PLP→PDP][Moncler] Using moncler-specific extractor...")
+    #
+    # 2. 抽出候補として拾ったhrefの一覧（上限10件程度）
+    #    logger.debug("[PLP→PDP][Moncler] Raw hrefs (first 10): %s", raw_hrefs[:10])
+    #
+    # 3. 何件が「origin mismatch」でrejectされ、何件が「locale mismatch」でrejectされたか
+    #    logger.warning(
+    #        "[PLP→PDP][Moncler] Extraction summary: raw=%d, origin_rejected=%d, "
+    #        "locale_rejected=%d, path_rejected=%d, accepted=%d",
+    #        len(raw_hrefs), origin_rejected, locale_rejected, path_rejected, len(accepted_hrefs),
+    #    )
+    #
+    # 4. accepted==0の場合、raw_hrefsをTelemetry JSONにダンプ
+    #    # TODO (CR-ATELIER-002): When accepted==0, dump raw_hrefs to Telemetry JSON
+    #    # for offline analysis.
+    #    if not accepted_hrefs and self.telemetry and ctx.run_context:
+    #        from app.agents.browser.telemetry import TelemetryContext
+    #        tctx = TelemetryContext(
+    #            site=ctx.site,
+    #            query=ctx.query,
+    #            run_id=getattr(ctx.run_context, "run_id", None),
+    #            stage="plp"
+    #        )
+    #        await self.telemetry.save_json(
+    #            "moncler_pdp_extraction_debug",
+    #            {
+    #                "raw_hrefs": raw_hrefs[:50],
+    #                "rejection_stats": {
+    #                    "origin_mismatch": origin_rejected,
+    #                    "locale_mismatch": locale_rejected,
+    #                    "path_mismatch": path_rejected,
+    #                },
+    #                "url": page.url,
+    #            },
+    #            tctx,
+    #        )
+    #
+    # ==============================================================================
+
     async def run_deep_extraction(
         self,
         page: Page,
@@ -609,6 +1005,296 @@ class NavigationDriver:
         except Exception as e:
             logger.debug(f"[recover_plp] Recovery failed: {e}")
         return False
+
+    async def _detect_trap_page(self, ctx: NavigationContext) -> Optional[Dict[str, str]]:
+        """
+        CR-ATELIER-002 Step 1: Trap ページ検出（DOM ベース）
+        
+        PLP ではない状態（404 / location gate / 想定外ロケール＋検索ページ）を検出する。
+        
+        Args:
+            ctx: ナビゲーションコンテキスト
+            
+        Returns:
+            trap を検出した場合は dict（type, reason を含む）、検出されなければ None
+        """
+        page = self.page
+        site_config = ctx.site_config
+        current_url = page.url or ""
+        
+        try:
+            # 1. 404 ページの検出
+            # h1 要素に "It's not here" が含まれるかチェック
+            try:
+                h1_text = await page.locator("h1").first.inner_text(timeout=2000)
+                if h1_text and "It's not here" in h1_text:
+                    return {
+                        "type": "404",
+                        "reason": f"h1 contains 'It's not here': {h1_text[:50]}",
+                    }
+            except Exception:
+                pass
+            
+            # URL パターンに `/404` や `not-found` が含まれるかチェック
+            url_lower = current_url.lower()
+            if "/404" in url_lower or "not-found" in url_lower:
+                return {
+                    "type": "404",
+                    "reason": f"URL contains /404 or not-found: {current_url}",
+                }
+            
+            # 2. Location gate の検出
+            # 本文に "Select your location" が含まれるかチェック
+            try:
+                body_text = await page.locator("body").first.inner_text(timeout=2000)
+                if body_text and "Select your location" in body_text:
+                    # product リスト（商品カード）が存在しないかチェック
+                    # Moncler の product card セレクタを確認
+                    plp_cfg = (site_config.get("selectors", {}) or {}).get("plp", {}) or {}
+                    pdp_cfg = (site_config.get("selectors", {}) or {}).get("pdp", {}) or {}
+                    
+                    # 商品カードのセレクタ候補
+                    product_selectors = [
+                        "[data-component='ProductCard']",
+                        "[data-testid*='product']",
+                        "article[data-product-id]",
+                        ".product-card",
+                        ".c-product-card",
+                        "a[href*='/products/']",
+                    ]
+                    # site_config からも取得
+                    product_selectors.extend(
+                        (plp_cfg.get("tile_selectors", []) or []) +
+                        (pdp_cfg.get("pdp_link_selectors", []) or [])
+                    )
+                    
+                    product_found = False
+                    for sel in product_selectors[:5]:  # 最初の5つだけチェック（パフォーマンス）
+                        try:
+                            count = await page.locator(sel).count()
+                            if count > 0:
+                                product_found = True
+                                break
+                        except Exception:
+                            continue
+                    
+                    if not product_found:
+                        return {
+                            "type": "location_gate",
+                            "reason": "Contains 'Select your location' but no product cards found",
+                        }
+            except Exception:
+                pass
+            
+            # 3. 想定外ロケール＋検索ページの検出
+            # URL パスに `/en-lt/` や `/en-de/` など、`/en-int/` 以外のロケールが含まれるかチェック
+            # かつ URL パスに `/search` が含まれるかチェック
+            locale_cfg = (site_config.get("locale", {}) or {})
+            prefer_locale = locale_cfg.get("prefer", "en-int")
+            target_locale_path = f"/{prefer_locale}/"
+            
+            # 想定外ロケールパターン（/en-int/ 以外のロケールセグメント）
+            unexpected_locale_patterns = [
+                "/en-lt/",
+                "/en-de/",
+                "/en-fr/",
+                "/en-jp/",
+                "/en-us/",
+            ]
+            
+            # URL に想定外ロケールが含まれ、かつ /search が含まれる場合
+            if "/search" in url_lower:
+                for pattern in unexpected_locale_patterns:
+                    if pattern in url_lower and target_locale_path not in url_lower:
+                        return {
+                            "type": "unexpected_locale_search",
+                            "reason": f"URL contains unexpected locale '{pattern}' and '/search': {current_url}",
+                        }
+            
+            # 二重ロケールパターン（例: /en-lt/en-int/search）
+            if target_locale_path in url_lower and "/search" in url_lower:
+                # 二重ロケールが含まれているかチェック
+                for pattern in unexpected_locale_patterns:
+                    if pattern in url_lower:
+                        return {
+                            "type": "unexpected_locale_search",
+                            "reason": f"URL contains double locale pattern '{pattern}' and '/search': {current_url}",
+                        }
+            
+            return None
+            
+        except Exception as e:
+            logger.debug(f"[TrapDetector] Error during trap page detection: {e}", exc_info=True)
+            return None
+
+    async def _ensure_expected_locale(self, ctx: NavigationContext) -> None:
+        """
+        CR-ATELIER-002 Step 2: Locale Guard - ロケール一貫性チェックと自動修正
+        
+        URLパスが `/en-int/` から始まり、クエリに `shipToCountry=GB` が含まれていることを確認し、
+        満たされていない場合は正しいURLに再ナビゲートする。
+        
+        Args:
+            ctx: ナビゲーションコンテキスト
+        """
+        page = self.page
+        site_config = ctx.site_config
+        current_url = page.url or ""
+        
+        # MONCLER_OFFICIAL のみを対象とする
+        site_code = site_config.get("site_code") or site_config.get("site") or ""
+        if site_code != "MONCLER_OFFICIAL":
+            return
+        
+        try:
+            from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+            
+            parsed = urlparse(current_url)
+            path = parsed.path or ""
+            query_params = parse_qs(parsed.query)
+            
+            # 期待値のチェック
+            expected_locale_path = "/en-int/"
+            expected_country = "GB"
+            
+            # パスが `/en-int/` から始まっているかチェック
+            path_ok = path.lower().startswith(expected_locale_path.lower())
+            
+            # クエリに `shipToCountry=GB` が含まれているかチェック
+            ship_to_country = query_params.get("shipToCountry", [])
+            country_ok = expected_country in ship_to_country if ship_to_country else False
+            
+            # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
+            # 両方満たされている場合は何もしないが、INFOログを必ず出す
+            if path_ok and country_ok:
+                logger.info(f"[LocaleGuard] Checked locale, no change: {current_url}")
+                return
+            
+            # ロケールがずれている場合、修正を試みる
+            logger.warning(
+                f"[LocaleGuard] Locale mismatch detected: path_ok={path_ok}, country_ok={country_ok}, "
+                f"URL={current_url}"
+            )
+            
+            # 正しいPLP URLを取得
+            # MonclerPLPStrategy の _HARD_PLP_URL を優先、なければ site_config から取得
+            corrected_url = None
+            
+            # StrategyPlugin から取得を試みる
+            if self.strategy and hasattr(self.strategy, "_HARD_PLP_URL"):
+                corrected_url = self.strategy._HARD_PLP_URL
+                logger.debug(f"[LocaleGuard] Using strategy _HARD_PLP_URL: {corrected_url}")
+            
+            # site_config から取得
+            if not corrected_url:
+                # plp_recovery の plp_hard_nav を確認
+                nav_cfg = (site_config.get("navigation", {}) or {})
+                plp_recovery_cfg = nav_cfg.get("plp_recovery", {}) or {}
+                corrected_url = (
+                    plp_recovery_cfg.get("plp_hard_nav") or
+                    site_config.get("seed_plp_url") or
+                    site_config.get("fallback_url") or
+                    (site_config.get("discovery_settings", {}) or {}).get("fallback_url") or
+                    site_config.get("home_url")
+                )
+            
+            # それでも取得できない場合は、現在のURLを修正
+            if not corrected_url:
+                # 現在のURLを修正して `/en-int/` と `shipToCountry=GB` を付与
+                # パスを正規化
+                if not path.lower().startswith(expected_locale_path.lower()):
+                    # 既存のロケールセグメントを削除して `/en-int/` を追加
+                    path_parts = [p for p in path.split("/") if p]
+                    # ロケールセグメントをスキップ
+                    while path_parts and _LOCALE_SEG_RE.match(path_parts[0] or ""):
+                        path_parts.pop(0)
+                    # `/en-int/` を先頭に追加
+                    normalized_path = f"/{expected_locale_path.strip('/')}/" + "/".join(path_parts)
+                    if not normalized_path.endswith("/") and normalized_path != "/":
+                        normalized_path += "/"
+                else:
+                    normalized_path = path
+                
+                # クエリパラメータを修正
+                query_params["forceLocale"] = ["en-int"]
+                query_params["shipToCountry"] = [expected_country]
+                # 既存のクエリパラメータも保持
+                normalized_query = urlencode(query_params, doseq=True)
+                
+                corrected_url = urlunparse((
+                    parsed.scheme,
+                    parsed.netloc,
+                    normalized_path,
+                    parsed.params,
+                    normalized_query,
+                    parsed.fragment
+                ))
+                logger.debug(f"[LocaleGuard] Constructed corrected URL from current URL: {corrected_url}")
+            
+            # Location gate の簡易ハンドリングを試みる
+            # 「Select your location」モーダルが開いている場合、GB/ENを選択
+            try:
+                body_text = await page.locator("body").first.inner_text(timeout=2000)
+                if body_text and "Select your location" in body_text:
+                    logger.info("[LocaleGuard] Location gate detected, attempting to select GB/EN")
+                    
+                    # GB / United Kingdom / EN を選択するセレクタを試す
+                    location_selectors = [
+                        "button:has-text('United Kingdom')",
+                        "button:has-text('GB')",
+                        "a:has-text('United Kingdom')",
+                        "a:has-text('GB')",
+                        "[data-country='GB']",
+                        "[data-locale='en-int']",
+                        "button[aria-label*='United Kingdom']",
+                        "button[aria-label*='GB']",
+                    ]
+                    
+                    location_selected = False
+                    for sel in location_selectors:
+                        try:
+                            locator = page.locator(sel).first
+                            if await locator.count() > 0:
+                                await locator.click(timeout=3000)
+                                await page.wait_for_timeout(1000)  # モーダルが閉じるのを待つ
+                                location_selected = True
+                                logger.info(f"[LocaleGuard] Selected location using selector: {sel}")
+                                break
+                        except Exception:
+                            continue
+                    
+                    if location_selected:
+                        # 選択後にURLが正しくなったか確認
+                        await page.wait_for_timeout(500)
+                        current_url_after = page.url or ""
+                        parsed_after = urlparse(current_url_after)
+                        path_after = parsed_after.path or ""
+                        query_after = parse_qs(parsed_after.query)
+                        ship_to_country_after = query_after.get("shipToCountry", [])
+                        
+                        if (path_after.lower().startswith(expected_locale_path.lower()) and
+                            expected_country in ship_to_country_after):
+                            logger.info(f"[LocaleGuard] Locale normalized via location gate: {current_url} -> {current_url_after}")
+                            return
+                        else:
+                            logger.warning(f"[LocaleGuard] Location gate selection did not fix locale, will navigate to corrected URL")
+            except Exception as e:
+                logger.debug(f"[LocaleGuard] Location gate handling failed: {e}")
+            
+            # 正しいURLに再ナビゲート
+            if corrected_url and corrected_url != current_url:
+                logger.warning(f"[LocaleGuard] Locale normalized: {current_url} -> {corrected_url}")
+                try:
+                    await page.goto(corrected_url, wait_until="domcontentloaded", timeout=30000)
+                    await page.wait_for_timeout(1000)  # ページが安定するのを待つ
+                    logger.info(f"[LocaleGuard] Successfully navigated to corrected URL: {page.url}")
+                except Exception as e:
+                    logger.warning(f"[LocaleGuard] Failed to navigate to corrected URL: {e}", exc_info=True)
+            else:
+                logger.warning(f"[LocaleGuard] Could not determine corrected URL, skipping navigation")
+                
+        except Exception as e:
+            logger.warning(f"[LocaleGuard] Failed to normalize locale: {e}", exc_info=True)
 
     # --- 内部用の private メソッド（型だけ定義） ---
     # Stage 3A-1: これらのメソッドは、Stage 3A-2 で実装を移行します
@@ -1400,6 +2086,12 @@ class NavigationDriver:
                         if target_url:
                             await self._force_plp_recover(page, site_config, target_url)
                             await page.wait_for_timeout(800)
+                            # CR-ATELIER-002 Step 2: Locale redirect recovery 後のロケールチェック
+                            # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
+                            try:
+                                await self._ensure_expected_locale(ctx)
+                            except Exception as locale_e:
+                                logger.warning(f"[Materialize] Locale Guard after locale redirect recovery failed: {locale_e}", exc_info=True)
                             continue
 
             if run_ctx is not None and hasattr(run_ctx, "take_screenshot") and attempt < 3:
@@ -1470,6 +2162,12 @@ class NavigationDriver:
                         try:
                             await self._force_plp_recover(page, site_config, target_url)
                             await page.wait_for_timeout(500)
+                            # CR-ATELIER-002 Step 2: Recovery hop 後のロケールチェック
+                            # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
+                            try:
+                                await self._ensure_expected_locale(ctx)
+                            except Exception as locale_e:
+                                logger.warning(f"[Materialize] Locale Guard after recovery hop failed: {locale_e}", exc_info=True)
                             rec_count = await page.locator(tile_selector_str).count()
                             logger.info(f"[Materialize] After recovery hop, tiles={rec_count}")
                             if rec_count >= target_min_tiles:
