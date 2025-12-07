@@ -33,33 +33,51 @@ Modernize and extend this codebase into a "BUYMA Growth Hub / Multi-Agent Automa
 以下のディレクトリは、AIによる改善・リファクタリング・修正を **許可** します：
 
 ### `app/core/**` ✅
+
 - **説明:** ドメインロジックの中心（pricing, scraping, stock, selector など）
+
 - **編集方針:** リファクタリング・最適化・テスト追加を積極的に行う
+
 - **重要度:** 高（NexusCore連携の核となる部分）
 
 ### `app/agents/**` ✅
+
 - **説明:** NexusCore連携エージェント（browser, selector_discovery, profitability など）
+
 - **編集方針:** AIによる改善・修正を許可
+
 - **重要度:** 高（マルチエージェントシステムの中核）
 
 ### `app/extractors/**` ✅
+
 - **説明:** 商品情報抽出ロジック（moncler_extractor, product_info_extractor など）
+
 - **編集方針:** 変更頻度が高いため積極的な改善を許可
+
 - **重要度:** 中
 
 ### `docs/**` ✅
+
 - **説明:** ドキュメント（README, completion_reports, chat_records など）
+
 - **編集方針:** ドキュメント追加・更新は常に許可
+
 - **重要度:** 中
 
 ### `tests/**` ✅
+
 - **説明:** テストコード（pytest）
+
 - **編集方針:** テスト追加・改善を推奨
+
 - **重要度:** 高
 
 ### `README.md` ✅
+
 - **説明:** プロジェクトREADME
+
 - **編集方針:** 常に最新状態に保つ
+
 - **重要度:** 中
 
 ---
@@ -69,18 +87,27 @@ Modernize and extend this codebase into a "BUYMA Growth Hub / Multi-Agent Automa
 以下のディレクトリは、既存の管理画面が壊れる可能性があるため **編集禁止** とします：
 
 ### `app/templates/**` ❌
+
 - **説明:** Flask Jinjaテンプレート（HTML）
+
 - **理由:** 既存管理画面のため変更禁止
+
 - **例外:** ユーザーが明示的に指示した場合のみ
 
 ### `app/forms/**` ❌
+
 - **説明:** WTForms定義
+
 - **理由:** UIフォームは壊れるので禁止
+
 - **例外:** ユーザーが明示的に指示した場合のみ
 
 ### `app/static/**` ❌
+
 - **説明:** CSS, JavaScript, 画像ファイル
+
 - **理由:** UI崩れを防ぐため禁止
+
 - **例外:** ユーザーが明示的に指示した場合のみ
 
 ---
@@ -88,9 +115,13 @@ Modernize and extend this codebase into a "BUYMA Growth Hub / Multi-Agent Automa
 ## 3. Flask ルーティング層 ❌
 
 ### `app/routes.py` ❌
+
 - **説明:** Flaskルーティング定義
+
 - **理由:** ロジックを持たず `app/core` 呼び出し専用にしたいため編集禁止
+
 - **方針:** ビジネスロジックは `app/core` に移動し、routes.py は薄く保つ
+
 - **例外:** ユーザーが明示的に新規エンドポイント追加を指示した場合のみ
 
 ---
@@ -100,31 +131,49 @@ Modernize and extend this codebase into a "BUYMA Growth Hub / Multi-Agent Automa
 以下は実行時に生成される一時ファイル・成果物のため **編集禁止** とします：
 
 ### `instance/**` ❌
+
 - **説明:** 実行時データ（logs, sessions, browser_profiles, runs, screenshots）
+
 - **理由:** 自動生成されるため編集不要
+
 - **例外:** なし
 
 ### `export/**` ❌
+
 ### `exports/**` ❌
+
 - **説明:** エクスポート成果物（CSV, ZIP など）
+
 - **理由:** 自動生成されるため編集不要
+
 - **例外:** なし
 
 ### `debug_catalog/**` ❌
+
 - **説明:** デバッグ出力
+
 - **理由:** 一時ファイルのため編集不要
+
 - **例外:** なし
 
 ### `logs/**` ❌
+
 ### `**/logs/**` ❌
+
 - **説明:** ログファイル
+
 - **理由:** 自動生成されるため編集不要
+
 - **例外:** なし
 
 ### `screenshots/**` ❌
+
 ### `**/screenshots/**` ❌
+
 - **説明:** スクリーンショット
+
 - **理由:** 自動生成されるため編集不要
+
 - **例外:** なし
 
 ---
@@ -132,14 +181,21 @@ Modernize and extend this codebase into a "BUYMA Growth Hub / Multi-Agent Automa
 ## 5. モデル・DB層 ⚠️
 
 ### `app/models.py` ⚠️
+
 - **説明:** SQLAlchemyモデル定義
+
 - **編集方針:** 慎重に編集（マイグレーションが必要な変更は避ける）
+
 - **重要度:** 高
+
 - **注意:** 既存カラムの削除・型変更は禁止。追加は可。
 
 ### `app/extensions.py` ⚠️
+
 - **説明:** Flask拡張機能の初期化
+
 - **編集方針:** 必要な場合のみ編集
+
 - **重要度:** 高
 
 ---
@@ -147,19 +203,29 @@ Modernize and extend this codebase into a "BUYMA Growth Hub / Multi-Agent Automa
 ## 6. 設定・スクリプト ⚠️
 
 ### `app/config/**` ⚠️
+
 - **説明:** 設定ファイル（sites, integrations, llm_costs など）
+
 - **編集方針:** 慎重に編集（JSON構造を壊さない）
+
 - **重要度:** 高
+
 - **注意:** `app/config/secrets.py` は編集禁止（.cursorignoreに含まれる）
 
 ### `scripts/**` ⚠️
+
 - **説明:** ユーティリティスクリプト
+
 - **編集方針:** 必要に応じて編集可
+
 - **重要度:** 中
 
 ### `tools/**` ⚠️
+
 - **説明:** 開発ツール
+
 - **編集方針:** 必要に応じて編集可
+
 - **重要度:** 中
 
 ---
@@ -167,20 +233,35 @@ Modernize and extend this codebase into a "BUYMA Growth Hub / Multi-Agent Automa
 ## 編集ポリシーまとめ
 
 | ディレクトリ/ファイル | 編集可否 | 理由 |
+
 |---------------------|---------|------|
+
 | `app/core/**` | ✅ 許可 | ドメインロジックの中心 |
+
 | `app/agents/**` | ✅ 許可 | NexusCore連携エージェント |
+
 | `app/extractors/**` | ✅ 許可 | 変更頻度が高い抽出ロジック |
+
 | `docs/**` | ✅ 許可 | ドキュメント |
+
 | `tests/**` | ✅ 許可 | テストコード |
+
 | `app/templates/**` | ❌ 禁止 | 既存UI（Flask） |
+
 | `app/forms/**` | ❌ 禁止 | 既存UI（Flask） |
+
 | `app/static/**` | ❌ 禁止 | 既存UI（Flask） |
+
 | `app/routes.py` | ❌ 禁止 | ロジックを持たせない方針 |
+
 | `instance/**` | ❌ 禁止 | 実行時ファイル |
+
 | `export/**` | ❌ 禁止 | 成果物 |
+
 | `logs/**` | ❌ 禁止 | ログファイル |
+
 | `app/models.py` | ⚠️ 慎重 | DB構造変更は避ける |
+
 | `app/config/**` | ⚠️ 慎重 | 設定ファイル |
 
 ---
@@ -214,9 +295,13 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 以下の作業が完了した際は、自動的に完了レポートを作成する：
 
 - **リファクタリング作業**: 複数ファイル・モジュールにまたがる段階的なリファクタリング
+
 - **機能追加**: 複数コンポーネントに影響する大きな機能追加
+
 - **アーキテクチャ変更**: 新しいクラス・モジュール・アーキテクチャパターンの導入
+
 - **重要なバグ修正**: 複数ファイルに影響する修正や、影響範囲の大きい修正
+
 - **移行作業**: コード移行、依存関係更新、フレームワークアップグレード
 
 ## レポート形式
@@ -224,8 +309,11 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 完了レポートは `docs/completion_reports/<作業識別子>_COMPLETION_REPORT.md` というパスと命名規則で作成する。
 
 例：
+
 - `docs/completion_reports/STAGE_3A3_COMPLETION_REPORT.md`
+
 - `docs/completion_reports/FEATURE_AUTHENTICATION_COMPLETION_REPORT.md`
+
 - `docs/completion_reports/REFACTORING_DATABASE_LAYER_COMPLETION_REPORT.md`
 
 プロジェクト内に既存の完了レポートがある場合は、その形式を参考にする。
@@ -237,26 +325,47 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 完了レポートには以下のセクションを含める：
 
 1. **実装日時**: 作業完了日
+
 2. **概要**: 目的、ゴール、原則
+
 3. **実装ステップ**: 各ステップの変更内容
+
    - 何を変更したか
+
    - なぜ変更したか
+
    - 必要に応じてコード例（変更前/変更後）
+
 4. **変更ファイル一覧**: 
+
    - 新規作成ファイル
+
    - 変更ファイル（簡潔な説明付き）
+
 5. **動作確認結果**: 
+
    - 静的解析結果（リンター、型チェッカー）
+
    - コードレビュー結果
+
    - テスト結果（該当する場合）
+
 6. **設計上の改善点**: 
+
    - アーキテクチャの改善
+
    - 将来の拡張性への配慮
+
    - コード品質の向上
+
 7. **既知の制約・注意事項**: 
+
    - 既存コードとの互換性
+
    - 制限事項やトレードオフ
+
    - 移行時の注意点（該当する場合）
+
 8. **次のステップ**: 推奨されるフォローアップアクション
 
 ## 作成タイミング
@@ -276,7 +385,9 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 以下のタイミングで、自動的にチャット記録を作成する：
 
 - **ユーザーが「Chat記録して」と明示的に要求した場合**
+
 - **重要な作業セッションが完了した場合**（完了レポート作成時など）
+
 - **セッション終了時**（可能な場合）
 
 ## レポート形式
@@ -284,7 +395,9 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 チャット記録は `docs/chat_records/CHAT_RECORD_YYYYMMDD_<概要>.md` という命名規則で作成する。
 
 例：
+
 - `docs/chat_records/CHAT_RECORD_20251128_MONCLER_DRISSION_DIAGNOSTICS.md`
+
 - `docs/chat_records/CHAT_RECORD_20251128_AUTO_FIX_AND_TESTS.md`
 
 **重要**: チャット記録は必ず `docs/chat_records/` ディレクトリに保存すること。
@@ -294,13 +407,21 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 チャット記録には以下のセクションを含める：
 
 1. **日時**: セッションの日時
+
 2. **概要**: セッションで実施した内容の概要
+
 3. **実施内容**: 詳細な実施内容
+
 4. **主な問題と解決**: 発生した問題とその解決方法
+
 5. **重要な注意事項**: 重要な注意事項や制約
+
 6. **実行方法**: 実行方法やコマンド
+
 7. **作成・変更ファイル一覧**: 作成・変更したファイルの一覧
+
 8. **次のステップ**: 推奨されるフォローアップアクション
+
 9. **関連ファイル**: 関連するファイルのパス
 
 ## GitHub除外
@@ -308,7 +429,9 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 チャット記録は `.gitignore` に追加されており、GitHubにはコミットされません。
 
 - プライバシー保護のため
+
 - リポジトリサイズの削減のため
+
 - 個人の作業記録としてローカルに保存するため
 
 ## 言語
