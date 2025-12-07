@@ -93,6 +93,8 @@ docs/chat_records/*.md
 # 開発スクリプト（scripts/dev/ は Git に含めるが、生成物は除外）
 scripts/dev/*.log
 scripts/dev/*.tmp
+tools/test_*.py
+scripts/dev/test_*.py
 
 # レポート（docs/reports/ は Git に含めるが、一時レポートは除外）
 docs/reports/*.tmp
