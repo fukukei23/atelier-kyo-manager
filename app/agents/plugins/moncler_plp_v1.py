@@ -6,36 +6,149 @@ from .base import StrategyPlugin
 
 logger = logging.getLogger(__name__)
 
+# ==============================================================================
+# CR-ATELIER-002 Step 3: Moncler PLP→PDP 抽出ロジック設計案
+# ==============================================================================
+#
+# 【Moncler PLP→PDP 抽出のデータフロー図】
+#
+# 1. BrowserUseAgent / NavigationDriver.run_plp_flow()
+#    └─> NavigationDriver.collect_pdp_links(ctx)
+#         └─> [MONCLER_OFFICIAL判定]
+#              ├─> NavigationDriver._collect_moncler_pdp_links(ctx)  [Moncler専用]
+#              │    ├─> Moncler専用セレクタで抽出
+#              │    │    ├─> article[data-component*='ProductCard'] a[href*='/products/']
+#              │    │    ├─> [data-testid*='product-card'] a[href*='/products/']
+#              │    │    └─> その他Moncler専用セレクタ
+#              │    ├─> _is_valid_moncler_pdp_url() でバリデーション
+#              │    │    ├─> origin == "https://www.moncler.com"
+#              │    │    ├─> path contains "/products/"
+#              │    │    ├─> locale path == "/en-int/"
+#              │    │    └─> 外部ドメイン除外（onetrust.com等）
+#              │    └─> グローバルsweep（フォールバック）
+#              │
+#              └─> [汎用ロジック]  [Moncler専用が失敗した場合のフォールバック]
+#                   ├─> Phase 1a: Global <a href> sweep + Regex Filter
+#                   ├─> Phase 1b: Selector-based補完（site_configから取得）
+#                   ├─> Phase 2: Deep Extraction Fallback
+#                   └─> Phase 3: Noise Filtering & Saving
+#
+# 2. MonclerPLPStrategy（StrategyPlugin）
+#    └─> _PLP_TILE_SELECTORS: タイル検出用セレクタ（.htmlパターン中心）
+#         └─> 現在は .html で終わるリンクを想定しているが、
+#             実際のMonclerサイトは /products/ パターンを使用している可能性が高い
+#
+# 3. URLバリデーション
+#    └─> extractor.py: looks_like_product_url()
+#         └─> PRODUCT_URL_ALLOW_PATTERNS: /(products?|p)/ パターン
+#    └─> NavigationDriver._is_valid_moncler_pdp_url()  [Moncler専用]
+#         └─> より厳格なバリデーション（origin, locale, trap除外）
+#
+# 【問題点】
+# - MonclerPLPStrategy._PLP_TILE_SELECTORS は .html パターンを想定しているが、
+#   実際のMonclerサイトは /products/ パターンを使用している可能性が高い
+# - 汎用ロジックでは onetrust.com などの外部ドメインが混入している
+# - Moncler専用ロジックが実装されているが、セレクタが実際のDOM構造と一致していない可能性
+#
+# ==============================================================================
+#
+# 【Moncler PLP 想定 DOM 構造（hypothesis based on failure_dom.html + live site）】
+#
+# 想定される構造:
+# - Main listing container:
+#   <section role="region"> または <div class="product-grid"> など
+#   - セレクタ候補: section[role='region'], .product-grid, [data-testid='product-grid']
+#
+# - Product tile:
+#   <article data-component="ProductCard"> または <div data-testid="product-card">
+#   - セレクタ候補:
+#     * article[data-component*='ProductCard']
+#     * [data-testid='product-card']
+#     * [data-testid='product-tile']
+#     * div[class*='product-card' i]
+#     * div[class*='product-tile' i]
+#
+# - PDP link:
+#   <a href="/en-int/.../products/..."> 各product tile内に存在
+#   - セレクタ候補:
+#     * article[data-component*='ProductCard'] a[href*='/products/']
+#     * [data-testid='product-card'] a[href*='/products/']
+#     * a[href*='/en-int/products/']
+#     * a[href*='/products/']  [より汎用的]
+#
+# 【注意】
+# - 現在のMonclerPLPStrategy._PLP_TILE_SELECTORSは .html で終わるリンクを想定しているが、
+#   実際のMonclerサイトは /products/ パターンを使用している可能性が高い
+# - hrefが /products/ 以外のパターン（例: /en-int/women/outerwear/xxx.html）を取る可能性もあるが、
+#   現状のログでは /products/ パターンが期待されている
+#
+# ==============================================================================
+# CR-ATELIER-002 Step 3: Moncler専用 PLP→PDP 抽出セレクタ
+# ==============================================================================
+# CR-ATELIER-002 Step3:
+#   - Moncler 専用 PLP→PDP 抽出ロジックの実装
+#   - 詳細は docs/spec/CR-ATELIER-002_MONCLER_PLP_PDP_EXTRACTION_FIX.md を参照
+# ==============================================================================
+
+# Moncler専用: PLPメインコンテナのセレクタ
+MONCLER_PLP_CONTAINER_SELECTORS = [
+    "main[role='main']",
+    "div[data-component='ProductListing']",
+    "section[role='region']",
+    ".product-grid",
+    "[data-testid='product-grid']",
+]
+
+# Moncler専用: Product tile（カード要素）のセレクタ
+MONCLER_PLP_TILE_SELECTORS = [
+    "article[data-component*='ProductCard']",
+    "[data-testid='product-card']",
+    "[data-testid='product-tile']",
+    "[data-test='product-card']",
+    "div[data-testid='product-card']",
+    "div[data-testid='product-tile']",
+    "div[class*='product-card' i]",
+    "div[class*='product-tile' i]",
+    "div.product-tile",
+    "div.c-product-tile",
+    "div[data-component*='ProductCard']",
+]
+
+# Moncler専用: PDP link（実際にクリックしたい <a>）のセレクタ
+MONCLER_PLP_PDP_LINK_SELECTORS = [
+    "article[data-component*='ProductCard'] a[href*='/products/']",
+    "[data-testid*='product-card'] a[href*='/products/']",
+    "[data-testid*='product-tile'] a[href*='/products/']",
+    "[data-test*='product-card'] a[href*='/products/']",
+    ".product-card a[href*='/products/']",
+    ".c-product-card a[href*='/products/']",
+    ".product-tile a[href*='/products/']",
+    ".c-product-tile a[href*='/products/']",
+    "a[href*='/en-int/products/']",
+    "a[href*='/products/']",
+    "[data-qa='product-tile'] a[href*='/products/']",
+    "[data-qa*='product'] a[href*='/products/']",
+]
+
+# ==============================================================================
+
 
 class MonclerPLPStrategy(StrategyPlugin):
     site = "MONCLER_OFFICIAL"
     _DEFAULT_LOCALE = "en-int"
     _DEFAULT_COUNTRY = "GB"
     _HARD_PLP_URL = "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
-    _PLP_TILE_SELECTORS = (
-        # Moncler PDP リンクパターン（ロケール + カテゴリ + .html）
-        "a[href*='/en-jp/women/outerwear/'][href$='.html']",
-        "a[href*='/en-int/women/outerwear/'][href$='.html']",
-        "a[href*='/en-jp/men/outerwear/'][href$='.html']",
-        "a[href*='/en-int/men/outerwear/'][href$='.html']",
-        # data-testid/data-test
-        "[data-testid='product-card']",
-        "[data-test='product-card']",
-        "div[data-testid='product-card']",
-        "div[data-testid='product-tile']",
-        # class and generic tile containers
-        "div[class*='product-card' i]",
-        "div[class*='product-tile' i]",
-        "div.product-tile",
-        "div.c-product-tile",
-        "div[data-component*='ProductCard']",
-        # list/article fallback（.html で終わるリンクを含む要素）
-        "li:has(a[href$='.html'])",
-        "article:has(a[href$='.html'])",
-        "div:has(a[href$='.html'])",
-        # region/list section fallback
-        "section[role='region'] .product-list a[href$='.html']",
-    )
+    
+    # CR-ATELIER-002 Step 3: Moncler専用セレクタをクラス属性として公開
+    # site_config.selectors.plp.* を正として、コード側はそれに合わせる
+    PLP_CONTAINER_SELECTORS = MONCLER_PLP_CONTAINER_SELECTORS
+    PLP_TILE_SELECTORS = MONCLER_PLP_TILE_SELECTORS
+    PLP_PDP_LINK_SELECTORS = MONCLER_PLP_PDP_LINK_SELECTORS
+    
+    # CR-ATELIER-002 Step 3: .htmlベースのセレクタは削除
+    # Monclerは /products/ パターンのみを使用するため、.htmlベースのセレクタは不要
+    # site_config.selectors.plp.tile_selectors と site_config.selectors.plp.pdp_link_selectors を使用
+    _PLP_TILE_SELECTORS = MONCLER_PLP_TILE_SELECTORS
 
     def before_navigate(self, url: str, ctx) -> str:
         # 1) フラグメント除去
