@@ -68,20 +68,18 @@ from app.agents.browser.extractor import (
 # PRICE_SELECTORS のエイリアス（互換性のため）
 PRICE_SELECTORS = VISIBLE_PRICE_SELECTORS
 
-# --- 専用パッチの動的インポート ---
-try:
-    from app.agents.browser_use_moncler_patch import moncler_plp_recovery
-except Exception:
-    moncler_plp_recovery = None
-# ---
-
 # --- Strategy Plugins ---
 try:
     from app.agents.plugins.base import StrategyPlugin
-    from app.agents.plugins.moncler_plp_v1 import MonclerPLPStrategy
 except Exception:
     StrategyPlugin = None  # type: ignore
-    MonclerPLPStrategy = None  # type: ignore
+# ---
+
+# --- Moncler Handler (CR-ATELIER-003 Phase B) ---
+try:
+    from app.agents.moncler.moncler_plp_handler import MonclerPlpHandler
+except Exception:
+    MonclerPlpHandler = None  # type: ignore
 # ---
 
 # 堅牢なインポート試行
@@ -98,11 +96,9 @@ try:
     )
     # V88.5.1: (Patch) AiLlmController は run_with_repair 内部でのみ import
     # from app.utils.ai_llm_controller import AiLlmController
-    # MONCLER専用 DrissionPage ハンドラのインポート（未導入時は None）
-    try:
-        from app.specialized.moncler_handler import MonclerDrissionHandler
-    except ImportError:
-        MonclerDrissionHandler = None  # type: ignore
+    # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
+    # MonclerDrissionHandler は MonclerPlpHandler 内で処理される
+    MonclerDrissionHandler = None  # type: ignore
 except ImportError:
     # 実行環境によってはパスが通っていない可能性を考慮
     logging.warning("Failed to import modules from standard paths. Trying relative imports...")
@@ -115,11 +111,8 @@ except ImportError:
         from ..utils.observability import (
             save_dom, count_selectors, save_raw_hrefs, write_fail_snapshot
         )
-        # MONCLER専用 DrissionPage ハンドラのインポート（未導入時は None）
-        try:
-            from ..specialized.moncler_handler import MonclerDrissionHandler
-        except ImportError:
-            MonclerDrissionHandler = None  # type: ignore
+        # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
+        MonclerDrissionHandler = None  # type: ignore
     except ImportError as e:
          logging.critical(f"Relative import also failed: {e}. Some functionalities might be broken.")
          # 最低限動作するためのモックやプレースホルダを定義する (必要に応じて)
@@ -145,7 +138,7 @@ except ImportError:
              async def save_json(self, name, payload): pass
              async def save_screenshot(self, page, name): pass
              async def write_fail_snapshot(self, page, reason, tctx, extra=None): pass
-         # MonclerDrissionHandler も定義（インポート失敗時は None）
+         # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
          MonclerDrissionHandler = None  # type: ignore
          @dataclass
          class TelemetryContext: # type: ignore
@@ -729,12 +722,8 @@ class BrowserUseAgent:
             if settings.get("enable_visual_regression_check") and "plp" in (settings.get("vrt_scope") or ""):
                 await self._perform_vrt(page, "plp", settings)
 
-            # Moncler legacy patch is PDP-only; PLP flows rely on plugin/target URL normalization.
-            if site.upper() == "MONCLER_OFFICIAL" and moncler_plp_recovery and not likely_plp:
-                try:
-                    await moncler_plp_recovery(page, site_config, {"query": query, "shipTo": "GB"})
-                except Exception as _e:
-                    self.logger.warning(f"[MonclerPatch] skipped: {_e}")
+            # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
+            # Moncler の処理は NavigationDriver.run_plp_flow 内で MonclerPlpHandler 経由で実行される
 
             context = self._context
             if context is None:
@@ -1002,11 +991,11 @@ class BrowserUseAgent:
         elif env_enable_video is not None:
             enable_video = env_enable_video
         else:
-            enable_video = True if site_key_guess == "MONCLER_OFFICIAL" else False
+            # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
+            enable_video = False
 
         default_accept_language = "en-GB,en;q=0.8"
-        if site_key_guess == "MONCLER_OFFICIAL":
-            default_accept_language = "en-US,en;q=0.8"
+        # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
 
         settings = {
             "timeout_sec": self.runtime_kwargs.get("timeout_sec") or ds.get("timeout_sec", 60),
@@ -1445,35 +1434,14 @@ class BrowserUseAgent:
             logger.warning(f"[_normalize_url] NavigationDriver failed, returning original URL: {e}")
             return url
 
-    # Stage 4: _force_en_int() は Moncler 専用パッチに移行すべき機能のため、このメソッドは削除または無効化
-    # 必要に応じて browser_use_moncler_patch.py の moncler_plp_recovery() を使用
+    # CR-ATELIER-003 Phase B: _force_en_int() は Moncler 専用パッチに移行済み
+    # このメソッドは削除され、MonclerPlpHandler 内で処理される
     async def _force_en_int(self, page: Page, site_config: Optional[Dict[str, Any]] = None) -> None:
         """
-        Stage 4: このメソッドは Moncler 専用の機能のため、site_config の enable_moncler_patch フラグで制御
+        CR-ATELIER-003 Phase B: このメソッドは MonclerPlpHandler に移行済み
         """
-        if site_config is None:
-            logger.warning("[_force_en_int] site_config is None, skipping (Stage 4 migration)")
-            return
-        
-        # Moncler専用パッチが有効な場合のみ実行
-        ds = (site_config.get("discovery_settings", {}) or {})
-        if not ds.get("enable_moncler_patch", False):
-            logger.debug("[_force_en_int] Moncler patch is disabled in site_config")
-            return
-        
-        try:
-            # Cookie注入は site_config から取得（Moncler専用パッチに移行すべき）
-            if page.context:
-                # この部分は browser_use_moncler_patch.py に移行すべき
-                logger.debug("[_force_en_int] Cookie injection should be handled by moncler_plp_recovery()")
-        except Exception: pass
-        try:
-            fixed = self._normalize_url(page.url, site_config)
-            if fixed != page.url:
-                await page.goto(url=fixed, wait_until="domcontentloaded")
-                try: await page.wait_for_load_state("networkidle", timeout=1500)
-                except Exception: pass
-        except Exception: pass
+        logger.debug("[_force_en_int] This method has been migrated to MonclerPlpHandler")
+        return
 
     # --- PLP Materialize ---
     # Stage 3A-2-2: 実体は NavigationDriver.ensure_plp_materialized に移行済み
@@ -1709,33 +1677,8 @@ class BrowserUseAgent:
     # --- Main Run Logic (V88.5.0: Refactored for session management) ---
     async def run(self, *, site: str, query: str, site_config: Dict[str, Any], run_context: RunContext, target_url: str, likely_plp: bool) -> DiscoveryResult:
 
-        # --- MONCLER 専用 DrissionPage ルート ---
-        if site.upper() == "MONCLER_OFFICIAL" and MonclerDrissionHandler is not None:
-            self.logger.info("[BrowserUseAgent] MONCLER検知: DrissionPageエンジンへ切り替えます")
-            
-            try:
-                handler = MonclerDrissionHandler(runtime_kwargs=self.runtime_kwargs)
-                
-                # DrissionPage は同期ライブラリなので、スレッドオフロードで呼び出す
-                discovery_result = await asyncio.to_thread(
-                    handler.run,
-                    query=query,
-                    site_config=site_config,
-                    run_context=run_context,
-                    target_url=target_url,
-                )
-                
-                # 結果が成功した場合はそのまま返す
-                if discovery_result.ok:
-                    self.logger.info("[BrowserUseAgent] DrissionPageルートで成功しました")
-                    return discovery_result
-                else:
-                    # 失敗した場合は警告を出して Playwright ルートにフォールバック
-                    self.logger.warning(
-                        "[BrowserUseAgent] DrissionPageルートで失敗。Playwrightルートにフォールバックします: %s",
-                        discovery_result.message,
-                    )
-                    # フォールバックのため、そのまま下の Playwright ロジックに続行
+        # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
+        # Moncler の処理は NavigationDriver.run_plp_flow 内で MonclerPlpHandler 経由で実行される
                     
             except Exception as e:
                 self.logger.warning(
@@ -1834,15 +1777,8 @@ class BrowserUseAgent:
                 if settings.get("enable_visual_regression_check") and "plp" in (settings.get("vrt_scope") or ""):
                     await self._perform_vrt(page, "plp", settings)
 
-                if (
-                    site.upper() == "MONCLER_OFFICIAL"
-                    and moncler_plp_recovery is not None
-                    and plugin is None
-                ):
-                    try:
-                        await moncler_plp_recovery(page, site_config, query)
-                    except Exception as _e:
-                        self.logger.warning(f"[MonclerPatch] skipped: {_e}")
+                # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行済み
+                # Moncler の処理は NavigationDriver.run_plp_flow 内で MonclerPlpHandler 経由で実行される
 
                 start_t, budget_ms = self._start_watchdog(
                     settings.get("overall_plp_budget_ms", OVERALL_PLP_BUDGET_MS_DEFAULT)
@@ -1858,15 +1794,8 @@ class BrowserUseAgent:
                     )
 
                 if likely_plp:
-                    if (
-                        site.upper() == "MONCLER_OFFICIAL"
-                        and moncler_plp_recovery is not None
-                        and plugin is None
-                    ):
-                        try:
-                            await moncler_plp_recovery(page, site_config, query)
-                        except Exception as _e:
-                            self.logger.warning(f"[MonclerPatch] skipped: {_e}")
+                    # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
+                    # Moncler の処理は NavigationDriver.run_plp_flow 内で MonclerPlpHandler 経由で実行される
                     if plugin:
                         plp_ctx = {"plp_min_cards": 24, "query": query}
 
