@@ -82,6 +82,42 @@ except Exception:
     MonclerPlpHandler = None  # type: ignore
 # ---
 
+# --- UI Helpers (CR-ATELIER-003 Phase C) ---
+try:
+    from app.agents.browser.ui_helpers import (
+        kill_overlays,
+        click_continue_shopping_if_present,
+        pause_for_operator,
+        accept_cookies_if_present,
+        dismiss_geo_modal,
+        safe_wait_selector as ui_safe_wait_selector,
+    )
+except Exception:
+    # Fallback: 既存のメソッドを使用
+    kill_overlays = None  # type: ignore
+    click_continue_shopping_if_present = None  # type: ignore
+    pause_for_operator = None  # type: ignore
+    accept_cookies_if_present = None  # type: ignore
+    dismiss_geo_modal = None  # type: ignore
+    ui_safe_wait_selector = None  # type: ignore
+# ---
+
+# --- Navigation Helpers (CR-ATELIER-003 Phase C) ---
+try:
+    from app.agents.browser.navigation_helpers import (
+        normalize_url as nav_normalize_url,
+        normalize_abs_url as nav_normalize_abs_url,
+        is_redirect_loop,
+        is_wrong_locale,
+    )
+except Exception:
+    # Fallback: 既存のメソッドを使用
+    nav_normalize_url = None  # type: ignore
+    nav_normalize_abs_url = None  # type: ignore
+    is_redirect_loop = None  # type: ignore
+    is_wrong_locale = None  # type: ignore
+# ---
+
 # 堅牢なインポート試行
 try:
     from app.core.run_context import RunContext
@@ -485,10 +521,23 @@ class BrowserUseAgent:
             )
             # 失敗しても続行（後続の処理で回復を試みる）
         
-        await self._accept_cookies_if_present(page, site_config)
-        await self._dismiss_geo_modal(page, site_config)
-        await self._kill_overlays(page)
-        await self._click_continue_shopping_if_present(page, site_config)
+        # CR-ATELIER-003 Phase C: ui_helpers.py を使用
+        if accept_cookies_if_present:
+            await accept_cookies_if_present(page, site_config)
+        else:
+            await self._accept_cookies_if_present(page, site_config)
+        if dismiss_geo_modal:
+            await dismiss_geo_modal(page, self.logger)
+        else:
+            await self._dismiss_geo_modal(page, site_config)
+        if kill_overlays:
+            await kill_overlays(page)
+        else:
+            await self._kill_overlays(page)
+        if click_continue_shopping_if_present:
+            await click_continue_shopping_if_present(page, site_config)
+        else:
+            await self._click_continue_shopping_if_present(page, site_config)
 
         if settings.get("enable_human_like"):
             try:
@@ -534,18 +583,29 @@ class BrowserUseAgent:
                         # URL正規化を適用
                         fixed_url = self._normalize_url(fixed_url, site_config)
                         await page.goto(url=fixed_url, wait_until="domcontentloaded")
-                        await self._click_continue_shopping_if_present(page, site_config)
+                        # CR-ATELIER-003 Phase C: ui_helpers.py を使用
+                        if click_continue_shopping_if_present:
+                            await click_continue_shopping_if_present(page, site_config)
+                        else:
+                            await self._click_continue_shopping_if_present(page, site_config)
                         try:
                             await page.wait_for_load_state("networkidle", timeout=2000)
                         except Exception:
                             pass
-                        await self._accept_cookies_if_present(page, site_config)
+                        if accept_cookies_if_present:
+                            await accept_cookies_if_present(page, site_config)
+                        else:
+                            await self._accept_cookies_if_present(page, site_config)
             except Exception as gate_e:
                 self.logger.warning(f"[LocaleGate] Gate detection failed: {gate_e}")
 
             if settings.get("enable_locale_escape"):
                 await self._force_en_int(page, site_config)
-                await self._click_continue_shopping_if_present(page, site_config)
+                # CR-ATELIER-003 Phase C: ui_helpers.py を使用
+                if click_continue_shopping_if_present:
+                    await click_continue_shopping_if_present(page, site_config)
+                else:
+                    await self._click_continue_shopping_if_present(page, site_config)
                 await run_context.take_screenshot(page, "12_after_locale_escape")
 
             # trap_domains へのリダイレクトを検出
@@ -580,9 +640,19 @@ class BrowserUseAgent:
         run_context: RunContext,
     ):
         async def _prepare(page: Page):
-            await self._kill_overlays(page)
-            await self._click_continue_shopping_if_present(page, site_config)
-            await self._dismiss_geo_modal(page, site_config)
+            # CR-ATELIER-003 Phase C: ui_helpers.py を使用
+            if kill_overlays:
+                await kill_overlays(page)
+            else:
+                await self._kill_overlays(page)
+            if click_continue_shopping_if_present:
+                await click_continue_shopping_if_present(page, site_config)
+            else:
+                await self._click_continue_shopping_if_present(page, site_config)
+            if dismiss_geo_modal:
+                await dismiss_geo_modal(page, self.logger)
+            else:
+                await self._dismiss_geo_modal(page, site_config)
             if settings.get("enable_visual_regression_check") and "pdp" in (settings.get("vrt_scope") or ""):
                 await self._perform_vrt(page, "pdp", settings)
 
@@ -1413,8 +1483,9 @@ class BrowserUseAgent:
     # Stage 4: _normalize_to_en_int_url() を削除し、NavigationDriver._normalize_url() を使用
     def _normalize_url(self, url: str, site_config: Dict[str, Any]) -> str:
         """
-        Stage 4: URL正規化のヘルパー（NavigationDriver経由）
-        NavigationDriver._normalize_url() を呼び出すためのラッパー
+        Stage 4: URL正規化のヘルパー
+        
+        CR-ATELIER-003 Phase C: navigation_helpers.py を使用
         
         Args:
             url: 正規化するURL
@@ -1423,9 +1494,12 @@ class BrowserUseAgent:
         Returns:
             str: 正規化されたURL
         """
+        # CR-ATELIER-003 Phase C: navigation_helpers.py を使用
+        if nav_normalize_url:
+            return nav_normalize_url(url, site_config)
+        
+        # Fallback: NavigationDriver経由
         from app.agents.browser.navigation_driver import NavigationDriver
-        # NavigationDriverインスタンスを作成（pageは不要なのでNone）
-        # ただし、_normalize_urlはインスタンスメソッドなので、page=Noneでも動作するようにする
         try:
             driver = NavigationDriver(page=None)  # type: ignore
             return driver._normalize_url(url, site_config)
@@ -1474,6 +1548,12 @@ class BrowserUseAgent:
     # --- PDP Extraction ---
     # --- PLP -> PDP Link Collection (Robust v85.5) ---
     def _normalize_abs_url(self, base_url: str, href: str) -> str:
+        """
+        CR-ATELIER-003 Phase C: navigation_helpers.py を使用
+        """
+        if nav_normalize_abs_url:
+            return nav_normalize_abs_url(base_url, href)
+        # Fallback: 既存の実装
         try:
             absu = urljoin(base_url, href)
             parts = list(urlsplit(absu))
@@ -1498,7 +1578,12 @@ class BrowserUseAgent:
         container_sels: List[str] = (
             ((site_config.get("selectors") or {}).get("pdp") or {}).get("plp_container_selectors", []) or []
         )
-        for cont in (container_sels or []): await self.safe_wait_selector(page, cont, timeout_ms=1000, state="visible")
+        # CR-ATELIER-003 Phase C: ui_helpers.py を使用
+        for cont in (container_sels or []):
+            if ui_safe_wait_selector:
+                await ui_safe_wait_selector(page, cont, timeout_ms=1000, state="visible")
+            else:
+                await self.safe_wait_selector(page, cont, timeout_ms=1000, state="visible")
         try:
             for _ in range(2): await page.evaluate("window.scrollBy(0, document.body.scrollHeight)"); await page.wait_for_timeout(200)
         except Exception: pass
@@ -1954,7 +2039,11 @@ class BrowserUseAgent:
                     self.logger.warning(f"[_run_plp_flow] NavigationDriver.recover_plp failed: {e}", exc_info=True)
                     raise ValueError(f"Landing page looks like legal/trap (recovery failed): {page.url}")
 
-        await self._pause_for_operator(page, run_context, "before_plp_materialize")
+        # CR-ATELIER-003 Phase C: ui_helpers.py を使用
+        if pause_for_operator:
+            await pause_for_operator(page, run_context, "before_plp_materialize", self.runtime_kwargs, self.logger)
+        else:
+            await self._pause_for_operator(page, run_context, "before_plp_materialize")
 
         # CR-ATELIER-003 Phase A-1: NavigationDriver への完全移行
         # NavigationDriver が materialize 済みか、NavigationDriver 経由で materialize を実行
@@ -2077,7 +2166,11 @@ class BrowserUseAgent:
                 # CR-ATELIER-003 Phase A-1: _plp_header_search_fallback の代わりに NavigationDriver.header_search_fallback を使用
                 did_search = await navigation_driver.header_search_fallback(nav_ctx)
                 if did_search:
-                    await self._click_continue_shopping_if_present(page, site_config)
+                    # CR-ATELIER-003 Phase C: ui_helpers.py を使用
+                    if click_continue_shopping_if_present:
+                        await click_continue_shopping_if_present(page, site_config)
+                    else:
+                        await self._click_continue_shopping_if_present(page, site_config)
                     try: anchors = await page.locator("a[href*='/p/'], a[href*='/product/']").count()
                     except Exception: anchors = 0
                     if anchors < 6:
@@ -2319,7 +2412,11 @@ class BrowserUseAgent:
         error_type = self._classify_exception(e, "run_failure")
         
         try:
-            await self._pause_for_operator(active_page, run_context, "failure_inspection")
+            # CR-ATELIER-003 Phase C: ui_helpers.py を使用
+            if pause_for_operator:
+                await pause_for_operator(active_page, run_context, "failure_inspection", self.runtime_kwargs, self.logger)
+            else:
+                await self._pause_for_operator(active_page, run_context, "failure_inspection")
             if active_page and not active_page.is_closed():
                 final_url_on_fail = active_page.url
         except Exception:
