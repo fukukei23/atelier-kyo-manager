@@ -1679,21 +1679,6 @@ class BrowserUseAgent:
 
         # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
         # Moncler の処理は NavigationDriver.run_plp_flow 内で MonclerPlpHandler 経由で実行される
-                    
-            except Exception as e:
-                self.logger.warning(
-                    "[BrowserUseAgent] DrissionPageルートでエラー発生。Playwrightルートにフォールバックします: %s",
-                    e,
-                )
-                # エラー情報を run_context に記録
-                try:
-                    run_context.save_json("drission_fallback_error.json", {
-                        "error": str(e),
-                        "error_type": type(e).__name__,
-                    })
-                except Exception:
-                    pass
-                # フォールバックのため、そのまま下の Playwright ロジックに続行
 
         # --- ここから下は既存の Playwright ロジック（変更しない） ---
         settings = self._resolve_run_settings(site_config)
