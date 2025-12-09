@@ -1479,116 +1479,9 @@ class BrowserUseAgent:
     # Stage 3A-2-2: 実体は NavigationDriver.ensure_plp_materialized に移行済み
     # このメソッドは NavigationDriver が使われていない場合のフォールバックとして残している
     # TODO: Stage 3A-2 完了後、NavigationDriver が常に使われるようになったら削除可能
-    async def _ensure_plp_materialized(self, page: Page, site_config: Dict[str, Any], settings: Dict[str, Any], *, start_t: float, budget_ms: int, target_url: Optional[str] = None) -> bool:
-        pdp_cfg = (site_config.get("selectors") or {}).get("pdp", {}) or {}
-        tile_selectors = _dedupe_keep_order((pdp_cfg.get("pdp_link_selectors") or []) + (pdp_cfg.get("plp_container_selectors") or []) + ["a[data-product-url]", "[data-product-url]", "[data-qa='product-tile']", ".product-card", ".c-product-card", ".c-product-tile", "[data-testid*='product' i]"])
-        tile_selector_str = ", ".join(tile_selectors)
-        target_min_tiles = 8
-        max_scroll_attempts = int(max(settings.get("plp_scroll_rounds", 10), 10))
-        run_ctx = getattr(self, "run_context", None)
-
-        locale_recover_attempts = 0
-        locale_recover_max = int(settings.get("locale_recover_max", 5))
-
-        for attempt in range(max_scroll_attempts):
-            left_ms = self._time_left_ms(start_t, budget_ms)
-            if left_ms <= 0: self.logger.warning("[Materialize] Timed out."); return False
-
-            # v88.6.x: Attemptごとに遅延表示ゲート/バナーを掃除する
-            try:
-                await self._accept_cookies_if_present(page, site_config)
-            except Exception:
-                pass
-            try:
-                await self._dismiss_geo_modal(page, site_config)
-            except Exception:
-                pass
-            try:
-                await self._kill_overlays(page)
-            except Exception:
-                pass
-
-            # Stage 4: ロケールリダイレクトの検出（汎用化）
-            current_url = (page.url or "").lower()
-            locale_cfg = (site_config.get("locale", {}) or {})
-            prefer_locale = locale_cfg.get("prefer", "")
-            allowed_domain = site_config.get("allowed_domain", "")
-            
-            # ターゲットロケール以外のロケールにリダイレクトされた場合を検出
-            if prefer_locale and allowed_domain:
-                target_locale_path = f"/{prefer_locale}/"
-                if allowed_domain.lower() in current_url and target_locale_path not in current_url:
-                    # ロケールセグメントが含まれているかチェック
-                    if _LOCALE_SEG_RE.search(current_url):
-                        self.logger.warning(f"[Materialize] Detected locale redirect away from {prefer_locale} mid-attempt: {current_url}")
-                        if locale_recover_attempts >= locale_recover_max:
-                            self.logger.error("[Materialize] Locale recovery exceeded max attempts. Aborting.")
-                            return False
-                        locale_recover_attempts += 1
-                        if target_url:
-                            await self._force_plp_recover(page, site_config, target_url)
-                            await page.wait_for_timeout(800)
-                            continue
-
-            if run_ctx is not None and attempt < 3:
-                try:
-                    await run_ctx.take_screenshot(
-                        page,
-                        f"30_plp_materialize_attempt_{attempt + 1:02d}"
-                    )
-                except Exception as ss_e:
-                    self.logger.warning(f"[Materialize] Screenshot failed on attempt {attempt + 1}: {ss_e}")
-
-            try:
-                for _ in range(6): await page.evaluate("window.scrollBy(0, Math.floor(window.innerHeight*0.6))"); await page.wait_for_timeout(160)
-                try: await page.wait_for_load_state("networkidle", timeout=800)
-                except Exception: pass
-            except Exception as e: self.logger.warning(f"[Materialize] Scroll failed on attempt {attempt + 1}: {e}"); break
-
-            # Moncler locale gate が途中で出た場合に備えて閉じておく
-            try:
-                modal_title = page.locator("text=Select your location").first
-                if await modal_title.count() > 0:
-                    self.logger.info("[GeoModal] Locale gate header detected during PLP materialization.")
-                    close_btn = page.locator(
-                        "button[aria-label*='close' i], "
-                        "button:has-text('Close'), "
-                        "button:has-text('×'), "
-                        ".modal__close, .c-modal__close"
-                    ).first
-                    if await close_btn.count() > 0:
-                        await close_btn.click(timeout=3000)
-                        await page.wait_for_timeout(500)
-                        self.logger.info("[GeoModal] Locale gate closed.")
-            except Exception as e:
-                self.logger.warning(f"[GeoModal] Locale gate handling failed: {e}")
-
-            try:
-                count = await page.locator(tile_selector_str).count()
-                self.logger.info(f"[Materialize] Attempt {attempt + 1}/{max_scroll_attempts}, found {count} tiles.")
-                if count >= target_min_tiles:
-                    self.logger.info(f"[Materialize] Success: Found {count} tiles (>= {target_min_tiles})."); return True
-                if count < 4 and attempt >= 1:
-                    self.logger.warning(f"[Materialize] Low tiles ({count}) after {attempt+1} attempts, forcing recovery hop.")
-                    if target_url:
-                        try:
-                            await self._force_plp_recover(page, site_config, target_url)
-                            await page.wait_for_timeout(500)
-                            rec_count = await page.locator(tile_selector_str).count()
-                            self.logger.info(f"[Materialize] After recovery hop, tiles={rec_count}")
-                            if rec_count >= target_min_tiles:
-                                return True
-                        except Exception as rec_e:
-                            self.logger.warning(f"[Materialize] Recovery hop failed: {rec_e}")
-                    return False
-            except asyncio.CancelledError:
-                self.logger.warning("[Materialize] Cancelled during tile count.")
-                return False
-            except Exception as e: self.logger.warning(f"[Materialize] Could not count tiles on attempt {attempt + 1}: {e}")
-
-        final_count = await page.locator(tile_selector_str).count()
-        if final_count > 0: self.logger.warning(f"[Materialize] Finished attempts, found {final_count} tiles (< {target_min_tiles}), but proceeding as non-empty."); return True
-        self.logger.error("[Materialize] Failed: No product tiles found after all scroll attempts."); return False
+    # CR-ATELIER-003 Phase A-4: _ensure_plp_materialized を削除
+    # すべての呼び出し箇所は NavigationDriver.ensure_plp_materialized 経由に置き換え済み
+    # このメソッドは削除されました。NavigationDriver.ensure_plp_materialized を直接使用してください。
 
     # --- Price / Size Selection ---
     async def _read_price_or_none(self, page: Page) -> Optional[str]:
@@ -1625,39 +1518,9 @@ class BrowserUseAgent:
     # このメソッドは薄いラッパーとして残している（互換性維持）
     # 注意: _run_plp_flow 内では NavigationDriver.run_plp_flow の結果（nav_outcome.pdp_links）を優先的に使用
     # TODO: Stage 3A-2 完了後、すべての呼び出しが NavigationDriver 経由になったら削除可能
-    async def _collect_pdp_links(self, page: Page, site_config: Dict, settings: Dict, run_context: RunContext) -> List[str]:
-        """
-        Stage 3A-2-1:
-        PDPリンク収集の本体は NavigationDriver.collect_pdp_links に移譲。
-        互換性維持のため、既存シグネチャは残しておく。
-        
-        注意: このメソッドは _run_plp_flow 内から呼ばれるため、
-        将来的には _run_plp_flow から直接 NavigationDriver を呼ぶ形に変更する。
-        """
-        # Stage 3A-2-1: NavigationContext を構築して NavigationDriver を呼ぶ
-        from app.agents.browser.navigation_driver import NavigationContext, NavigationDriver
-        import time
-        
-        # NavigationContext を構築（site, query は runtime_kwargs から取得）
-        nav_ctx = NavigationContext(
-            site=self.runtime_kwargs.get("site", "UNKNOWN"),
-            query=self.runtime_kwargs.get("query", ""),
-            site_config=site_config,
-            settings=settings,
-            run_context=run_context,
-            start_t=time.time(),
-            budget_ms=int(settings.get("timeout_sec", 60)) * 1000,
-        )
-        
-        # Stage 3B: TelemetryClient を初期化
-        telemetry = TelemetryClient(run_context)
-        navigation_driver = NavigationDriver(
-            page=page,
-            telemetry=telemetry,  # Stage 3B: TelemetryClient を渡す
-            trap_checker=None,
-            strategy=None,
-        )
-        return await navigation_driver.collect_pdp_links(nav_ctx)
+    # CR-ATELIER-003 Phase A-4: _collect_pdp_links を削除
+    # すべての呼び出し箇所は NavigationDriver.collect_pdp_links 経由に置き換え済み
+    # このメソッドは削除されました。NavigationDriver.collect_pdp_links を直接使用してください。
 
     # --- V88.3.0J: _run_deep_extraction_phase2 Safer Fallback Evaluate ---
     # --- V88.6.2J: (BugFix) SyntaxError on container_sels ---
@@ -2164,30 +2027,37 @@ class BrowserUseAgent:
             # ★ V88.6.0: 呼び出しを self._looks_like_trap_or_legal に修正
             # ★ V88.5.9: 1. 入口で trap でも、まず 1 回だけ回復ナビを試みる
             # Stage 4: site_configを渡す
+            # CR-ATELIER-003 Phase A-1: _force_plp_recover の代わりに NavigationDriver.recover_plp を使用
             if self._looks_like_trap_or_legal(page.url, site_config):
                 self.logger.warning("[_looks_like_trap] initial trap-like url: %s", page.url)
                 attempted_recover = True
-                await self._force_plp_recover(page, site_config, target_url)
-                # 正規化後URLでもう一度だけ判定
-                if self._looks_like_trap_or_legal(page.url, site_config):
-                    raise ValueError(f"Landing page looks like legal/trap (even after recovery attempt): {page.url}")
-                self.logger.info("[_looks_like_trap] Recovery navigation seems successful.")
+                try:
+                    recovered = await navigation_driver.recover_plp(nav_ctx)
+                    if not recovered or self._looks_like_trap_or_legal(page.url, site_config):
+                        raise ValueError(f"Landing page looks like legal/trap (even after recovery attempt): {page.url}")
+                    self.logger.info("[_looks_like_trap] Recovery navigation seems successful.")
+                except Exception as e:
+                    self.logger.warning(f"[_run_plp_flow] NavigationDriver.recover_plp failed: {e}", exc_info=True)
+                    raise ValueError(f"Landing page looks like legal/trap (recovery failed): {page.url}")
 
         await self._pause_for_operator(page, run_context, "before_plp_materialize")
 
-        # --- Stage 3A-2-2: NavigationDriver が materialize 済みならスキップ ---
+        # CR-ATELIER-003 Phase A-1: NavigationDriver への完全移行
+        # NavigationDriver が materialize 済みか、NavigationDriver 経由で materialize を実行
         if skip_materialize:
             ok_materialized = True
         elif nav_outcome and nav_outcome.plp_materialized:
             # NavigationDriver が既に materialize を実行済み
             ok_materialized = True
-            self.logger.debug("[_run_plp_flow] NavigationDriver already materialized PLP, skipping _ensure_plp_materialized")
+            self.logger.debug("[_run_plp_flow] NavigationDriver already materialized PLP")
         else:
-            # NavigationDriver が materialize を実行していない場合、従来の処理を実行
-            ok_materialized = await self._ensure_plp_materialized(
-                page, site_config, settings,
-                start_t=start_t, budget_ms=budget_ms, target_url=target_url
-            )
+            # NavigationDriver が materialize を実行していない場合、NavigationDriver 経由で実行
+            # CR-ATELIER-003 Phase A-1: _ensure_plp_materialized の代わりに NavigationDriver.ensure_plp_materialized を使用
+            try:
+                ok_materialized = await navigation_driver.ensure_plp_materialized(nav_ctx)
+            except Exception as e:
+                self.logger.warning(f"[_run_plp_flow] NavigationDriver.ensure_plp_materialized failed: {e}", exc_info=True)
+                ok_materialized = False
 
         # ★ V88.5.7: (Fail Fast) まともなPLP(タイル0枚)が出なかったらすぐ諦める
         if not ok_materialized:
@@ -2195,25 +2065,28 @@ class BrowserUseAgent:
                 f"PLP did not materialize (no product tiles). URL={page.url}"
             )
 
-        # --- Stage 3A-2-3: NavigationDriver が materialize 後の trap 再チェックも処理済みの場合 ---
+        # CR-ATELIER-003 Phase A-1: NavigationDriver への完全移行
+        # NavigationDriver が materialize 後の trap 再チェックも処理済みの場合
         if nav_outcome and nav_outcome.plp_materialized:
             # NavigationDriver が materialize 後の trap 再チェックも完了している
             # NavigationDriver の run_plp_flow 内で既に trap 判定・復旧が完了しているため、
             # ここでの trap 再チェックは不要（NavigationDriver が例外を投げているはず）
             self.logger.debug("[_run_plp_flow] Using NavigationDriver result (post-materialize trap check already done)")
-        else:
-            # Stage 3A-2-3: NavigationDriver が使われていない場合の従来処理
-            # Stage 4: site_configを渡す
-            # ★ V88.6.0: 呼び出しを self._looks_like_trap_or_legal に修正
-            # ★ V88.5.9: スクロール後のURL再チェック (v88.5.6ロジック)
+        elif ok_materialized:
+            # NavigationDriver が materialize を実行したが、trap 再チェックが未実行の場合
+            # NavigationDriver 経由で trap 再チェックを実行
+            # CR-ATELIER-003 Phase A-1: _force_plp_recover の代わりに NavigationDriver.recover_plp を使用
             if self._looks_like_trap_or_legal(page.url, site_config):
-                # V88.5.9: まだ回復トライしてなければ、ここで試す
                 if not attempted_recover:
-                    self.logger.warning("[_looks_like_trap] trap-like url after materialize: %s", page.url)
-                    await self._force_plp_recover(page, site_config, target_url)
-                    if self._looks_like_trap_or_legal(page.url, site_config):
-                         raise ValueError(f"After materialize still on legal/trap page (even after recovery attempt): {page.url}")
-                    self.logger.info("[_looks_like_trap] Recovery navigation (post-materialize) seems successful.")
+                    self.logger.warning("[_run_plp_flow] trap-like url after materialize: %s", page.url)
+                    try:
+                        recovered = await navigation_driver.recover_plp(nav_ctx)
+                        if not recovered or self._looks_like_trap_or_legal(page.url, site_config):
+                            raise ValueError(f"After materialize still on legal/trap page (even after recovery attempt): {page.url}")
+                        self.logger.info("[_run_plp_flow] Recovery navigation (post-materialize) seems successful.")
+                    except Exception as e:
+                        self.logger.warning(f"[_run_plp_flow] NavigationDriver.recover_plp failed: {e}", exc_info=True)
+                        raise ValueError(f"After materialize still on legal/trap page (recovery failed): {page.url}")
                 else:
                     # 既に回復試行済みで、スクロールしたらまたトラップに戻った場合
                     raise ValueError(f"After materialize, bounced back to legal/trap page: {page.url}")
@@ -2287,14 +2160,19 @@ class BrowserUseAgent:
 
             try:
                 self.logger.debug("[Fallback] Trying header search UI...")
-                did_search = await self._plp_header_search_fallback(page, query, site_config, settings, run_context, context, start_t=start_t, budget_ms=budget_ms)
+                # CR-ATELIER-003 Phase A-1: _plp_header_search_fallback の代わりに NavigationDriver.header_search_fallback を使用
+                did_search = await navigation_driver.header_search_fallback(nav_ctx)
                 if did_search:
                     await self._click_continue_shopping_if_present(page, site_config)
                     try: anchors = await page.locator("a[href*='/p/'], a[href*='/product/']").count()
                     except Exception: anchors = 0
                     if anchors < 6:
                         self.logger.debug(f"[Fallback] Materializing after search (anchors={anchors}<6)")
-                        await self._ensure_plp_materialized(page, site_config, settings, start_t=start_t, budget_ms=budget_ms, target_url=target_url)
+                        # CR-ATELIER-003 Phase A-1: _ensure_plp_materialized の代わりに NavigationDriver.ensure_plp_materialized を使用
+                        try:
+                            await navigation_driver.ensure_plp_materialized(nav_ctx)
+                        except Exception as e:
+                            self.logger.warning(f"[_run_plp_flow] NavigationDriver.ensure_plp_materialized after search failed: {e}", exc_info=True)
                     try:
                         # Stage 3B: TelemetryService を使用
                         telemetry = self._ensure_telemetry()
@@ -2403,10 +2281,15 @@ class BrowserUseAgent:
                             return await self._run_pdp_flow(pdp_page, site, query, settings, run_context, site_config)
                         except Exception as plp_e:
                             self.logger.warning(f"[Fallback] PlpDriver failed: {plp_e}", exc_info=True)
-                            # フォールバック: 既存の _click_first_card_or_link を使用
-                            new_page = await self._click_first_card_or_link(page, site_config, settings, context)
-                            if new_page:
-                                return await self._run_pdp_flow(new_page or page, site, query, settings, run_context, site_config)
+                            # CR-ATELIER-003 Phase A-1: _click_first_card_or_link の代わりに NavigationDriver.click_first_card_or_link を使用
+                            try:
+                                clicked_url = await navigation_driver.click_first_card_or_link(nav_ctx)
+                                if clicked_url:
+                                    # NavigationDriver.click_first_card_or_link は URL を返すので、その URL に遷移
+                                    await page.goto(clicked_url, wait_until="domcontentloaded", timeout=30000)
+                                    return await self._run_pdp_flow(page, site, query, settings, run_context, site_config)
+                            except Exception as click_e:
+                                self.logger.warning(f"[Fallback] NavigationDriver.click_first_card_or_link failed: {click_e}", exc_info=True)
                             # new_page も取れなかった → ここで即ギブアップ (V88.5.5)
                             raise ValueError("No PDP links and click fallback failed (gave up early for speed).")
                     # --- V88.5.5: 修正ここまで ---
@@ -2437,31 +2320,9 @@ class BrowserUseAgent:
             )
         raise ValueError("All PDP attempts failed after all recovery attempts.")
 
-    # Stage 3A-2-4: 実体は NavigationDriver.header_search_fallback に移行済み
-    # このメソッドは NavigationDriver が使われていない場合のフォールバックとして残している
-    # TODO: Stage 3A-2 完了後、NavigationDriver が常に使われるようになったら削除可能
-    # Stage 4: _plp_header_search_fallback() を削除し、NavigationDriver.header_search_fallback() を使用
-    async def _plp_header_search_fallback(self, page, query: str, site_config, settings, run_context, context: BrowserContext, *, start_t: float, budget_ms: int) -> bool:
-        """
-        Stage 4: ヘッダ検索フォールバックのヘルパー（NavigationDriver経由）
-        NavigationDriver.header_search_fallback() を呼び出すためのラッパー
-        """
-        from app.agents.browser.navigation_driver import NavigationDriver, NavigationContext
-        # NavigationContextを作成
-        nav_ctx = NavigationContext(
-            site=getattr(run_context, "site", ""),
-            query=query,
-            site_config=site_config,
-            settings=settings,
-            run_context=run_context,
-            start_t=start_t,
-            budget_ms=budget_ms,
-            entry_url=page.url,
-            context=context,
-        )
-        # NavigationDriverインスタンスを作成
-        driver = NavigationDriver(page=page)
-        return await driver.header_search_fallback(nav_ctx)
+    # CR-ATELIER-003 Phase A-2: _plp_header_search_fallback を削除
+    # すべての呼び出し箇所は NavigationDriver.header_search_fallback 経由に置き換え済み
+    # このメソッドは削除されました。NavigationDriver.header_search_fallback を直接使用してください。
 
     # ★ V88.5.5: タイムアウトを 15000ms -> 5000ms に短縮
     async def _click_and_capture_navigation(self, click_coro, page: Page, context: BrowserContext, *, url_regex: Optional[re.Pattern] = re.compile(r"/product[s]?/|/p/|/pp/", re.I), wait_state: str = "domcontentloaded", timeout_ms: int = 5000) -> Optional[Page]:
@@ -2494,42 +2355,9 @@ class BrowserUseAgent:
         except Exception as e_wait: self.logger.warning(f"[_click_and_capture] Nav race failed: {e_wait}"); return None
         finally: [t.cancel() for t in (popup_task, same_tab_nav_task, spa_url_task, spa_price_task) if t and not t.done()]
 
-    # Stage 3A-2-4: 実体は NavigationDriver.click_first_card_or_link に移行済み
-    # このメソッドは NavigationDriver が使われていない場合のフォールバックとして残している
-    # TODO: Stage 3A-2 完了後、NavigationDriver が常に使われるようになったら削除可能
-    async def _click_first_card_or_link(self, page: Page, site_config: Dict, settings: Dict, context: BrowserContext) -> Optional[Page]:
-        pdp = (site_config.get("selectors", {}).get("pdp") or {})
-        link_sel = pdp.get("pdp_link_selectors", [])
-        plp_boxes = pdp.get("plp_container_selectors", ["main", "section[role='main']", "#main", "[id*='product' i]", "[class*='product' i]"])
-        block_ng = set(pdp.get("blocklist_href_substrings", ["/cart", "/wishlist", "javascript:void"]))
-        url_pat = re.compile(r"/product[s]?/|/p/|/pp/", re.I)
-        if link_sel:
-            for s in link_sel:
-                try:
-                    loc = page.locator(s); count = await loc.count()
-                    for i in range(count):
-                        el = loc.nth(i); href = (await el.get_attribute("href")) or (await el.get_attribute("data-href")) or ""
-                        if href and not any(bad in href for bad in block_ng):
-                            await el.scroll_into_view_if_needed(); newp = await self._click_and_capture_navigation(lambda: el.click(timeout=5000), page, context, url_regex=url_pat)
-                            if newp: return newp
-                except Exception: continue
-        # ★ 88.6.2: (Refactor) 可読性のため整形
-        tile_selectors = [
-            "[data-qa='product-tile']",
-            ".c-product-tile",
-            ".product-card",
-            "[data-testid*='product-card']",
-            "article[data-product-id]"
-        ]
-        for box in plp_boxes:
-            for tile_sel in tile_selectors:
-                try:
-                    card = page.locator(f"{box} {tile_sel}").first; await card.scroll_into_view_if_needed()
-                    if await card.count() > 0:
-                        newp = await self._click_and_capture_navigation(lambda: card.click(timeout=5000), page, context, url_regex=url_pat)
-                        if newp: return newp
-                except Exception: continue
-        self.logger.warning("[Fallback:click-card] Could not find any clickable link or card."); return None
+    # CR-ATELIER-003 Phase A-2: _click_first_card_or_link を削除
+    # すべての呼び出し箇所は NavigationDriver.click_first_card_or_link 経由に置き換え済み
+    # このメソッドは削除されました。NavigationDriver.click_first_card_or_link を直接使用してください。
 
     # --- Flow Logic: PDP ---
     async def _run_pdp_flow(
@@ -2555,27 +2383,9 @@ class BrowserUseAgent:
             prepare_page=prepare_hook,
         )
 
-    # ★ V88.6.0: (Fix) ご提示いただいた差分パッチ L.59-L.90 (v88.5.9J で欠落していた) をここに追加
-    # ★NEW: 既定の“強制PLP復帰”保険（本命）
-    # ★ V88.6.1: (Refactor) 呼び出しを _normalize_to_en_int_url に修正
-    # ★ V88.6.1: (BugFix) goto に url= を明記
-    # Stage 3A-2-3: 実体は NavigationDriver.recover_plp に移行済み
-    # このメソッドは NavigationDriver が使われていない場合のフォールバックとして残している
-    # TODO: Stage 3A-2 完了後、NavigationDriver が常に使われるようになったら削除可能
-    # Stage 4: _force_plp_recover() を削除し、NavigationDriver._force_plp_recover() を使用
-    async def _force_plp_recover(self, page, site_config: dict, target_url: str | None) -> None:
-        """
-        Stage 4: PLP回復のヘルパー（NavigationDriver経由）
-        NavigationDriver._force_plp_recover() を呼び出すためのラッパー
-        """
-        from app.agents.browser.navigation_driver import NavigationDriver
-        # NavigationDriverインスタンスを作成
-        driver = NavigationDriver(page=page)
-        await driver._force_plp_recover(page, site_config, target_url)
-
-    # ★NEW: ガード用の簡易版（_force_plp_recover が見つからない場合の代替）
-    async def _inline_force_plp_recover(self, page, site_config: dict, target_url: str | None) -> None:
-        await self._force_plp_recover(page, site_config, target_url)
+    # CR-ATELIER-003 Phase A-2: _force_plp_recover と _inline_force_plp_recover を削除
+    # すべての呼び出し箇所は NavigationDriver.recover_plp 経由に置き換え済み
+    # このメソッドは削除されました。NavigationDriver.recover_plp を直接使用してください。
 
     # ★ V88.6.1: (Refactor) 不要になった重複メソッドを削除
     # def _normalize_en_int_url(self, url: str, site_config: dict) -> str: ...
@@ -2699,7 +2509,34 @@ class BrowserUseAgent:
     # --- Flow Logic: Learning ---
     async def _run_learning_flow(self, page: Page, context: BrowserContext, site: str, site_config: Dict, settings: Dict, run_context: RunContext, *, start_t: float, budget_ms: int) -> DiscoveryResult:
         self.logger.info(f"[LEARN] Starting learning flow for site: {site}")
-        await self._ensure_plp_materialized(page, site_config, settings, start_t=start_t, budget_ms=budget_ms)
+        # CR-ATELIER-003 Phase A-1: _ensure_plp_materialized の代わりに NavigationDriver.ensure_plp_materialized を使用
+        from app.agents.browser.navigation_driver import NavigationContext, NavigationDriver
+        from app.agents.browser.telemetry import TelemetryClient
+        nav_ctx = NavigationContext(
+            site=site,
+            query="(learning)",
+            site_config=site_config,
+            settings=settings,
+            run_context=run_context,
+            start_t=start_t,
+            budget_ms=budget_ms,
+            entry_url=page.url,
+            context=context,
+        )
+        telemetry = TelemetryClient(run_context=run_context)
+        navigation_driver = NavigationDriver(
+            page=page,
+            telemetry=telemetry,
+            trap_checker=None,
+            strategy=None,
+        )
+        try:
+            ok_materialized = await navigation_driver.ensure_plp_materialized(nav_ctx)
+            if not ok_materialized:
+                raise ValueError(f"PLP did not materialize for learning flow: {page.url}")
+        except Exception as e:
+            self.logger.warning(f"[LEARN] NavigationDriver.ensure_plp_materialized failed: {e}", exc_info=True)
+            raise ValueError(f"PLP did not materialize for learning flow: {page.url}")
         # Stage 3B: TelemetryService を使用
         try:
             telemetry = self._ensure_telemetry()
