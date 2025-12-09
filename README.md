@@ -79,6 +79,7 @@
   - セレクタ壊れ検知
   - 修正案生成
   - Telemetry ベースの再学習サイクル
+- **パッチ適用ガイド**: Moncler run 失敗時のパッチ候補を手動で適用する手順は [`docs/official/moncler_patch_apply_guide.md`](docs/official/moncler_patch_apply_guide.md) を参照
 
 ---
 

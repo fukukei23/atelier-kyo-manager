@@ -130,3 +130,105 @@ class SelectorDiscoveryAgent:
             finally:
                 if context:
                     await context.close()
+    
+    async def propose_moncler_selectors(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        CR-ATELIER-002 Step 6-5: Moncler 専用のセレクタ提案
+        
+        Args:
+            payload: セレクタ発見のための情報
+                - dom_snapshot_path: Optional[str]
+                - selectors_current: Dict[str, Any]
+                - layer_stats: Dict[str, Any]
+                - rejection_stats: Dict[str, Any]
+                - run_id: Optional[str]
+        
+        Returns:
+            Dict[str, Any]: セレクタ提案結果
+                - candidate_selectors: List[str]
+                - confidence_scores: List[float]
+                - recommended_layer: str ("primary" | "secondary" | "tertiary")
+        """
+        logger.info("[SelectorDiscovery][Moncler] Starting selector proposal")
+        
+        dom_snapshot_path = payload.get("dom_snapshot_path")
+        selectors_current = payload.get("selectors_current", {})
+        layer_stats = payload.get("layer_stats", {})
+        
+        # 現在のセレクタを取得
+        plp_selectors = (selectors_current.get("plp", {}) or {}).get("pdp_link_selectors", []) or []
+        
+        # 候補セレクタを生成（現時点ではルールベース、将来は LLM を使用可能）
+        candidate_selectors = []
+        confidence_scores = []
+        
+        # Primary layer の候補（既存のセレクタをベースに拡張）
+        if layer_stats.get("primary_raw", 0) == 0:
+            # Primary が失敗した場合、より広いセレクタを提案
+            candidate_selectors.extend([
+                "article[data-component*='ProductCard'] a[href*='/products/']",
+                "[data-testid*='product-card'] a[href*='/products/']",
+                "[data-testid*='product-tile'] a[href*='/products/']",
+                "div[class*='product-card' i] a[href*='/products/']",
+                "div[class*='product-tile' i] a[href*='/products/']",
+            ])
+            confidence_scores.extend([0.92, 0.88, 0.85, 0.80, 0.75])
+        
+        # Secondary layer の候補
+        if layer_stats.get("secondary_raw", 0) == 0:
+            candidate_selectors.extend([
+                "a[href*='/products/']:not([class*='breadcrumb']):not([class*='nav'])",
+                "section a[href*='/products/']",
+                "main a[href*='/products/']",
+            ])
+            confidence_scores.extend([0.70, 0.65, 0.60])
+        
+        # Tertiary layer の候補（最終手段）
+        if layer_stats.get("tertiary_raw", 0) == 0:
+            candidate_selectors.extend([
+                "a[href*='/products/']",
+            ])
+            confidence_scores.extend([0.50])
+        
+        # 既存のセレクタと重複を排除
+        existing_selectors = set(plp_selectors)
+        unique_candidates = []
+        unique_scores = []
+        for sel, score in zip(candidate_selectors, confidence_scores):
+            if sel not in existing_selectors:
+                unique_candidates.append(sel)
+                unique_scores.append(score)
+        
+        # 信頼度の高い順にソート
+        sorted_pairs = sorted(zip(unique_candidates, unique_scores), key=lambda x: x[1], reverse=True)
+        candidate_selectors = [sel for sel, _ in sorted_pairs]
+        confidence_scores = [score for _, score in sorted_pairs]
+        
+        # 最低3件の候補を返す（不足する場合は既存のセレクタから追加）
+        if len(candidate_selectors) < 3:
+            # 既存のセレクタから追加（信頼度は低めに設定）
+            for sel in plp_selectors[:3]:
+                if sel not in candidate_selectors:
+                    candidate_selectors.append(sel)
+                    confidence_scores.append(0.40)
+        
+        # recommended_layer を決定
+        recommended_layer = "primary"
+        if layer_stats.get("primary_accepted", 0) == 0:
+            if layer_stats.get("secondary_accepted", 0) > 0:
+                recommended_layer = "secondary"
+            else:
+                recommended_layer = "tertiary"
+        
+        result = {
+            "candidate_selectors": candidate_selectors[:10],  # 最大10件
+            "confidence_scores": confidence_scores[:10],
+            "recommended_layer": recommended_layer,
+        }
+        
+        logger.info(
+            f"[SelectorDiscovery][Moncler] Proposed {len(result['candidate_selectors'])} selectors, "
+            f"recommended_layer={recommended_layer}"
+        )
+        
+        return result

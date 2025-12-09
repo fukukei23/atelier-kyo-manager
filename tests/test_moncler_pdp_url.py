@@ -284,7 +284,7 @@ class TestExtractMonclerPdpLinks:
         assert len(result) == 0
         assert mock_telemetry.save_json.called
         call_args = mock_telemetry.save_json.call_args
-        assert call_args[0][0] == "moncler_pdp_extraction_debug"
+        assert call_args[0][0] == "moncler_pdp_links_debug"
         assert "raw_hrefs" in call_args[0][1]
         assert "rejection_stats" in call_args[0][1]
 
