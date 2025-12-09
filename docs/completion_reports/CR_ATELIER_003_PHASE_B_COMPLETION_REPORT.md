@@ -219,16 +219,36 @@ if site_code == "MONCLER_OFFICIAL":
 
 **実施内容**:
 - `tests/test_moncler_pdp_url.py` を実行
-- `tests/test_plp_driver.py` を実行（venv が有効化されていないため、エラーが発生）
+- `tests/test_moncler_*` を実行（Moncler 関連テストすべて）
+- `tests/test_plp_driver.py` を実行
+- `tests/test_browser_use_agent_plp_integration.py` を実行
+- `tests/test_navigation_driver_stage3a2.py` を実行
 
 **結果**:
-- `test_moncler_pdp_url.py`: 17 passed
-- `test_plp_driver.py`: venv が有効化されていないため、エラーが発生（実装とは無関係）
+- `test_moncler_pdp_url.py`: 17 passed ✅
+- `test_moncler_*`: 40 passed ✅（Moncler 関連テストはすべてパス）
+- `test_plp_driver.py`: 13 passed ✅
+- `test_browser_use_agent_plp_integration.py`: 1 passed, 5 failed ⚠️（テストコードの問題）
+- `test_navigation_driver_stage3a2.py`: 4 passed, 4 failed ⚠️（テストコードの問題）
 
 **重要な確認事項**:
 - ✅ `AttributeError / NameError`（`MonclerPlpHandler` が見つからない系）は発生していない
 - ✅ Moncler 専用処理が MonclerPlpHandler 経由で実行されている
 - ✅ NavigationDriver 内に Moncler 分岐がない
+- ✅ 構文エラーは修正済み（孤立した `except` ブロックを削除）
+
+**Phase B とは無関係なテスト失敗の詳細**:
+1. **`test_browser_use_agent_plp_integration.py` の失敗**:
+   - 原因: PlpDriver のモック問題（`'coroutine' object has no attribute 'count'`）
+   - 影響: Phase B の実装とは無関係（テストコードのモック設定の問題）
+   - 対応: テストコードの修正が必要（Phase B の範囲外）
+
+2. **`test_navigation_driver_stage3a2.py` の失敗**:
+   - 原因: テストコードが古い API を使用
+     - `NavigationDriver.looks_like_trap_or_legal` はプライベートメソッド（`_looks_like_trap_or_legal`）
+     - `NavigationDriver.__init__()` に `ensure_plp_materialized` 引数が存在しない
+   - 影響: Phase B の実装とは無関係（テストコードが古い API を使用している）
+   - 対応: テストコードの修正が必要（Phase B の範囲外）
 
 ### Step B-6: Git コミット
 
