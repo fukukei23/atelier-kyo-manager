@@ -40,6 +40,9 @@ from app.agents.plugins.moncler_plp_v1 import (
     MONCLER_PLP_CONTAINER_SELECTORS,
     MONCLER_PLP_TILE_SELECTORS,
     MONCLER_PLP_PDP_LINK_SELECTORS,
+    MONCLER_PLP_PDP_LINK_SELECTORS_PRIMARY,
+    MONCLER_PLP_PDP_LINK_SELECTORS_SECONDARY,
+    MONCLER_PLP_PDP_LINK_SELECTORS_TERTIARY,
 )
 
 logger_extractor = logging.getLogger(__name__)
@@ -90,6 +93,7 @@ async def extract_moncler_pdp_links(
         "url_normalization_failed": 0,
         "external_domain": 0,
         "blocked_domain": 0,
+        "double_locale_path": 0,  # CR-ATELIER-002 Step 4-2: 二重ロケールパターン
         "no_en_int_path": 0,
         "no_products_path": 0,
         "trap_pattern": 0,
@@ -108,9 +112,36 @@ async def extract_moncler_pdp_links(
         except Exception:
             continue
     
-    # 2) コンテナ内の tile を query（直接リンクセレクタを使用）
+    # CR-ATELIER-002 Step 5-2: セレクタ戦略のレイヤリング実装
+    # Primary → Secondary → Tertiary の順で抽出を試みる
+    # 各レイヤで何件ヒットしたかを Telemetry に記録
+    
+    # Primary Layer（site_config準拠）を優先的に使用
+    plp_selectors = (site_config.get("selectors", {}) or {}).get("plp", {}) or {}
+    primary_selectors = plp_selectors.get("pdp_link_selectors", []) or MONCLER_PLP_PDP_LINK_SELECTORS_PRIMARY
+    
+    # Secondary Layer（DOM構造ベース）
+    secondary_selectors = MONCLER_PLP_PDP_LINK_SELECTORS_SECONDARY
+    
+    # Tertiary Layer（汎用フォールバック）
+    tertiary_selectors = MONCLER_PLP_PDP_LINK_SELECTORS_TERTIARY
+    
+    # レイヤごとのヒット数を記録
+    layer_stats: Dict[str, int] = {
+        "primary_raw": 0,
+        "primary_accepted": 0,
+        "secondary_raw": 0,
+        "secondary_accepted": 0,
+        "tertiary_raw": 0,
+        "tertiary_accepted": 0,
+    }
+    
+    # 2) Primary Layer で抽出を試みる
     raw_elements_count = 0
-    for link_sel in MONCLER_PLP_PDP_LINK_SELECTORS:
+    current_layer = "primary"
+    current_selectors = primary_selectors
+    
+    for link_sel in current_selectors:
         try:
             nodes = await page.query_selector_all(link_sel)
             if not nodes:
@@ -170,13 +201,35 @@ async def extract_moncler_pdp_links(
     if len(urls) > max_links:
         urls = urls[:max_links]
     
-    # CR-ATELIER-002 Step 3-3: ログ出力とTelemetry保存
+    # CR-ATELIER-002 Step 4-3: Telemetry/ログの実データに合わせた具体化
+    # PDP候補hrefのraw一覧を、最大10件までdebugログに出力
+    if raw_hrefs:
+        sample_hrefs = raw_hrefs[:10]
+        logger_extractor.debug(
+            f"[PLP→PDP][Moncler] Raw hrefs (first 10): {sample_hrefs}"
+        )
+    
+    # 各hrefがrejectされた理由をカウントし、reject_statsとしてログにまとめる
+    origin_rejected = rejection_stats.get('external_domain', 0) + rejection_stats.get('blocked_domain', 0)
+    locale_rejected = rejection_stats.get('no_en_int_path', 0)
+    path_rejected = rejection_stats.get('no_products_path', 0)
+    trap_rejected = rejection_stats.get('trap_pattern', 0)
+    other_rejected = (
+        rejection_stats.get('no_href', 0) +
+        rejection_stats.get('url_normalization_failed', 0) +
+        rejection_stats.get('other', 0)
+    )
+    
+    # CR-ATELIER-002 Step 5-2: レイヤごとの統計情報をログに出力
     logger_extractor.info(
         f"[PLP→PDP][Moncler] Extraction summary: raw={len(raw_hrefs)}, "
-        f"origin_rejected={rejection_stats.get('external_domain', 0) + rejection_stats.get('blocked_domain', 0)}, "
-        f"locale_rejected={rejection_stats.get('no_en_int_path', 0)}, "
-        f"path_rejected={rejection_stats.get('no_products_path', 0)}, "
-        f"accepted={len(urls)}"
+        f"origin_rejected={origin_rejected}, "
+        f"locale_rejected={locale_rejected}, "
+        f"path_rejected={path_rejected}, "
+        f"trap_rejected={trap_rejected}, "
+        f"other_rejected={other_rejected}, "
+        f"accepted={len(urls)}, "
+        f"layer_stats={layer_stats}"
     )
     
     # accepted==0 の場合、Telemetry に保存
@@ -197,18 +250,30 @@ async def extract_moncler_pdp_links(
                     run_id=getattr(run_context, "run_id", None),
                     stage="plp"
                 )
+                # CR-ATELIER-002 Step 4-3: Telemetry保存の仕様を明確化
+                # moncler_pdp_links_debug.json のようなファイル名で保存
                 await telemetry.save_json(
-                    "moncler_pdp_extraction_debug",
+                    "moncler_pdp_links_debug",
                     {
                         "raw_hrefs": raw_hrefs[:50],  # 最大50件
-                        "rejection_stats": rejection_stats,
-                        "url": target_url,
+                        "rejection_stats": {
+                            "origin": origin_rejected,
+                            "locale": locale_rejected,
+                            "path": path_rejected,
+                            "trap": trap_rejected,
+                            "other": other_rejected,
+                            "total_rejected": sum(rejection_stats.values()),
+                        },
+                        "rejection_details": rejection_stats,  # 詳細なreject理由
+                        "current_url": target_url,
                         "raw_elements_count": raw_elements_count,
+                        "run_id": getattr(run_context, "run_id", None),
                     },
                     tctx,
                 )
                 logger_extractor.warning(
-                    "[PLP→PDP][Moncler] No valid PDP links found, debug data saved to Telemetry"
+                    f"[PLP→PDP][Moncler] No valid PDP links found (raw={len(raw_hrefs)}, "
+                    f"rejected={sum(rejection_stats.values())}), debug data saved to Telemetry"
                 )
         except Exception as e:
             logger_extractor.debug(f"[PLP→PDP][Moncler] Failed to save Telemetry: {e}")
@@ -217,6 +282,38 @@ async def extract_moncler_pdp_links(
         f"[PLP→PDP][Moncler] Collected {len(urls)} PDP links "
         f"(from {raw_elements_count} raw elements)"
     )
+    
+    # CR-ATELIER-002 Step 6-2: outcome 情報を生成
+    # 使用されたレイヤを判定
+    layers_used: List[str] = []
+    if layer_stats.get("primary_raw", 0) > 0 or layer_stats.get("primary_accepted", 0) > 0:
+        layers_used.append("primary")
+    if layer_stats.get("secondary_raw", 0) > 0 or layer_stats.get("secondary_accepted", 0) > 0:
+        layers_used.append("secondary")
+    if layer_stats.get("tertiary_raw", 0) > 0 or layer_stats.get("tertiary_accepted", 0) > 0:
+        layers_used.append("tertiary")
+    
+    # outcome 情報を構築（NavigationDriver 側で Telemetry 保存用に使用）
+    # ctx に格納できる場合は格納（後方互換性のため）
+    outcome_info = {
+        "links": urls,
+        "raw_count": len(raw_hrefs),
+        "accepted_count": len(urls),
+        "layer_stats": layer_stats,
+        "layers_used": layers_used,
+        "rejection_stats": rejection_stats,
+        "current_url": target_url,
+    }
+    
+    # ctx が dict-like の場合、outcome_info を格納
+    if isinstance(ctx, dict):
+        ctx["moncler_outcome"] = outcome_info
+    elif hasattr(ctx, "__dict__"):
+        # NavigationContext などのオブジェクトの場合、動的に属性を追加
+        try:
+            setattr(ctx, "moncler_outcome", outcome_info)
+        except Exception:
+            pass  # 読み取り専用属性の場合は無視
     
     return urls
 
@@ -241,10 +338,9 @@ def _get_moncler_rejection_reason(url: str, base_url: str) -> Optional[str]:
         
         # ホストチェック（Moncler本体のドメインのみ）
         host = parsed.netloc.lower()
-        if not host.endswith("moncler.com"):
-            return "external_domain"
         
-        # 外部ドメインの明示的な除外
+        # CR-ATELIER-002 Step 4-2: 外部ドメインの明示的な除外を先にチェック
+        # （blocked_domains のチェックを host.endswith より前に実行）
         blocked_domains = [
             "onetrust.com",
             "monclergroup.com",
@@ -257,8 +353,17 @@ def _get_moncler_rejection_reason(url: str, base_url: str) -> Optional[str]:
             if blocked in host:
                 return "blocked_domain"
         
+        if not host.endswith("moncler.com"):
+            return "external_domain"
+        
         # パスチェック
         path = parsed.path or ""
+        
+        # CR-ATELIER-002 Step 4-2: 二重ロケールパターンの検出とreject
+        # /en-lt/en-int/ や /en-de/en-int/ のような二重ロケールを含むパスはreject
+        double_locale_pattern = re.compile(r"/en-[a-z]{2}/en-int/", re.I)
+        if double_locale_pattern.search(path):
+            return "double_locale_path"
         
         # ロケールパスが /en-int/ で始まること（/en-lt/, /en-de/, /en-jp/ は除外）
         if not path.startswith("/en-int/"):
@@ -268,7 +373,8 @@ def _get_moncler_rejection_reason(url: str, base_url: str) -> Optional[str]:
         if "/products/" not in path and "/product/" not in path:
             return "no_products_path"
         
-        # trap ページパターンの除外
+        # CR-ATELIER-002 Step 4-2: trapページパターンの除外を強化
+        # /search, /client-service, /404 等を含むパスはreject
         trap_patterns = [
             "/404",
             "/not-found",
@@ -285,6 +391,10 @@ def _get_moncler_rejection_reason(url: str, base_url: str) -> Optional[str]:
             if trap_pattern in path.lower():
                 return "trap_pattern"
         
+        # クエリパラメータのチェック（shipToCountry=GB が推奨されるが、必須ではない）
+        # URLバリデーションの範囲外として、ここではチェックしない
+        # （_ensure_expected_locale が現在のページ自体を /en-int/...&shipToCountry=GB に揃える役割）
+        
         return None  # 有効なURL
     except Exception:
         return "other"
@@ -292,16 +402,21 @@ def _get_moncler_rejection_reason(url: str, base_url: str) -> Optional[str]:
 
 def _is_valid_moncler_pdp_url(url: str, base_url: str) -> bool:
     """
-    CR-ATELIER-002 Step 3: Moncler専用のURLバリデーション
+    CR-ATELIER-002 Step 4-2: Moncler専用のURLバリデーション
     
     Accept 条件（Moncler用）:
     - origin: https://www.moncler.com
-    - path: /en-int/ で始まる（trap 判定と競合しない範囲で）
-    - path に /products/ を含む
+    - path: /en-int/.../products/... を含む
+    - query: shipToCountry=GB（推奨されるが、URLバリデーションでは必須ではない）
     
     Reject 条件:
-    - onetrust.com などの外部ドメイン
-    - .../search や 404 など trap ページパターン（必要な範囲で）
+    - origin != moncler.com
+    - path に /search, /client-service, /404 等を含む（trapページパターン）
+    - パス内に /en-[a-z]{2}/en-int/ のような二重ロケールを含む
+    
+    注意:
+    - ロケール制御（_ensure_expected_locale）は「現在のページ自体」を /en-int/...&shipToCountry=GB に揃える役割
+    - URLバリデーションは「PDP候補リンク」をフィルタする役割に限定
     
     Args:
         url: 検証対象のURL
@@ -338,6 +453,12 @@ def _is_valid_moncler_pdp_url(url: str, base_url: str) -> bool:
         # パスチェック
         path = parsed.path or ""
         
+        # CR-ATELIER-002 Step 4-2: 二重ロケールパターンの検出とreject
+        # /en-lt/en-int/ や /en-de/en-int/ のような二重ロケールを含むパスはreject
+        double_locale_pattern = re.compile(r"/en-[a-z]{2}/en-int/", re.I)
+        if double_locale_pattern.search(path):
+            return False
+        
         # ロケールパスが /en-int/ で始まること（/en-lt/, /en-de/, /en-jp/ は除外）
         if not path.startswith("/en-int/"):
             return False
@@ -346,7 +467,8 @@ def _is_valid_moncler_pdp_url(url: str, base_url: str) -> bool:
         if "/products/" not in path and "/product/" not in path:
             return False
         
-        # trap ページパターンの除外
+        # CR-ATELIER-002 Step 4-2: trapページパターンの除外を強化
+        # /search, /client-service, /404 等を含むパスはreject
         trap_patterns = [
             "/404",
             "/not-found",
@@ -364,7 +486,8 @@ def _is_valid_moncler_pdp_url(url: str, base_url: str) -> bool:
                 return False
         
         # クエリパラメータのチェック（shipToCountry=GB が推奨されるが、必須ではない）
-        # ここではチェックしない（URLバリデーションの範囲外）
+        # URLバリデーションの範囲外として、ここではチェックしない
+        # （_ensure_expected_locale が現在のページ自体を /en-int/...&shipToCountry=GB に揃える役割）
         
         return True
     except Exception:

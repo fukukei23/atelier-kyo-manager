@@ -422,6 +422,47 @@ class TelemetryService:
     async def _maybe_await(self, x: Any) -> Any:
         """引数が Awaitable であれば await し、そうでなければそのまま返す"""
         return (await x) if inspect.isawaitable(x) else x
+    
+    async def record_moncler_plp_pdp_outcome(
+        self,
+        outcome: Dict[str, Any],
+    ) -> None:
+        """
+        CR-ATELIER-002 Step 6: Moncler PLP→PDP 抽出結果を Telemetry に記録
+        
+        Args:
+            outcome: 抽出結果の辞書。以下のフィールドを含む:
+                - plp_materialized: bool
+                - tiles_detected: int
+                - pdp_links_raw: int
+                - pdp_links_accepted: int
+                - selector_layers_used: list[str]  # ["primary", "secondary", ...]
+                - layer_stats: dict  # レイヤ別件数など
+                - locale_corrections: int
+                - trap_detected: bool
+                - current_url: str
+                - run_id: str
+                - timestamp: str  # ISO8601 文字列（オプション、なければ自動生成）
+        """
+        try:
+            # timestamp がなければ自動生成
+            if "timestamp" not in outcome:
+                from datetime import datetime
+                outcome["timestamp"] = datetime.utcnow().isoformat() + "Z"
+            
+            # キー名は設計書に準拠
+            await self._save_json(outcome, "moncler_plp_pdp_outcome")
+            self.logger.info(
+                f"[Telemetry][Moncler] Recorded PLP→PDP outcome: "
+                f"raw={outcome.get('pdp_links_raw', 0)}, "
+                f"accepted={outcome.get('pdp_links_accepted', 0)}, "
+                f"layers={outcome.get('selector_layers_used', [])}"
+            )
+        except Exception as e:
+            self.logger.warning(
+                f"[Telemetry][Moncler] Failed to record PLP→PDP outcome: {e}",
+                exc_info=True
+            )
 
 
 class TelemetryClient:
