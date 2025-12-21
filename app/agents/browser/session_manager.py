@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import random
@@ -147,6 +148,9 @@ class SessionManager:
         try:
             if self._context and self.settings.get("enable_trace"):
                 await self._context.tracing.stop(path=self.run_context.get_path("trace.zip"))
+        except asyncio.CancelledError:
+            # タイムアウトキャンセル時はCancelledErrorを握ってクリーンアップを継続
+            self.logger.warning("[SessionManager] Tracing stop cancelled (timeout). Continuing cleanup.")
         except Exception as e:
             self.logger.warning(f"[SessionManager] Failed to stop tracing: {e}")
 
@@ -162,6 +166,9 @@ class SessionManager:
                         except Exception as ve:
                             self.logger.warning(f"[SessionManager] Failed to save video: {ve}")
                 await self._context.close()
+        except asyncio.CancelledError:
+            # タイムアウトキャンセル時はCancelledErrorを握ってクリーンアップを継続
+            self.logger.warning("[SessionManager] Context close cancelled (timeout). Continuing cleanup.")
         except Exception as e:
             self.logger.warning(f"[SessionManager] Failed to close context: {e}")
 
@@ -193,19 +200,43 @@ class SessionManager:
         pw = await async_playwright().start()
         self._playwright = pw
 
-        use_proxy_flag = bool(
-            self.runtime_kwargs.get("use_proxy")
-            or self.site_config.get("use_proxy")
-            or (self.site_config.get("discovery_settings") or {}).get("use_proxy", False)
+        # 三値（None/True/False）でproxy判定を行う
+        # 優先順位: runtime_kwargs > site_config > discovery_settings > default
+        use_proxy_value: Optional[bool] = None
+        source: str = "default"
+        
+        # 1. runtime_kwargsをチェック（keyが存在するかで判定、Falseも有効）
+        if "use_proxy" in self.runtime_kwargs:
+            use_proxy_value = bool(self.runtime_kwargs["use_proxy"])
+            source = "runtime"
+        # 2. site_configをチェック（keyが存在するかで判定、Falseも有効）
+        elif "use_proxy" in self.site_config:
+            use_proxy_value = bool(self.site_config["use_proxy"])
+            source = "site_config"
+        # 3. discovery_settingsをチェック（keyが存在するかで判定、Falseも有効）
+        elif "use_proxy" in (self.site_config.get("discovery_settings") or {}):
+            use_proxy_value = bool((self.site_config.get("discovery_settings") or {})["use_proxy"])
+            source = "discovery_settings"
+        # 4. 明示指定が無い場合のみ、proxy_poolの存在でデフォルト決定
+        else:
+            if self._get_proxy_list_for_site(self.site):
+                use_proxy_value = True
+                source = "default (proxies configured)"
+            else:
+                use_proxy_value = False
+                source = "default (no proxies)"
+        
+        use_proxy_flag = use_proxy_value
+        
+        # ログ出力（use_proxy_flagとsourceを明示）
+        self.logger.info(
+            "[SessionManager] use_proxy=%s (source=%s, site=%s)",
+            use_proxy_flag,
+            source,
+            self.site,
         )
-
-        if not use_proxy_flag and self._get_proxy_list_for_site(self.site):
-            self.logger.info(
-                "[SessionManager] Proxies configured for %s, enabling proxy mode by default.",
-                self.site,
-            )
-            use_proxy_flag = True
-
+        
+        # proxyが有効だがproxy_poolにproxyが無い場合の警告
         if use_proxy_flag and not self._get_proxy_list_for_site(self.site):
             self.logger.warning(
                 "[SessionManager] use_proxy=True but no proxies configured for %s. Falling back to direct connection.",
@@ -241,25 +272,35 @@ class SessionManager:
                     slow_mo=self.settings.get("slow_mo", 0),
                     proxy=proxy_arg,
                 )
+                if browser is None:
+                    raise RuntimeError("Failed to launch browser")
+                
                 context_opts = self._build_context_options()
                 context = await browser.new_context(**context_opts)
+                if context is None:
+                    raise RuntimeError("Failed to create browser context")
                 
                 # Stealth を適用（context 作成後）
-                if apply_stealth_to_context is not None:
+                if apply_stealth_to_context is not None and build_stealth_params_from_site_config is not None:
                     stealth_params = build_stealth_params_from_site_config(
                         self.site_config,
                         settings=self.settings,
                         enable_ua_rotation=self.settings.get("enable_ua_rotation", False),
                         enable_viewport_rotation=self.settings.get("enable_viewport_rotation", False),
                     )
-                    await apply_stealth_to_context(
-                        context,
-                        user_agent=stealth_params.get("user_agent"),
-                        viewport=stealth_params.get("viewport"),
-                        locale=stealth_params.get("locale"),
-                        timezone_id=stealth_params.get("timezone_id"),
-                        accept_language=stealth_params.get("accept_language"),
-                    )
+                    if stealth_params is not None:
+                        await apply_stealth_to_context(
+                            context,
+                            user_agent=stealth_params.get("user_agent"),
+                            viewport=stealth_params.get("viewport"),
+                            locale=stealth_params.get("locale"),
+                            timezone_id=stealth_params.get("timezone_id"),
+                            accept_language=stealth_params.get("accept_language"),
+                        )
+                    else:
+                        # Stealth params の構築に失敗した場合はフォールバック
+                        self.logger.warning("[SessionManager] Failed to build stealth params, using fallback")
+                        await self._setup_init_scripts(context)
                 else:
                     # フォールバック: 既存の _setup_init_scripts を使用
                     await self._setup_init_scripts(context)

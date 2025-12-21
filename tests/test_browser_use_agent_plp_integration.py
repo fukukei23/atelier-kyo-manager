@@ -193,11 +193,16 @@ async def test_browser_use_agent_delegates_to_plp_driver(
     )
     
     # PlpDriver をモック: navigate_to_pdp が expected_result を返す
-    with patch("app.agents.browser_use_agent.PlpDriver") as mock_plp_driver_class:
+    # CR-ATELIER-003 Phase C-4 Step 2: Orchestrator 経由でもモックが効くように、
+    # browser_orchestrator.PlpDriver もモックする
+    with patch("app.agents.browser_use_agent.PlpDriver") as mock_plp_driver_class, \
+         patch("app.agents.browser_orchestrator.PlpDriver") as mock_orchestrator_plp_driver_class:
         mock_plp_driver_instance = MagicMock()
         mock_plp_driver_instance.navigate_to_pdp = AsyncMock(return_value=expected_result)
         mock_plp_driver_instance.page = mock_page
         mock_plp_driver_class.return_value = mock_plp_driver_instance
+        # Orchestrator 用のモックも同じインスタンスを使用
+        mock_orchestrator_plp_driver_class.return_value = mock_plp_driver_instance
         
         # NavigationDriver 側は「pdp_links が空で PlpDriver 経由になる」最低限の動きだけ残す
         with patch("app.agents.browser_use_agent.NavigationDriver") as mock_nav_driver_class, \
@@ -281,6 +286,7 @@ async def test_browser_use_agent_uses_plp_driver_result(
     )
     
     with patch("app.agents.browser_use_agent.PlpDriver") as mock_plp_driver_class, \
+         patch("app.agents.browser_orchestrator.PlpDriver") as mock_orchestrator_plp_driver_class, \
          patch("app.agents.browser_use_agent.NavigationDriver") as mock_nav_driver_class, \
          patch("app.agents.browser_use_agent.NavigationContext") as mock_nav_ctx_class, \
          patch.object(browser_use_agent, "_run_pdp_flow", new_callable=AsyncMock) as mock_run_pdp_flow, \
@@ -294,6 +300,8 @@ async def test_browser_use_agent_uses_plp_driver_result(
         mock_plp_driver_instance.navigate_to_pdp = AsyncMock(return_value=plp_result)
         mock_plp_driver_instance.page = mock_page
         mock_plp_driver_class.return_value = mock_plp_driver_instance
+        # Orchestrator 用のモックも同じインスタンスを使用
+        mock_orchestrator_plp_driver_class.return_value = mock_plp_driver_instance
         
         # NavigationDriver は「pdp_links が空」になるようにだけ整える
         from app.agents.browser.navigation_driver import NavigationOutcome
@@ -455,11 +463,16 @@ async def test_browser_use_agent_saves_overlays_handled(
     run_context.save_json = mock_save_json
     
     # PlpDriver をモック
-    with patch('app.agents.browser_use_agent.PlpDriver') as mock_plp_driver_class:
+    # CR-ATELIER-003 Phase C-4 Step 2: Orchestrator 経由でもモックが効くように、
+    # browser_orchestrator.PlpDriver もモックする
+    with patch('app.agents.browser_use_agent.PlpDriver') as mock_plp_driver_class, \
+         patch("app.agents.browser_orchestrator.PlpDriver") as mock_orchestrator_plp_driver_class:
         mock_plp_driver = AsyncMock()
         mock_plp_driver.navigate_to_pdp = AsyncMock(return_value=overlay_result)
         mock_plp_driver.page = mock_page
         mock_plp_driver_class.return_value = mock_plp_driver
+        # Orchestrator 用のモックも同じインスタンスを使用
+        mock_orchestrator_plp_driver_class.return_value = mock_plp_driver
         
         # PlpDriver を使用してナビゲーション
         from app.agents.browser.plp_driver import PlpDriver
@@ -548,8 +561,12 @@ async def test_run_plp_flow_saves_plp_navigation_result(
     }
     
     # PlpDriver と NavigationDriver をモック
+    # CR-ATELIER-003 Phase C-4 Final: Orchestrator 経由でもモックが効くように、
+    # browser_orchestrator.PlpDriver と browser_orchestrator.NavigationDriver もモックする
     with patch('app.agents.browser_use_agent.PlpDriver') as mock_plp_driver_class, \
+         patch("app.agents.browser_orchestrator.PlpDriver") as mock_orchestrator_plp_driver_class, \
          patch('app.agents.browser_use_agent.NavigationDriver') as mock_nav_driver_class, \
+         patch("app.agents.browser_orchestrator.NavigationDriver") as mock_orchestrator_nav_driver_class, \
          patch('app.agents.browser_use_agent.NavigationContext') as mock_nav_ctx_class, \
          patch.object(browser_use_agent, '_run_pdp_flow', new_callable=AsyncMock) as mock_run_pdp_flow, \
          patch.object(browser_use_agent, '_ensure_telemetry', return_value=MagicMock()):
@@ -568,12 +585,16 @@ async def test_run_plp_flow_saves_plp_navigation_result(
         mock_plp_driver.navigate_to_pdp = AsyncMock(return_value=nav_result)
         mock_plp_driver.page = mock_page
         mock_plp_driver_class.return_value = mock_plp_driver
+        # Orchestrator 用のモックも同じインスタンスを使用
+        mock_orchestrator_plp_driver_class.return_value = mock_plp_driver
         
         # NavigationDriver をモック
         mock_nav_driver = AsyncMock()
         mock_nav_driver.run_plp_flow = AsyncMock(return_value=mock_nav_outcome)
         mock_nav_driver.collect_pdp_links = AsyncMock(return_value=[])
         mock_nav_driver_class.return_value = mock_nav_driver
+        # Orchestrator 用のモックも同じインスタンスを使用
+        mock_orchestrator_nav_driver_class.return_value = mock_nav_driver
         mock_nav_ctx_class.return_value = MagicMock()
         
         # _run_plp_flow を実行

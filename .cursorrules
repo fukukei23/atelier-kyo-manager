@@ -526,4 +526,69 @@ If the user's input implies an intent to **analyze, scan, or understand the curr
 
 - Spec が無いまま大きな機能追加・リファクタリングを行うことは禁止。
 
+---
+
+# == AKM SRS Management Rules (atelier-kyo-manager) ==
+
+## AKM 正式仕様書（SRS）の管理ルール
+
+- **AKM 全体仕様は `docs/akm/` 以下で集中管理する**
+
+- **既存の `docs/spec/` 以下（CR-ATELIER-*** など）はそのまま維持し、移動・削除しない**
+
+## SRS 作成・更新時の必須ルール
+
+### 1. SRS の配置先
+
+- 新しい SRS は必ず `docs/akm/specs/<domain>/AKM_SRS_<Domain>_v1.0.md` に配置する
+- 例: `docs/akm/specs/self_healing/AKM_SRS_SelfHealing_v1.0.md`
+
+### 2. 総合仕様書の更新（必須）
+
+**新しい SRS を作成・更新した場合は、必ず以下のファイルを更新すること：**
+
+- `docs/akm/system/AKM_SRS_AKM_OVERALL_v1.0.md`
+
+**更新内容：**
+
+- 「すべての SRS へのパス一覧」セクションに新しい SRS へのリンクを追加
+- 該当モジュールの「状態」を更新（未実装 → 実装済み、など）
+- 「更新履歴」セクションに更新日時と内容を記録
+
+### 3. SRS テンプレート
+
+SRS を作成・更新するときは、以下の構成を必ず含める：
+
+1. 目的（Purpose）
+2. スコープ（Scope）
+3. 用語定義（Definitions）
+4. 機能要求（Functional Requirements）
+5. 非機能要求（Non-Functional Requirements）
+6. 入力 / 出力 / I/O仕様
+7. データモデル（スキーマ）
+8. 処理フロー / 状態遷移
+9. エラー・例外処理
+10. 制約
+11. 他 SRS との依存関係
+12. リスク・未決事項
+
+### 4. コード修正前の SRS 確認
+
+- コード修正前に必ず該当 SRS を確認する
+- SRS が未整備なら、まず SRS を作る／更新する
+- 実装は SRS を基に行う
+- SRS を無視したコード変更は禁止
+
+### 5. 仕様変更を伴う改修の順序
+
+仕様変更を伴う改修は以下の順番で進める：
+
+1. **SRS 更新** → 2. **総合仕様書更新** → 3. **テスト** → 4. **実装**
+
+## 関連ファイル
+
+- `docs/akm/process/AKM_CURSOR_INSTRUCTIONS.md`: Cursor 指示書（詳細ルール）
+- `docs/akm/process/AKM_PROCESS_SDS_TDD_POLICY_v1.0.md`: SDS・TDDポリシー
+- `docs/akm/system/AKM_SRS_AKM_OVERALL_v1.0.md`: 総合仕様書（必ず更新）
+
 # -----------------------------------

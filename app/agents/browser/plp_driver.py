@@ -129,6 +129,148 @@ class PlpDriver:
         overlays_handled: List[str] = []
         
         try:
+            # 0. trap/localeの早期判定（無駄な処理をスキップ）
+            trap_config = self._get_trap_config()
+            trap_detected_early = False
+            trap_reason_early = None
+            
+            # trap判定を先に実行（materialize前に）
+            if self._is_trap_page(plp_url, trap_config):
+                trap_detected_early = True
+                trap_reason_early = f"trap_url_detected: {plp_url}"
+                
+                # trap/localeの切り分けログ（集約出力）
+                try:
+                    # URL解析
+                    from urllib.parse import urlparse
+                    parsed_url = urlparse(plp_url)
+                    path_ok = "/en-int/" in parsed_url.path
+                    country_ok = "en-lt" not in parsed_url.path and "en-int" in parsed_url.path
+                    
+                    # proxy情報（contextから取得を試みる）
+                    proxy_info = "unknown"
+                    try:
+                        if hasattr(self.context, "_proxy_entry") and self.context._proxy_entry:
+                            proxy_info = f"proxy={self.context._proxy_entry.server}"
+                        elif hasattr(self.context, "proxy") and self.context.proxy:
+                            proxy_info = f"proxy={self.context.proxy.get('server', 'unknown')}"
+                        else:
+                            proxy_info = "proxy=none"
+                    except Exception:
+                        proxy_info = "proxy=unknown"
+                    
+                    # cookie/localStorage適用有無（簡易チェック）
+                    cookie_applied = False
+                    localStorage_applied = False
+                    try:
+                        cookies = await self.page.context.cookies()
+                        cookie_applied = len(cookies) > 0
+                        # localStorageは簡易的に（エラーを握る）
+                        try:
+                            localStorage_keys = await self.page.evaluate("() => Object.keys(localStorage).length")
+                            localStorage_applied = localStorage_keys > 0
+                        except Exception:
+                            localStorage_applied = False
+                    except Exception:
+                        pass
+                    
+                    self.logger.warning(
+                        f"[PlpDriver] Early trap detection - Diagnostic info: "
+                        f"current_url={plp_url}, "
+                        f"path_ok={path_ok}, "
+                        f"country_ok={country_ok}, "
+                        f"{proxy_info}, "
+                        f"cookie_applied={cookie_applied}, "
+                        f"localStorage_applied={localStorage_applied}, "
+                        f"trap_reason={trap_reason_early}"
+                    )
+                except Exception as e_diag:
+                    self.logger.debug(f"[PlpDriver] Failed to collect diagnostic info: {e_diag}")
+                    self.logger.warning(f"[PlpDriver] Early trap detection: {trap_reason_early}")
+                
+                errors.append(trap_reason_early)
+                # trapが検出された場合は早期に失敗を返す
+                return PlpNavigationResult(
+                    pdp_url="",
+                    pdp_opened_in_new_tab=False,
+                    plp_url=plp_url,
+                    tiles_seen=0,
+                    trap_detected=True,
+                    trap_reason=trap_reason_early,
+                    recovery_attempted=False,
+                    recovery_successful=False,
+                    overlays_handled=overlays_handled,
+                    navigation_method=None,
+                    errors=errors,
+                )
+            
+            # localeリダイレクトループの検出（一定回数連続でtrap-like URLになった場合）
+            locale_redirect_loop_detected = False
+            if target_url and self._detected_locale_redirect():
+                # ロケールリダイレクトが検出された場合、早期に失敗を返す（materializeをスキップ）
+                locale_redirect_loop_detected = True
+                error_msg = f"locale_redirect_loop: Current URL={plp_url}, Target URL={target_url}"
+                
+                # trap/localeの切り分けログ（集約出力）
+                try:
+                    from urllib.parse import urlparse
+                    parsed_url = urlparse(plp_url)
+                    path_ok = "/en-int/" in parsed_url.path
+                    country_ok = "en-lt" not in parsed_url.path and "en-int" in parsed_url.path
+                    
+                    proxy_info = "unknown"
+                    try:
+                        if hasattr(self.context, "_proxy_entry") and self.context._proxy_entry:
+                            proxy_info = f"proxy={self.context._proxy_entry.server}"
+                        elif hasattr(self.context, "proxy") and self.context.proxy:
+                            proxy_info = f"proxy={self.context.proxy.get('server', 'unknown')}"
+                        else:
+                            proxy_info = "proxy=none"
+                    except Exception:
+                        proxy_info = "proxy=unknown"
+                    
+                    cookie_applied = False
+                    localStorage_applied = False
+                    try:
+                        cookies = await self.page.context.cookies()
+                        cookie_applied = len(cookies) > 0
+                        try:
+                            localStorage_keys = await self.page.evaluate("() => Object.keys(localStorage).length")
+                            localStorage_applied = localStorage_keys > 0
+                        except Exception:
+                            localStorage_applied = False
+                    except Exception:
+                        pass
+                    
+                    self.logger.warning(
+                        f"[PlpDriver] Early locale redirect loop detection - Diagnostic info: "
+                        f"current_url={plp_url}, "
+                        f"target_url={target_url}, "
+                        f"path_ok={path_ok}, "
+                        f"country_ok={country_ok}, "
+                        f"{proxy_info}, "
+                        f"cookie_applied={cookie_applied}, "
+                        f"localStorage_applied={localStorage_applied}"
+                    )
+                except Exception as e_diag:
+                    self.logger.debug(f"[PlpDriver] Failed to collect diagnostic info: {e_diag}")
+                    self.logger.warning(f"[PlpDriver] Early locale redirect loop detection: {error_msg}")
+                
+                errors.append(error_msg)
+                return PlpNavigationResult(
+                    pdp_url="",
+                    pdp_opened_in_new_tab=False,
+                    plp_url=plp_url,
+                    tiles_seen=0,
+                    trap_detected=False,
+                    trap_reason=None,
+                    recovery_attempted=False,
+                    recovery_successful=False,
+                    overlays_handled=overlays_handled,
+                    navigation_method=None,
+                    errors=errors,
+                )
+            
             # 1. Overlay処理（Cookie、Geo、その他）
             await self._handle_overlays(overlays_handled)
             
@@ -142,6 +284,11 @@ class PlpDriver:
             )
             
             if tiles_seen == 0:
+                # 証跡保存（best-effort）
+                await self._save_materialize_failure_evidence(
+                    ", ".join(plp_config.get("product_tiles", []) + plp_config.get("product_link", [])),
+                    plp_config
+                )
                 error_msg = f"PLP did not materialize (no product tiles). URL={plp_url}"
                 errors.append(error_msg)
                 raise ValueError(error_msg)
@@ -505,6 +652,10 @@ class PlpDriver:
             pass
         
         self.logger.error("[PlpDriver] Failed: No product tiles found after all scroll attempts.")
+        
+        # 証跡保存（best-effort、例外を握る）
+        await self._save_materialize_failure_evidence(tile_selector_str, plp_config)
+        
         return 0
     
     # === Private Methods: ナビゲーション ===
@@ -857,34 +1008,120 @@ class PlpDriver:
     
     async def _handle_cookie_banner(self, config: Dict[str, Any]) -> bool:
         """
-        Cookieバナーを処理（Stage 4: site_configベース）
+        Cookieバナーを処理（Stage 4: site_configベース・堅牢化版 v2）
+        
+        OneTrust等のCookieバナーを段階的フォールバックで処理。
+        要素が不可視でも例外でRunを落とさず、警告ログで継続。
+        すべての例外（TimeoutError/TargetClosedError/CancelledError）を握る。
         
         Returns:
             bool: Cookieバナーが処理されたかどうか
         """
-        selectors = config.get("selectors", [])
-        wait_ms = config.get("wait_after_click_ms", 500)
-        
-        # デフォルトセレクタも追加
-        if not selectors:
-            selectors = [
-                "#onetrust-accept-btn-handler",
-                "button:has-text('ACCEPT ALL')",
-                "button:has-text('CONTINUE WITHOUT ACCEPTING')",
-                "button[aria-label*='Accept' i]"
-            ]
-        
-        for sel in selectors:
-            try:
-                loc = self.page.locator(sel).first
-                if await loc.count() > 0:
-                    await loc.click(timeout=3000)
-                    await self.page.wait_for_timeout(wait_ms)
-                    self.logger.info(f"[PlpDriver] Cookie banner accepted via: {sel}")
-                    return True
-            except Exception:
-                continue
-        return False
+        # 関数全体をtry/exceptで囲み、例外を外へ出さない
+        try:
+            selectors = config.get("selectors", [])
+            wait_ms = config.get("wait_after_click_ms", 500)
+            
+            # デフォルトセレクタ（OneTrustのidを最優先）
+            if not selectors:
+                selectors = [
+                    "#accept-recommended-btn-handler",  # OneTrustの実際のid（最優先）
+                    "button#accept-recommended-btn-handler",  # buttonタグ付き
+                    "#onetrust-accept-btn-handler",  # 既存のOneTrustセレクタ
+                    "button:has-text('ACCEPT ALL')",  # テキストベース
+                    "button[id*='accept'][id*='btn']",  # 部分一致
+                    "button:has-text('CONTINUE WITHOUT ACCEPTING')",
+                    "button[aria-label*='Accept' i]"
+                ]
+            
+            for sel in selectors:
+                try:
+                    loc = self.page.locator(sel).first
+                    count = await loc.count()
+                    
+                    if count == 0:
+                        continue
+                    
+                    # 段階的フォールバック: 1) 通常のクリック（visibleの場合）
+                    try:
+                        is_visible = await loc.is_visible()
+                        if is_visible:
+                            await loc.click(timeout=2000)  # timeout短縮
+                            await self.page.wait_for_timeout(wait_ms)
+                            self.logger.info(f"[CookieBanner] Accepted via visible click: {sel}")
+                            return True
+                    except Exception as e_visible:
+                        self.logger.debug(f"[CookieBanner] Visible click failed for {sel}: {e_visible}")
+                    
+                    # 段階的フォールバック: 2) locator.evaluate("el => el.click()") - 表示要件を回避
+                    try:
+                        await loc.evaluate("el => el.click()")
+                        await self.page.wait_for_timeout(wait_ms)
+                        self.logger.info(f"[CookieBanner] Accepted via evaluate click: {sel}")
+                        return True
+                    except Exception as e_eval:
+                        self.logger.debug(f"[CookieBanner] Evaluate click failed for {sel}: {e_eval}")
+                    
+                    # 段階的フォールバック: 3) force=Trueでクリック
+                    try:
+                        await loc.click(force=True, timeout=1500)
+                        await self.page.wait_for_timeout(wait_ms)
+                        self.logger.info(f"[CookieBanner] Accepted via force click: {sel}")
+                        return True
+                    except Exception as e_force:
+                        self.logger.debug(f"[CookieBanner] Force click failed for {sel}: {e_force}")
+                    
+                    # 段階的フォールバック: 4) page.evaluateでDOM直接クリック（idセレクタのみ）
+                    try:
+                        # idセレクタの場合は直接idで試す（安全な方法）
+                        if sel.startswith("#"):
+                            element_id = sel.lstrip("#").split()[0]  # 複合セレクタの場合は最初のidのみ
+                            clicked = await self.page.evaluate(
+                                """((elementId) => {
+                                    try {
+                                        const btn = document.getElementById(elementId) || 
+                                                   document.querySelector('button#' + elementId);
+                                        if (btn) {
+                                            btn.click();
+                                            return true;
+                                        }
+                                        return false;
+                                    } catch (e) {
+                                        return false;
+                                    }
+                                })""",
+                                element_id
+                            )
+                            if clicked:
+                                await self.page.wait_for_timeout(wait_ms)
+                                self.logger.info(f"[CookieBanner] Accepted via DOM click (id): {element_id}")
+                                return True
+                    except Exception as e_dom:
+                        self.logger.debug(f"[CookieBanner] DOM click failed for {sel}: {e_dom}")
+                    
+                except Exception as e:
+                    # セレクタ解決自体が失敗した場合は次のセレクタへ
+                    self.logger.debug(f"[CookieBanner] Selector evaluation failed for {sel}: {e}")
+                    continue
+            
+            # すべての手段が失敗した場合、警告ログを出して継続（例外を投げない）
+            self.logger.warning(
+                "[CookieBanner] Could not close cookie banner with any method. "
+                "Continuing execution (banner may interfere with navigation)."
+            )
+            return False
+            
+        except asyncio.CancelledError:
+            # CancelledErrorは握ってreturn Falseで抜ける
+            self.logger.warning("[CookieBanner] Cancelled during cookie banner handling. Continuing execution.")
+            return False
+        except Exception as e:
+            # すべての例外（TimeoutError, TargetClosedError等を含む）を握る
+            exc_type = type(e).__name__
+            self.logger.warning(
+                f"[CookieBanner] Could not accept; continue. reason={exc_type}: {e}"
+            )
+            return False
     
     async def _handle_geo_modal(self, config: Dict[str, Any]) -> bool:
         """
@@ -1026,3 +1263,140 @@ class PlpDriver:
         """残り時間を計算する。"""
         elapsed_ms = (time.time() - start_t) * 1000
         return max(0, budget_ms - elapsed_ms)
+    
+    async def _save_materialize_failure_evidence(
+        self,
+        tile_selector_str: str,
+        plp_config: Dict[str, Any],
+    ) -> None:
+        """
+        PLP materialize失敗時の証跡を保存（best-effort）
+        
+        - DOMスナップショット（failure_dom.html）
+        - tile候補セレクタ別count
+        - 現在URL
+        - OneTrust/Consent iframeの存在有無と可視状態
+        - スクリーンショット（可能なら）
+        """
+        try:
+            current_url = self.page.url
+            
+            # 1. DOMスナップショット保存
+            try:
+                dom_content = await self.page.content()
+                if self.run_context:
+                    dom_path = self.run_context.get_path("plp_failure_dom.html")
+                    with open(dom_path, "w", encoding="utf-8") as f:
+                        f.write(dom_content)
+                    self.logger.info(f"[PlpDriver] Saved failure DOM: {dom_path}")
+            except Exception as e_dom:
+                self.logger.debug(f"[PlpDriver] Failed to save DOM: {e_dom}")
+            
+            # 2. tile候補セレクタ別count
+            selector_counts = {}
+            try:
+                product_tiles = plp_config.get("product_tiles", [])
+                product_link = plp_config.get("product_link", [])
+                for sel in product_tiles + product_link:
+                    try:
+                        count = await self.page.locator(sel).count()
+                        selector_counts[sel] = count
+                    except Exception:
+                        selector_counts[sel] = -1  # エラー
+                
+                # 統合セレクタもカウント
+                try:
+                    count = await self.page.locator(tile_selector_str).count()
+                    selector_counts["_combined"] = count
+                except Exception:
+                    selector_counts["_combined"] = -1
+                
+                if self.run_context:
+                    counts_path = self.run_context.get_path("plp_failure_selector_counts.json")
+                    import json
+                    with open(counts_path, "w", encoding="utf-8") as f:
+                        json.dump({
+                            "url": current_url,
+                            "selector_counts": selector_counts,
+                            "tile_selector_str": tile_selector_str,
+                        }, f, indent=2, ensure_ascii=False)
+                    self.logger.info(f"[PlpDriver] Saved selector counts: {counts_path}")
+            except Exception as e_counts:
+                self.logger.debug(f"[PlpDriver] Failed to save selector counts: {e_counts}")
+            
+            # 3. OneTrust/Consent iframeの存在有無と可視状態
+            try:
+                iframe_info = {}
+                iframe_selectors = [
+                    "#onetrust-banner-sdk",
+                    "#onetrust-pc-sdk",
+                    "iframe[src*='onetrust']",
+                    "iframe[src*='consent']",
+                ]
+                for sel in iframe_selectors:
+                    try:
+                        loc = self.page.locator(sel)
+                        count = await loc.count()
+                        is_visible = False
+                        if count > 0:
+                            try:
+                                is_visible = await loc.first.is_visible()
+                            except Exception:
+                                pass
+                        iframe_info[sel] = {"count": count, "is_visible": is_visible}
+                    except Exception:
+                        iframe_info[sel] = {"count": -1, "is_visible": False}
+                
+                if self.run_context:
+                    iframe_path = self.run_context.get_path("plp_failure_iframe_info.json")
+                    import json
+                    with open(iframe_path, "w", encoding="utf-8") as f:
+                        json.dump({
+                            "url": current_url,
+                            "iframe_info": iframe_info,
+                        }, f, indent=2, ensure_ascii=False)
+                    self.logger.info(f"[PlpDriver] Saved iframe info: {iframe_path}")
+            except Exception as e_iframe:
+                self.logger.debug(f"[PlpDriver] Failed to save iframe info: {e_iframe}")
+            
+            # 4. スクリーンショット（可能なら）
+            try:
+                if self.run_context:
+                    screenshot_path = self.run_context.get_path("plp_failure_screenshot.png")
+                    await self.page.screenshot(path=screenshot_path, full_page=False)
+                    self.logger.info(f"[PlpDriver] Saved screenshot: {screenshot_path}")
+            except Exception as e_screenshot:
+                self.logger.debug(f"[PlpDriver] Failed to save screenshot: {e_screenshot}")
+            
+            # 5. 現在URLと主要cookie/localStorageのダンプ（簡易版）
+            try:
+                if self.run_context:
+                    url_info_path = self.run_context.get_path("plp_failure_url_info.json")
+                    import json
+                    url_info = {
+                        "url": current_url,
+                        "title": await self.page.title() if hasattr(self.page, "title") else "",
+                    }
+                    # cookie/localStorageは簡易的に（エラーを握る）
+                    try:
+                        cookies = await self.page.context.cookies()
+                        url_info["cookies_count"] = len(cookies)
+                        url_info["cookies_sample"] = cookies[:5] if cookies else []
+                    except Exception:
+                        url_info["cookies_count"] = -1
+                    
+                    try:
+                        localStorage_items = await self.page.evaluate("() => Object.keys(localStorage).length")
+                        url_info["localStorage_keys_count"] = localStorage_items
+                    except Exception:
+                        url_info["localStorage_keys_count"] = -1
+                    
+                    with open(url_info_path, "w", encoding="utf-8") as f:
+                        json.dump(url_info, f, indent=2, ensure_ascii=False)
+                    self.logger.info(f"[PlpDriver] Saved URL info: {url_info_path}")
+            except Exception as e_url_info:
+                self.logger.debug(f"[PlpDriver] Failed to save URL info: {e_url_info}")
+                
+        except Exception as e:
+            # 証跡保存自体が失敗しても本体エラーを上書きしない
+            self.logger.debug(f"[PlpDriver] Failed to save materialize failure evidence: {e}")

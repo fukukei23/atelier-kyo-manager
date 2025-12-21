@@ -18,17 +18,19 @@ Stage 3A-2-1 では、BrowserUseAgent._collect_pdp_links のロジックをこ�
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING
 from urllib.parse import urljoin, urlsplit, urlunsplit, urlparse, parse_qsl, quote_plus
 
 from playwright.async_api import ElementHandle, Locator, Page, BrowserContext
 
 if TYPE_CHECKING:
-    from app.agents.browser.telemetry import TelemetryService, TelemetryClient, TelemetryContext
+    from app.agents.browser.telemetry import TelemetryClient, TelemetryContext
 
 # Stage 3A-2-1: extractor モジュールから looks_like_product_url を import
 try:
@@ -48,6 +50,36 @@ logger = logging.getLogger(__name__)
 
 # Stage 3A-2-2: ロケールセグメント判定用の正規表現
 _LOCALE_SEG_RE = re.compile(r"^[a-z]{2}-[a-z]{2}$", re.IGNORECASE)
+
+# CR-E2E-003: reject理由の列挙型
+class RejectReason(str, Enum):
+    """PDPリンク候補のreject理由"""
+    NO_HREF = "no_href"
+    DIFFERENT_ORIGIN = "different_origin"
+    DIFFERENT_DOMAIN = "different_domain"  # CR-E2E-003A拡張: eTLD+1が異なる
+    DIFFERENT_SUBDOMAIN = "different_subdomain"  # CR-E2E-003A拡張: サブドメインが異なる
+    BLOCKED_ORIGIN = "blocked_origin"
+    NOT_PRODUCT_URL = "not_product_url"
+    NO_PRODUCTS_PATH = "no_products_path"
+    BLOCKED_DOMAIN = "blocked_domain"
+    TRAP_PATTERN = "trap_pattern"
+    NOISE_PATTERN = "noise_pattern"
+    VALIDATION_ERROR = "validation_error"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class LinkCandidate:
+    """PDPリンク候補（CR-E2E-003/003A/003B）"""
+    url: str  # raw_href
+    phase: str  # "1a", "1b", "2", "moncler"
+    normalized_url: str  # resolved_url
+    reject_reasons: List[str] = field(default_factory=list)
+    accepted: bool = False
+    source_selector: Optional[str] = None  # CR-E2E-003A: セレクタ情報
+    origin: Optional[str] = None  # CR-E2E-003A: origin情報
+    notes: Optional[str] = None  # CR-E2E-003A: 補足情報
+    product_url_rules: Optional[Dict[str, Any]] = None  # CR-E2E-003B: 判定根拠
 
 # CR-ATELIER-002 Step 1: Trap ページ検出用の例外クラス
 class TrapPageDetected(Exception):
@@ -90,6 +122,8 @@ class NavigationContext:
     budget_ms: int
     entry_url: Optional[str] = None
     context: Any = None  # Stage 3A-2-4: BrowserContext（fallback で必要、click_first_card_or_link で使用）
+    link_collection_summary: Optional[Dict[str, Any]] = None  # CR-E2E-003: リンク収集のサマリ
+    link_collection_summary: Optional[Dict[str, Any]] = None  # CR-E2E-003: リンク収集のサマリ
 
 
 @dataclass
@@ -551,7 +585,7 @@ class NavigationDriver:
                     "run_id": getattr(ctx.run_context, "run_id", None) if ctx.run_context else None,
                 }
                 
-                # TelemetryService に保存
+                # TelemetryClient に保存
                 if hasattr(self.telemetry, "_service"):
                     await self.telemetry._service.record_moncler_plp_pdp_outcome(outcome_dict)
                 else:
@@ -650,6 +684,497 @@ class NavigationDriver:
         
         return outcome
 
+    def _extract_etld_plus_one(self, hostname: str) -> Optional[str]:
+        """
+        CR-E2E-003A拡張: eTLD+1を抽出（例: www.moncler.com -> moncler.com）
+        
+        Args:
+            hostname: ホスト名
+        
+        Returns:
+            Optional[str]: eTLD+1またはNone
+        """
+        if not hostname:
+            return None
+        hostname = hostname.lower().strip()
+        # 簡易実装: 最後の2つのドメイン部分を取得
+        # より正確にはpublicsuffixlistを使うが、ここでは簡易版
+        parts = hostname.split(".")
+        if len(parts) >= 2:
+            return ".".join(parts[-2:])
+        return hostname
+    
+    def _is_same_site(self, url1: str, url2: str) -> bool:
+        """
+        CR-E2E-003A拡張: 2つのURLが同じサイト（eTLD+1）か判定
+        
+        Args:
+            url1: URL1
+            url2: URL2
+        
+        Returns:
+            bool: 同じサイトの場合True
+        """
+        try:
+            parsed1 = urlparse(url1)
+            parsed2 = urlparse(url2)
+            etld1 = self._extract_etld_plus_one(parsed1.netloc)
+            etld2 = self._extract_etld_plus_one(parsed2.netloc)
+            return etld1 and etld2 and etld1 == etld2
+        except Exception:
+            return False
+    
+    def _check_origin_allowed(
+        self,
+        url: str,
+        base_url: str,
+        site_config: Optional[Dict[str, Any]] = None,
+    ) -> tuple[bool, Optional[str]]:
+        """
+        CR-E2E-003/003A拡張: originが許可されているかチェック（eTLD+1判定対応）
+        
+        Args:
+            url: 検証対象URL
+            base_url: ベースURL
+            site_config: サイト設定（任意）
+        
+        Returns:
+            (is_allowed, reject_reason): 許可されている場合True、拒否理由（拒否時）
+        """
+        try:
+            parsed = urlparse(url)
+            base_parsed = urlparse(base_url)
+            url_origin = (parsed.scheme, parsed.netloc)
+            base_origin = (base_parsed.scheme, base_parsed.netloc)
+            
+            # 同一originの場合は許可
+            if url_origin == base_origin:
+                return True, None
+            
+            # CR-E2E-003A拡張: eTLD+1判定（same-site）
+            if self._is_same_site(url, base_url):
+                # サブドメインが異なる場合は警告付きで許可
+                if parsed.netloc.lower() != base_parsed.netloc.lower():
+                    return True, None  # 許可（reject理由は記録しない）
+                return True, None
+            
+            # site_configから設定を取得（Missing-safe）
+            if site_config:
+                allowed_origins = site_config.get("allowed_origins", [])
+                blocked_origins = site_config.get("blocked_origins", [])
+                allowed_host_suffixes = site_config.get("allowed_host_suffixes", [])
+                # CR-E2E-003A拡張: allowed_domains（配列）とallowed_domain（文字列）の両方に対応
+                allowed_domains = site_config.get("allowed_domains", [])
+                if not allowed_domains:
+                    allowed_domain = site_config.get("allowed_domain")
+                    if allowed_domain:
+                        allowed_domains = [allowed_domain]
+            else:
+                allowed_origins = []
+                blocked_origins = []
+                allowed_host_suffixes = []
+                allowed_domains = []
+            
+            # blocked_originsチェック
+            if blocked_origins:
+                for blocked in blocked_origins:
+                    if blocked in parsed.netloc.lower():
+                        return False, RejectReason.BLOCKED_ORIGIN.value
+            
+            # CR-E2E-003A拡張: allowed_domainsチェック（eTLD+1判定）
+            if allowed_domains:
+                url_etld = self._extract_etld_plus_one(parsed.netloc)
+                for allowed_domain in allowed_domains:
+                    allowed_etld = self._extract_etld_plus_one(allowed_domain)
+                    if url_etld and allowed_etld and url_etld == allowed_etld:
+                        return True, None
+            
+            # allowed_originsチェック
+            if allowed_origins:
+                for allowed in allowed_origins:
+                    if allowed in parsed.netloc.lower():
+                        return True, None
+            
+            # allowed_host_suffixesチェック
+            if allowed_host_suffixes:
+                for suffix in allowed_host_suffixes:
+                    if parsed.netloc.lower().endswith(suffix):
+                        return True, None
+            
+            # CR-E2E-003A拡張: reject理由を分解
+            # eTLD+1が異なる場合はdifferent_domain、サブドメインのみ異なる場合はdifferent_subdomain
+            url_etld = self._extract_etld_plus_one(parsed.netloc)
+            base_etld = self._extract_etld_plus_one(base_parsed.netloc)
+            if url_etld and base_etld and url_etld != base_etld:
+                return False, RejectReason.DIFFERENT_DOMAIN.value
+            elif parsed.netloc.lower() != base_parsed.netloc.lower():
+                return False, RejectReason.DIFFERENT_SUBDOMAIN.value
+            
+            # デフォルト: 外部originは拒否（ただし候補として残す）
+            return False, RejectReason.DIFFERENT_ORIGIN.value
+        except Exception:
+            return False, RejectReason.VALIDATION_ERROR.value
+    
+    def _extract_origin(self, url: str) -> Optional[str]:
+        """
+        CR-E2E-003A: URLからoriginを抽出
+        
+        Args:
+            url: URL
+        
+        Returns:
+            Optional[str]: origin（scheme://netloc）またはNone
+        """
+        try:
+            parsed = urlparse(url)
+            if parsed.scheme and parsed.netloc:
+                return f"{parsed.scheme}://{parsed.netloc}"
+        except Exception:
+            pass
+        return None
+    
+    def _normalize_url(
+        self,
+        url: str,
+        base_url: str,
+        site_config: Optional[Dict[str, Any]] = None,
+    ) -> tuple[str, Dict[str, Any]]:
+        """
+        CR-E2E-003B: URLを正規化（相対URL、クエリ、フラグメント、末尾スラッシュ、localeパラメータ等を統一）
+        
+        Args:
+            url: 正規化対象URL
+            base_url: ベースURL（相対URL解決用）
+            site_config: サイト設定（任意）
+        
+        Returns:
+            (normalized_url, normalization_info): 正規化されたURLと正規化情報
+        """
+        normalization_info = {
+            "original": url,
+            "was_relative": False,
+            "removed_query_params": [],
+            "removed_fragment": False,
+            "normalized": url,
+        }
+        
+        try:
+            # プロトコル相対URL（//example.com/path）の処理
+            if url.startswith("//"):
+                base_parsed = urlparse(base_url)
+                normalized = f"{base_parsed.scheme}:{url}"
+                normalization_info["was_relative"] = True
+            # 相対URLを絶対URLに変換
+            elif url.startswith("/") or not url.startswith("http"):
+                normalized = urljoin(base_url, url)
+                normalization_info["was_relative"] = True
+            else:
+                normalized = url
+            
+            parsed = urlparse(normalized)
+            
+            # クエリパラメータの処理
+            query_params = {}
+            if parsed.query:
+                from urllib.parse import parse_qs
+                query_dict = parse_qs(parsed.query)
+                
+                # site_configから削除すべきクエリパラメータを取得
+                remove_params = []
+                if site_config:
+                    url_rules = site_config.get("url_rules", {})
+                    if isinstance(url_rules, dict):
+                        normalize_rules = url_rules.get("normalize_rules", {})
+                        if isinstance(normalize_rules, dict):
+                            remove_params = normalize_rules.get("remove_query_params", [])
+                
+                # 削除対象以外のパラメータを保持
+                for key, values in query_dict.items():
+                    if key not in remove_params:
+                        query_params[key] = values
+                    else:
+                        normalization_info["removed_query_params"].append(key)
+            
+            # フラグメントの処理
+            fragment = ""
+            if site_config:
+                url_rules = site_config.get("url_rules", {})
+                if isinstance(url_rules, dict):
+                    normalize_rules = url_rules.get("normalize_rules", {})
+                    if isinstance(normalize_rules, dict) and not normalize_rules.get("remove_fragment", True):
+                        fragment = parsed.fragment
+                    else:
+                        normalization_info["removed_fragment"] = True
+            
+            # URLを再構築
+            from urllib.parse import urlencode, urlunparse
+            normalized_query = urlencode(query_params, doseq=True) if query_params else ""
+            normalized = urlunparse((
+                parsed.scheme,
+                parsed.netloc,
+                parsed.path,
+                parsed.params,
+                normalized_query,
+                fragment
+            ))
+            
+            normalization_info["normalized"] = normalized
+            return normalized, normalization_info
+        except Exception as e:
+            logger.debug(f"[URL Normalize] Failed to normalize URL: {e}")
+            normalization_info["error"] = str(e)
+            return url, normalization_info
+    
+    def _validate_candidate_url(
+        self,
+        url: str,
+        normalized_url: str,
+        base_url: str,
+        site_config: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        CR-E2E-003B: 候補URLを検証し、判定根拠を返す
+        
+        Args:
+            url: 元のURL（raw_href）
+            normalized_url: 正規化済みURL
+            base_url: ベースURL
+            site_config: サイト設定（任意）
+        
+        Returns:
+            Dict[str, Any]: 検証結果と判定根拠
+            {
+                "domain_allowed": bool,
+                "allow_path_matched": bool,
+                "allow_path_pattern": Optional[str],  # マッチしたパターン
+                "forbidden_path_matched": bool,
+                "forbidden_path_pattern": Optional[str],  # マッチしたパターン
+                "locale_ok": bool,
+                "final_decision": "accept" | "reject",
+                "reject_reasons": List[str],
+                "product_url_rules": Dict[str, Any],
+            }
+        """
+        result = {
+            "domain_allowed": False,
+            "allow_path_matched": False,
+            "allow_path_pattern": None,
+            "forbidden_path_matched": False,
+            "forbidden_path_pattern": None,
+            "locale_ok": False,
+            "final_decision": "reject",
+            "reject_reasons": [],
+            "product_url_rules": {},
+        }
+        
+        try:
+            parsed = urlparse(normalized_url)
+            path = parsed.path or ""
+            host = parsed.netloc.lower() if parsed.netloc else ""
+            
+            # 1. ドメイン許可チェック
+            if site_config:
+                allowed_domains = site_config.get("allowed_domains", [])
+                if not allowed_domains:
+                    allowed_domain = site_config.get("allowed_domain")
+                    if allowed_domain:
+                        allowed_domains = [allowed_domain]
+                
+                domain_allowed = False
+                if allowed_domains:
+                    url_etld = self._extract_etld_plus_one(host)
+                    for allowed_domain in allowed_domains:
+                        allowed_etld = self._extract_etld_plus_one(allowed_domain)
+                        if url_etld and allowed_etld and url_etld == allowed_etld:
+                            domain_allowed = True
+                            break
+                
+                result["domain_allowed"] = domain_allowed
+                
+                if not domain_allowed:
+                    result["reject_reasons"].append(RejectReason.DIFFERENT_DOMAIN.value)
+                    result["final_decision"] = "reject"
+                    return result
+            else:
+                # site_configがない場合は、base_urlと同じドメインかチェック
+                base_parsed = urlparse(base_url)
+                base_host = base_parsed.netloc.lower() if base_parsed.netloc else ""
+                if host and base_host:
+                    url_etld = self._extract_etld_plus_one(host)
+                    base_etld = self._extract_etld_plus_one(base_host)
+                    result["domain_allowed"] = url_etld and base_etld and url_etld == base_etld
+                    if not result["domain_allowed"]:
+                        result["reject_reasons"].append(RejectReason.DIFFERENT_DOMAIN.value)
+                        result["final_decision"] = "reject"
+                        return result
+                else:
+                    result["domain_allowed"] = True  # デフォルトで許可
+            
+            # 2. forbidden_path_patternsチェック（優先）
+            if site_config:
+                url_rules = site_config.get("url_rules", {})
+                if isinstance(url_rules, dict):
+                    forbidden_path_patterns = url_rules.get("forbidden_path_patterns", [])
+                    for pattern in forbidden_path_patterns:
+                        if re.search(pattern, path, re.I):
+                            result["forbidden_path_matched"] = True
+                            result["forbidden_path_pattern"] = pattern
+                            result["reject_reasons"].append(RejectReason.NOISE_PATTERN.value)
+                            result["final_decision"] = "reject"
+                            return result
+                    
+                    # 3. allow_path_patternsチェック
+                    allow_path_patterns = url_rules.get("allow_path_patterns", [])
+                    if allow_path_patterns:
+                        for pattern in allow_path_patterns:
+                            if re.search(pattern, path, re.I):
+                                result["allow_path_matched"] = True
+                                result["allow_path_pattern"] = pattern
+                                break
+                    
+                    # allow_path_patternsが設定されていてマッチしない場合
+                    if allow_path_patterns and not result["allow_path_matched"]:
+                        result["reject_reasons"].append(RejectReason.NO_PRODUCTS_PATH.value)
+                        result["final_decision"] = "reject"
+                        return result
+                    elif not allow_path_patterns:
+                        # 従来の/products?/チェック
+                        if not re.search(r"/products?/", path, re.I):
+                            result["reject_reasons"].append(RejectReason.NO_PRODUCTS_PATH.value)
+                            result["final_decision"] = "reject"
+                            return result
+                else:
+                    # 従来の/products?/チェック
+                    if not re.search(r"/products?/", path, re.I):
+                        result["reject_reasons"].append(RejectReason.NO_PRODUCTS_PATH.value)
+                        result["final_decision"] = "reject"
+                        return result
+            else:
+                # site_configがない場合も従来の/products?/チェック
+                if not re.search(r"/products?/", path, re.I):
+                    result["reject_reasons"].append(RejectReason.NO_PRODUCTS_PATH.value)
+                    result["final_decision"] = "reject"
+                    return result
+                else:
+                    result["allow_path_matched"] = True
+            
+            # 4. locale_okチェック（LocaleGuardの結果を参照）
+            # 簡易チェック: /en-int/で始まるか
+            result["locale_ok"] = path.lower().startswith("/en-int/")
+            
+            # 5. looks_like_product_urlチェック（allow_path_matchedがTrueの場合はスキップ）
+            if not result["allow_path_matched"]:
+                looks_like_product = looks_like_product_url(normalized_url)
+                if not looks_like_product:
+                    result["reject_reasons"].append(RejectReason.NOT_PRODUCT_URL.value)
+                    result["final_decision"] = "reject"
+                    return result
+            
+            # 6. すべてのチェックをパスした場合
+            if not result["reject_reasons"]:
+                result["final_decision"] = "accept"
+            
+            # product_url_rulesを構築
+            result["product_url_rules"] = {
+                "domain_allowed": result["domain_allowed"],
+                "allow_path_matched": result["allow_path_matched"],
+                "allow_path_pattern": result["allow_path_pattern"],
+                "forbidden_path_matched": result["forbidden_path_matched"],
+                "forbidden_path_pattern": result["forbidden_path_pattern"],
+                "locale_ok": result["locale_ok"],
+                "final_decision": result["final_decision"],
+                "reject_reasons": result["reject_reasons"],
+            }
+            
+            return result
+        except Exception as e:
+            logger.warning(f"[Validate Candidate URL] Failed to validate URL: {e}", exc_info=True)
+            result["reject_reasons"].append(RejectReason.VALIDATION_ERROR.value)
+            result["final_decision"] = "reject"
+            result["error"] = str(e)
+            return result
+    
+    def _classify_candidate(
+        self,
+        candidate: LinkCandidate,
+        base_url: str,
+        site_config: Optional[Dict[str, Any]] = None,
+    ) -> LinkCandidate:
+        """
+        CR-E2E-003/003A/003B: 候補を分類し、reject理由を記録
+        
+        CR-E2E-003B拡張: _validate_candidate_urlを使用して体系的な検証を行う
+        
+        Args:
+            candidate: リンク候補
+            base_url: ベースURL
+            site_config: サイト設定（任意）
+        
+        Returns:
+            LinkCandidate: reject理由が記録された候補
+        """
+        # CR-E2E-003A: origin情報を記録
+        if candidate.normalized_url:
+            candidate.origin = self._extract_origin(candidate.normalized_url)
+        
+        # CR-E2E-003A拡張: スキーム除外チェック（javascript:, mailto:, tel:など）
+        parsed_url = urlparse(candidate.normalized_url)
+        if parsed_url.scheme and parsed_url.scheme.lower() not in ("http", "https", ""):
+            candidate.reject_reasons.append(RejectReason.NO_HREF.value)
+            candidate.notes = f"invalid scheme: {parsed_url.scheme}"
+            candidate.product_url_rules = {
+                "domain_allowed": False,
+                "allow_path_matched": False,
+                "forbidden_path_matched": False,
+                "locale_ok": False,
+                "final_decision": "reject",
+                "reject_reasons": [RejectReason.NO_HREF.value],
+                "error": "invalid scheme",
+            }
+            return candidate
+        
+        # OneTrustドメイン除外（早期チェック）
+        if "onetrust.com" in parsed_url.netloc.lower():
+            candidate.reject_reasons.append(RejectReason.BLOCKED_DOMAIN.value)
+            candidate.notes = "blocked domain: onetrust.com"
+            candidate.product_url_rules = {
+                "domain_allowed": False,
+                "allow_path_matched": False,
+                "forbidden_path_matched": False,
+                "locale_ok": False,
+                "final_decision": "reject",
+                "reject_reasons": [RejectReason.BLOCKED_DOMAIN.value],
+            }
+            return candidate
+        
+        # CR-E2E-003B: _validate_candidate_urlを使用して検証
+        validation_result = self._validate_candidate_url(
+            url=candidate.url,
+            normalized_url=candidate.normalized_url,
+            base_url=base_url,
+            site_config=site_config,
+        )
+        
+        # 検証結果を候補に反映
+        candidate.reject_reasons.extend(validation_result["reject_reasons"])
+        candidate.product_url_rules = validation_result.get("product_url_rules", {})
+        
+        # notesに詳細を記録
+        if validation_result["forbidden_path_matched"]:
+            candidate.notes = f"forbidden path pattern: {validation_result.get('forbidden_path_pattern', 'unknown')}"
+        elif not validation_result["domain_allowed"]:
+            candidate.notes = f"different domain (eTLD+1): {candidate.origin}"
+        elif not validation_result["allow_path_matched"]:
+            candidate.notes = f"path did not match allow_path_patterns"
+        elif not validation_result["locale_ok"]:
+            candidate.notes = "locale mismatch"
+        
+        # すべてのチェックをパスした場合のみaccept
+        if validation_result["final_decision"] == "accept":
+            candidate.accepted = True
+        
+        return candidate
+    
     async def collect_pdp_links(
         self,
         ctx: NavigationContext,
@@ -665,9 +1190,7 @@ class NavigationDriver:
         Phase 3: Noise Filtering & Saving
         
         CR-ATELIER-002 Step 3: Moncler専用のPDP抽出ロジックを追加
-        # CR-ATELIER-002 Step3:
-        #   - Moncler 専用 PLP→PDP 抽出ロジックの実装
-        #   - 詳細は docs/spec/CR-ATELIER-002_MONCLER_PLP_PDP_EXTRACTION_FIX.md を参照
+        CR-E2E-003: 候補収集とreject理由の記録
         
         Args:
             ctx: ナビゲーションコンテキスト
@@ -682,6 +1205,9 @@ class NavigationDriver:
         target_url = page.url
         found_links: Set[str] = set()
         
+        # CR-E2E-003: 候補を段階的に収集
+        all_candidates: List[LinkCandidate] = []
+        
         # CR-ATELIER-002 Step 4: Moncler専用のPDP抽出ロジック（実ブラウザ検証版）
         # site_config のキーまたは ctx.site から site_code を取得
         site_code = (
@@ -695,16 +1221,34 @@ class NavigationDriver:
         # Moncler の処理は MonclerPlpHandler 経由で MonclerPdpHandler に委譲される
 
         # Phase 1a: Global <a href> sweep + Regex Filter
+        # CR-E2E-003: 候補を収集（origin判定は後で分類）
         try:
             raw_hrefs: List[str] = await page.evaluate("() => Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(Boolean)")
         except Exception as e:
             logger.warning(f"[PLP→PDP][1a] Sweep failed: {e}")
             raw_hrefs = []
         pdp_rx = re.compile(r"/(products?|p)/", re.I)
+        phase1a_candidates: List[LinkCandidate] = []
         for href in raw_hrefs:
+            # OneTrustドメインのhrefを除外（ノイズ除去）
+            if "onetrust.com" in href.lower():
+                continue
             if pdp_rx.search(href):
-                norm_url = self._normalize_abs_url(target_url, href)
-                if is_same_origin(norm_url, target_url) and looks_like_product_url(norm_url):
+                # CR-E2E-003B: URL正規化を先に実行
+                norm_url, norm_info = self._normalize_url(href, target_url, site_config)
+                candidate = LinkCandidate(
+                    url=href,
+                    phase="1a",
+                    normalized_url=norm_url,
+                    source_selector="global_sweep",  # CR-E2E-003A
+                )
+                candidate = self._classify_candidate(candidate, target_url, site_config)
+                # CR-E2E-003B: 正規化情報をproduct_url_rulesに追加
+                if candidate.product_url_rules:
+                    candidate.product_url_rules["normalization_info"] = norm_info
+                phase1a_candidates.append(candidate)
+                all_candidates.append(candidate)
+                if candidate.accepted:
                     found_links.add(norm_url)
         if found_links:
             logger.info(f"[PLP→PDP][1a] Sweep found {len(found_links)} links.")
@@ -736,6 +1280,7 @@ class NavigationDriver:
             ]
         
         PLP_PDP_LINK_SELECTORS = pdp_link_selectors
+        phase1b_candidates: List[LinkCandidate] = []
         for sel in PLP_PDP_LINK_SELECTORS:
             try:
                 nodes = await page.query_selector_all(sel)
@@ -743,53 +1288,182 @@ class NavigationDriver:
                     continue
                 matched_count = 0
                 rejected_count = 0
-                rejection_reasons = []
                 for n in nodes:
                     href = await n.get_attribute("href") or await n.get_attribute("data-href") or await n.get_attribute("data-product-url") or await n.get_attribute("data-url")
                     if not href:
+                        # CR-E2E-003A: 候補として記録（reject理由付き）
+                        candidate = LinkCandidate(
+                            url="",
+                            phase="1b",
+                            normalized_url="",
+                            reject_reasons=[RejectReason.NO_HREF.value],
+                            source_selector=sel,  # CR-E2E-003A
+                        )
+                        phase1b_candidates.append(candidate)
+                        all_candidates.append(candidate)
                         rejected_count += 1
-                        if rejected_count == 1:  # 最初の1件のみ詳細を記録
-                            rejection_reasons.append(f"no href/data-href/data-product-url/data-url attribute")
                         continue
-                    norm_url = self._normalize_abs_url(target_url, href)
-                    if not is_same_origin(norm_url, target_url):
+                    # OneTrustドメインのhrefを除外（ノイズ除去）
+                    if "onetrust.com" in href.lower():
+                        continue
+                    # CR-E2E-003B: URL正規化を先に実行
+                    norm_url, norm_info = self._normalize_url(href, target_url, site_config)
+                    # CR-E2E-003A: 候補として収集（origin判定は後で分類）
+                    candidate = LinkCandidate(
+                        url=href,
+                        phase="1b",
+                        normalized_url=norm_url,
+                        source_selector=sel,  # CR-E2E-003A
+                    )
+                    candidate = self._classify_candidate(candidate, target_url, site_config)
+                    # CR-E2E-003B: 正規化情報をproduct_url_rulesに追加
+                    if candidate.product_url_rules:
+                        candidate.product_url_rules["normalization_info"] = norm_info
+                    phase1b_candidates.append(candidate)
+                    all_candidates.append(candidate)
+                    if candidate.accepted:
+                        found_links.add(norm_url)
+                        matched_count += 1
+                    else:
                         rejected_count += 1
-                        if rejected_count == 1:
-                            rejection_reasons.append(f"different origin: {norm_url}")
-                        continue
-                    if not looks_like_product_url(norm_url):
-                        rejected_count += 1
-                        if rejected_count == 1:
-                            rejection_reasons.append(f"not product URL: {norm_url}")
-                        continue
-                    found_links.add(norm_url)
-                    matched_count += 1
                 if matched_count > 0:
                     logger.info(f"[PLP→PDP][1b] selector='{sel}' added {matched_count} links.")
                 elif nodes and rejected_count > 0:
                     # 要素は見つかったが、リンク抽出に失敗した場合
                     logger.warning(
                         f"[PLP→PDP][1b] selector='{sel}' found {len(nodes)} elements, "
-                        f"but {rejected_count} were rejected. "
-                        f"Reasons: {', '.join(rejection_reasons[:3])}"
+                        f"but {rejected_count} were rejected."
                     )
             except Exception as e:
                 logger.warning(f"[PLP→PDP][1b] selector='{sel}' failed: {e}")
 
         # Phase 2: Deep Extraction Fallback (only if Phase 1 failed)
+        phase2_candidates: List[LinkCandidate] = []
         if not found_links:
             logger.warning("[PLP→PDP] Phase 1a/1b found no links. Falling back to Phase 2 (Deep Extraction)...")
             try:
                 deep_hrefs = await self._run_deep_extraction_phase2(page, site_config)
                 for href in deep_hrefs:
-                    norm_url = self._normalize_abs_url(target_url, href)
-                    if is_same_origin(norm_url, target_url) and looks_like_product_url(norm_url):
+                    # CR-E2E-003B: URL正規化を先に実行
+                    norm_url, norm_info = self._normalize_url(href, target_url, site_config)
+                    # CR-E2E-003A: 候補として収集（origin判定は後で分類）
+                    candidate = LinkCandidate(
+                        url=href,
+                        phase="2",
+                        normalized_url=norm_url,
+                        source_selector="deep_extraction",  # CR-E2E-003A
+                    )
+                    candidate = self._classify_candidate(candidate, target_url, site_config)
+                    # CR-E2E-003B: 正規化情報をproduct_url_rulesに追加
+                    if candidate.product_url_rules:
+                        candidate.product_url_rules["normalization_info"] = norm_info
+                    phase2_candidates.append(candidate)
+                    all_candidates.append(candidate)
+                    if candidate.accepted:
                         found_links.add(norm_url)
                 if found_links:
                     logger.info(f"[PLP→PDP][2] Deep Extraction found {len(found_links)} links.")
             except Exception as e:
                 logger.error(f"[PLP→PDP][2] Deep Extraction failed: {e}")
 
+        # CR-E2E-003B拡張: 「候補あり・全reject」の場合の再フィルタリング（根拠のある緩和）
+        if not found_links and all_candidates:
+            # site_configから再フィルタリング設定を取得
+            refilter_config = (site_config or {}).get("pdp_link_refilter", {})
+            if refilter_config.get("enabled", False):
+                logger.info(
+                    f"[PLP→PDP][Refilter] {len(all_candidates)} candidates found but all rejected. "
+                    "Attempting evidence-based relaxed filtering..."
+                )
+                
+                # CR-E2E-003B: 根拠のある緩和の順序
+                # 1. forbidden_pathに当たってない候補を残す
+                for candidate in all_candidates:
+                    if not candidate.normalized_url:
+                        continue
+                    if candidate.product_url_rules:
+                        # forbidden_path_matchedがFalseの場合
+                        if not candidate.product_url_rules.get("forbidden_path_matched", True):
+                            # domain_allowedがTrueで、allow_path_matchedがFalseでも、商品カード由来など強い根拠があるものだけ試す
+                            if candidate.product_url_rules.get("domain_allowed", False):
+                                # source_selectorが商品カード関連の場合は採用を試す
+                                if candidate.source_selector and any(
+                                    keyword in candidate.source_selector.lower()
+                                    for keyword in ["product", "card", "tile", "item"]
+                                ):
+                                    found_links.add(candidate.normalized_url)
+                                    candidate.accepted = True
+                                    candidate.reject_reasons = [
+                                        r for r in candidate.reject_reasons
+                                        if r not in (RejectReason.NO_PRODUCTS_PATH.value,)
+                                    ]
+                                    candidate.notes = (candidate.notes or "") + " [Refilter: product card source]"
+                                    logger.debug(
+                                        f"[PLP→PDP][Refilter] Accepted candidate (product card source): {candidate.normalized_url}"
+                                    )
+                
+                # 2. same-siteのみ許可（forbidden_pathに当たってない場合）
+                if not found_links and refilter_config.get("allow_same_site_only", False):
+                    for candidate in all_candidates:
+                        if not candidate.normalized_url:
+                            continue
+                        # same-site判定
+                        if self._is_same_site(candidate.normalized_url, target_url):
+                            # forbidden_pathに当たっていない場合のみ
+                            if candidate.product_url_rules and not candidate.product_url_rules.get("forbidden_path_matched", False):
+                                # same-siteの場合は、domain/subdomain rejectを無視
+                                relaxed_reasons = [
+                                    r for r in candidate.reject_reasons
+                                    if r not in (
+                                        RejectReason.DIFFERENT_DOMAIN.value,
+                                        RejectReason.DIFFERENT_SUBDOMAIN.value,
+                                        RejectReason.DIFFERENT_ORIGIN.value,
+                                    )
+                                ]
+                                # 他のreject理由がなければ採用
+                                if not relaxed_reasons:
+                                    found_links.add(candidate.normalized_url)
+                                    candidate.accepted = True
+                                    candidate.reject_reasons = []
+                                    candidate.notes = (candidate.notes or "") + " [Refilter: same-site]"
+                                    logger.debug(
+                                        f"[PLP→PDP][Refilter] Accepted same-site candidate: {candidate.normalized_url}"
+                                    )
+                
+                # 3. 特定のreject理由を無視（forbidden_pathに当たってない場合）
+                if not found_links:
+                    ignore_reasons = refilter_config.get("ignore_reject_reasons", [])
+                    if ignore_reasons:
+                        for candidate in all_candidates:
+                            if not candidate.normalized_url:
+                                continue
+                            # forbidden_pathに当たっていない場合のみ
+                            if candidate.product_url_rules and not candidate.product_url_rules.get("forbidden_path_matched", False):
+                                # 無視するreject理由を除外
+                                filtered_reasons = [
+                                    r for r in candidate.reject_reasons
+                                    if r not in ignore_reasons
+                                ]
+                                # 残りのreject理由がなければ採用
+                                if not filtered_reasons:
+                                    found_links.add(candidate.normalized_url)
+                                    candidate.accepted = True
+                                    candidate.reject_reasons = []
+                                    candidate.notes = (candidate.notes or "") + f" [Refilter: ignored {ignore_reasons}]"
+                                    logger.debug(
+                                        f"[PLP→PDP][Refilter] Accepted candidate (ignored {ignore_reasons}): {candidate.normalized_url}"
+                                    )
+                
+                if found_links:
+                    logger.info(
+                        f"[PLP→PDP][Refilter] Evidence-based relaxed filtering accepted {len(found_links)} links."
+                    )
+                else:
+                    logger.warning(
+                        f"[PLP→PDP][Refilter] No candidates accepted after relaxed filtering. "
+                        f"Consider click fallback or selector adjustment."
+                    )
+        
         links = sorted(list(found_links))
         if not links:
             # 詳細な診断情報をログに出力
@@ -798,7 +1472,7 @@ class NavigationDriver:
                 log_file_path = ctx.run_context.get_path("system.log")
             logger.error(
                 f"[PLP→PDP] No PDP hrefs found after all phases. "
-                f"Found {len(found_links)} links total. "
+                f"Found {len(found_links)} links total, {len(all_candidates)} candidates collected. "
                 f"Target URL: {target_url}. "
                 "This indicates a selector mismatch or URL validation failure."
             )
@@ -844,6 +1518,18 @@ class NavigationDriver:
             if not noise_rx.search(u):
                 cleaned.append(u)
         logger.info(f"[PLP→PDP] collected {len(cleaned)} PDP-like links (raw={len(links)})")
+        
+        # CR-E2E-003: 候補収集の証跡を保存
+        link_collection_summary = await self._save_link_collection_evidence(
+            all_candidates=all_candidates,
+            accepted_links=cleaned,
+            run_context=run_context,
+            ctx=ctx,
+        )
+        
+        # CR-E2E-003: NavigationContextにサマリを保存（後でBrowserOrchestratorでevidenceに追加）
+        ctx.link_collection_summary = link_collection_summary
+        
         try:
             sample = cleaned[:20]
             logger.debug(f"[PLP→PDP] sample={sample}")
@@ -868,7 +1554,7 @@ class NavigationDriver:
                     if asyncio.iscoroutine(res):
                         await res
         except Exception as e:
-            logger.debug(f"[PLP→PDP] TelemetryService.save_raw_hrefs failed: {e}")
+            logger.debug(f"[PLP→PDP] TelemetryClient.save_raw_hrefs failed: {e}")
         except Exception:
             pass
         return cleaned
@@ -976,6 +1662,9 @@ class NavigationDriver:
                 )
                 pdp_rx = re.compile(r"/products?/", re.I)
                 for href in raw_hrefs:
+                    # OneTrustドメインのhrefを除外（ノイズ除去）
+                    if "onetrust.com" in href.lower():
+                        continue
                     if pdp_rx.search(href):
                         norm_url = self._normalize_abs_url(target_url, href)
                         if self._is_valid_moncler_pdp_url(norm_url, target_url):
@@ -1103,6 +1792,179 @@ class NavigationDriver:
             return "unknown"
         except Exception:
             return "validation_error"
+    
+    async def _save_link_collection_evidence(
+        self,
+        all_candidates: List[LinkCandidate],
+        accepted_links: List[str],
+        run_context: Optional[Any],
+        ctx: NavigationContext,
+    ) -> Dict[str, Any]:
+        """
+        CR-E2E-003A: リンク収集の証跡を保存し、サマリを返す
+        
+        Phase別のJSONファイルを保存し、検証レポートを生成する。
+        
+        Args:
+            all_candidates: すべての候補リスト
+            accepted_links: 受け入れられたリンクリスト
+            run_context: RunContext（任意）
+            ctx: NavigationContext
+        
+        Returns:
+            Dict[str, Any]: サマリデータ（evidence.link_collectionに追加する用）
+        """
+        summary: Dict[str, Any] = {
+            "total_candidates": len(all_candidates),
+            "total_valid": len(accepted_links),
+            "top_reject_reasons": {},
+            "sample_candidates": [],
+        }
+        
+        if not run_context or not hasattr(run_context, "save_json"):
+            return summary
+        
+        try:
+            # CR-E2E-003A: 候補をphase別に分類（最大200件まで）
+            phase1_candidates: List[Dict[str, Any]] = []
+            phase2_candidates: List[Dict[str, Any]] = []
+            
+            for candidate in all_candidates[:200]:  # 上限200件
+                candidate_dict = {
+                    "phase": candidate.phase,
+                    "source_selector": candidate.source_selector or "",
+                    "raw_href": candidate.url,
+                    "resolved_url": candidate.normalized_url or "",
+                    "origin": candidate.origin or "",
+                    "passed": candidate.accepted,
+                    "reject_reasons": candidate.reject_reasons if candidate.reject_reasons else [],  # 空配列でも必須
+                    "notes": candidate.notes or "",
+                    # CR-E2E-003B: product_url_rulesを追加
+                    "product_url_rules": candidate.product_url_rules if candidate.product_url_rules else {},
+                }
+                
+                if candidate.phase in ("1a", "1b"):
+                    phase1_candidates.append(candidate_dict)
+                elif candidate.phase == "2":
+                    phase2_candidates.append(candidate_dict)
+            
+            # CR-E2E-003A: Phase別JSONファイルを保存
+            run_context.save_json("pdp_link_candidates_phase1.json", {
+                "phase": "1a/1b",
+                "candidates": phase1_candidates,
+                "total": len(phase1_candidates),
+            })
+            
+            run_context.save_json("pdp_link_candidates_phase2.json", {
+                "phase": "2",
+                "candidates": phase2_candidates,
+                "total": len(phase2_candidates),
+            })
+            
+            # CR-E2E-003A: reject理由の集計
+            reject_reason_counts: Dict[str, int] = {}
+            for candidate in all_candidates:
+                for reason in candidate.reject_reasons:
+                    reject_reason_counts[reason] = reject_reason_counts.get(reason, 0) + 1
+            
+            # 上位のreject理由を取得（最大10件）
+            top_reject_reasons = dict(sorted(
+                reject_reason_counts.items(),
+                key=lambda x: x[1],
+                reverse=True
+            )[:10])
+            
+            # CR-E2E-003B: domain/path別の内訳を集計
+            domain_rejected_count = 0
+            path_rejected_count = 0
+            allow_path_matched_count = 0
+            forbidden_path_matched_count = 0
+            allow_path_pattern_counts: Dict[str, int] = {}
+            forbidden_path_pattern_counts: Dict[str, int] = {}
+            
+            for candidate in all_candidates:
+                if candidate.product_url_rules:
+                    rules = candidate.product_url_rules
+                    if not rules.get("domain_allowed", True):
+                        domain_rejected_count += 1
+                    if rules.get("forbidden_path_matched", False):
+                        forbidden_path_matched_count += 1
+                        pattern = rules.get("forbidden_path_pattern")
+                        if pattern:
+                            forbidden_path_pattern_counts[pattern] = forbidden_path_pattern_counts.get(pattern, 0) + 1
+                    if rules.get("allow_path_matched", False):
+                        allow_path_matched_count += 1
+                        pattern = rules.get("allow_path_pattern")
+                        if pattern:
+                            allow_path_pattern_counts[pattern] = allow_path_pattern_counts.get(pattern, 0) + 1
+                    if not rules.get("allow_path_matched", False) and not rules.get("forbidden_path_matched", False):
+                        path_rejected_count += 1
+            
+            # CR-E2E-003A: 検証レポートを生成
+            validation_report = {
+                "total_candidates": len(all_candidates),
+                "total_valid": len(accepted_links),
+                "total_rejected": len(all_candidates) - len(accepted_links),
+                "reject_reason_counts": reject_reason_counts,
+                "top_reject_reasons": top_reject_reasons,
+                # CR-E2E-003B: domain/path別の内訳
+                "domain_rejected_count": domain_rejected_count,
+                "path_rejected_count": path_rejected_count,
+                "allow_path_matched_count": allow_path_matched_count,
+                "forbidden_path_matched_count": forbidden_path_matched_count,
+                "allow_path_pattern_counts": dict(sorted(
+                    allow_path_pattern_counts.items(),
+                    key=lambda x: x[1],
+                    reverse=True
+                )[:10]),
+                "forbidden_path_pattern_counts": dict(sorted(
+                    forbidden_path_pattern_counts.items(),
+                    key=lambda x: x[1],
+                    reverse=True
+                )[:10]),
+                "sample_rejected": [
+                    {
+                        "raw_href": c.url,
+                        "resolved_url": c.normalized_url,
+                        "origin": c.origin or "",
+                        "reject_reasons": c.reject_reasons,
+                        "phase": c.phase,
+                        "source_selector": c.source_selector or "",
+                        "notes": c.notes or "",
+                        # CR-E2E-003B: product_url_rulesを追加
+                        "product_url_rules": c.product_url_rules if c.product_url_rules else {},
+                    }
+                    for c in all_candidates if not c.accepted
+                ][:10],  # 最大10件
+            }
+            
+            run_context.save_json("pdp_link_validation_report.json", validation_report)
+            
+            # CR-E2E-003A: サマリを更新（evidence.link_collection用）
+            summary["total_candidates"] = len(all_candidates)
+            summary["total_valid"] = len(accepted_links)
+            summary["top_reject_reasons"] = top_reject_reasons
+            summary["sample_candidates"] = [
+                {
+                    "raw_href": c.url,
+                    "resolved_url": c.normalized_url,
+                    "origin": c.origin or "",
+                    "reject_reasons": c.reject_reasons,
+                    "phase": c.phase,
+                    "source_selector": c.source_selector or "",
+                    "passed": c.accepted,
+                }
+                for c in all_candidates[:10]  # 最大10件
+            ]
+            
+            logger.info(
+                f"[PLP→PDP][CR-E2E-003A] Collected {len(all_candidates)} candidates, "
+                f"accepted {len(accepted_links)}, rejected {len(all_candidates) - len(accepted_links)}"
+            )
+        except Exception as e:
+            logger.warning(f"[PLP→PDP][CR-E2E-003A] Failed to save link collection evidence: {e}", exc_info=True)
+        
+        return summary
 
     # ==============================================================================
     # CR-ATELIER-002 Step 3: Moncler専用 PDP 抽出ロジック設計案（実装済み）
@@ -1340,10 +2202,91 @@ class NavigationDriver:
             logger.debug(f"[TrapDetector] Error during trap page detection: {e}", exc_info=True)
             return None
 
+    def _is_locale_stable(
+        self,
+        url: str,
+        site_config: Optional[Dict[str, Any]] = None,
+    ) -> tuple[bool, Dict[str, Any]]:
+        """
+        CR-E2E-003B拡張: ロケールが安定しているか判定
+        
+        Args:
+            url: 検証対象URL
+            site_config: サイト設定（任意）
+        
+        Returns:
+            (is_stable, diagnostics): 安定している場合True、診断情報
+        """
+        diagnostics = {
+            "url": url,
+            "path_ok": False,
+            "country_ok": False,
+            "reject_path_matched": False,
+            "trap_pattern_matched": False,
+            "stable": False,
+        }
+        
+        try:
+            from urllib.parse import urlparse, parse_qs
+            
+            parsed = urlparse(url)
+            path = parsed.path or ""
+            query_params = parse_qs(parsed.query)
+            
+            # locale_policyから設定を取得
+            locale_policy = {}
+            if site_config:
+                nav_cfg = site_config.get("navigation", {}) or {}
+                locale_policy = nav_cfg.get("locale_policy", {}) or {}
+            
+            target_locale = locale_policy.get("target_locale", "en-int")
+            target_country = locale_policy.get("target_country", "GB")
+            reject_path_prefixes = locale_policy.get("reject_path_prefixes", [])
+            trap_url_patterns = (nav_cfg.get("trap_url_patterns", []) if site_config else []) or []
+            
+            # パスチェック
+            expected_locale_path = f"/{target_locale}/"
+            double_locale_pattern = re.compile(r"/en-[a-z]{2}/en-int/", re.I)
+            has_double_locale = double_locale_pattern.search(path) is not None
+            path_ok = path.lower().startswith(expected_locale_path.lower()) and not has_double_locale
+            diagnostics["path_ok"] = path_ok
+            
+            # 国チェック
+            ship_to_country = query_params.get("shipToCountry", [])
+            country_ok = target_country in ship_to_country if ship_to_country else False
+            diagnostics["country_ok"] = country_ok
+            
+            # reject_path_prefixesチェック
+            reject_path_matched = False
+            for prefix in reject_path_prefixes:
+                if path.lower().startswith(prefix.lower()):
+                    reject_path_matched = True
+                    break
+            diagnostics["reject_path_matched"] = reject_path_matched
+            
+            # trap_url_patternsチェック
+            trap_pattern_matched = False
+            for pattern in trap_url_patterns:
+                if pattern in path.lower():
+                    trap_pattern_matched = True
+                    break
+            diagnostics["trap_pattern_matched"] = trap_pattern_matched
+            
+            # 安定判定
+            stable = path_ok and country_ok and not reject_path_matched and not trap_pattern_matched
+            diagnostics["stable"] = stable
+            
+            return stable, diagnostics
+        except Exception as e:
+            logger.warning(f"[LocaleGuard] _is_locale_stable failed: {e}", exc_info=True)
+            diagnostics["error"] = str(e)
+            return False, diagnostics
+    
     async def _ensure_expected_locale(self, ctx: NavigationContext) -> None:
         """
         CR-ATELIER-002 Step 2: Locale Guard - ロケール一貫性チェックと自動修正
         CR-ATELIER-002 Step 5-3: Redirect / Locale 挙動の扱い整理
+        CR-E2E-003B拡張: モーダル検出→国/言語選択→再矯正→再判定（最大3回）
         
         【責務】:
         - Pre-condition: Moncler の PLP/検索 URL
@@ -1366,6 +2309,28 @@ class NavigationDriver:
         """
         page = self.page
         site_config = ctx.site_config
+        run_context = ctx.run_context
+        
+        # 診断情報を収集
+        diagnostics = {
+            "attempts": [],
+            "http_errors": [],
+            "final_url": None,
+            "final_stable": False,
+        }
+        
+        # HTTPレスポンスエラーを記録
+        http_errors = []
+        async def on_response(response):
+            if response.status in [404, 410]:
+                http_errors.append({
+                    "url": response.url,
+                    "status": response.status,
+                    "timestamp": time.time(),
+                })
+        
+        page.on("response", on_response)
+        
         current_url = page.url or ""
         
         # MONCLER_OFFICIAL のみを対象とする
@@ -1380,6 +2345,34 @@ class NavigationDriver:
             logger.debug(f"[LocaleGuard] Skipping locale check for site: {site_code}")
             return
         
+        # locale_policyから設定を取得
+        nav_cfg = (site_config.get("navigation", {}) or {}) if site_config else {}
+        locale_policy = nav_cfg.get("locale_policy", {}) or {}
+        location_modal_cfg = nav_cfg.get("location_modal", {}) or {}
+        
+        target_locale = locale_policy.get("target_locale", "en-int")
+        target_country = locale_policy.get("target_country", "GB")
+        max_attempts = locale_policy.get("max_correction_attempts", 3)
+        stability_check_delay_ms = locale_policy.get("stability_check_delay_ms", 2000)
+        require_stable = locale_policy.get("require_stable_before_proceed", True)
+        
+        # スクリーンショット保存用のヘルパー
+        async def save_screenshot(stage: str) -> Optional[str]:
+            """段階スクショを保存"""
+            if not run_context:
+                return None
+            try:
+                timestamp = int(time.time() * 1000)
+                filename = f"locale_{stage}_{timestamp}.png"
+                # RunContextはscreenshots_path属性を持つ
+                path = run_context.screenshots_path / filename
+                path.parent.mkdir(parents=True, exist_ok=True)
+                await page.screenshot(path=str(path))
+                return str(path.relative_to(run_context.run_path))
+            except Exception as e:
+                logger.debug(f"[LocaleGuard] Failed to save screenshot {stage}: {e}")
+                return None
+        
         try:
             from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
             
@@ -1388,8 +2381,8 @@ class NavigationDriver:
             query_params = parse_qs(parsed.query)
             
             # 期待値のチェック
-            expected_locale_path = "/en-int/"
-            expected_country = "GB"
+            expected_locale_path = f"/{target_locale}/"
+            expected_country = target_country
             
             # CR-ATELIER-002 Step 4-2: 二重ロケールパターンの検出
             # /en-lt/en-int/ や /en-de/en-int/ のような二重ロケールを含むパスは修正対象
@@ -1407,6 +2400,31 @@ class NavigationDriver:
             # 両方満たされている場合は何もしないが、INFOログを必ず出す
             if path_ok and country_ok:
                 logger.info(f"[LocaleGuard] Checked locale, no change: {current_url}")
+                # CR-E2E-003B拡張: 早期終了時にも診断情報を保存
+                final_stable, final_diag = self._is_locale_stable(current_url, site_config)
+                diagnostics["final_url"] = current_url
+                diagnostics["final_stable"] = final_stable
+                diagnostics["http_errors"] = http_errors
+                diagnostics["attempts"] = [{
+                    "attempt": 0,
+                    "url_before": current_url,
+                    "url_after": current_url,
+                    "stable_after": final_stable,
+                    "stability_diagnostics": final_diag,
+                    "note": "Locale already stable, no correction needed"
+                }]
+                if run_context:
+                    try:
+                        # RunContextはrun_path属性を持つ
+                        diagnostics_path = run_context.run_path / "locale_diagnostics.json"
+                        diagnostics_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(diagnostics_path, "w", encoding="utf-8") as f:
+                            json.dump(diagnostics, f, indent=2, ensure_ascii=False)
+                        logger.info(f"[LocaleGuard] Saved locale diagnostics (stable case) to: {diagnostics_path}")
+                    except Exception as e:
+                        logger.warning(f"[LocaleGuard] Failed to save locale diagnostics: {e}", exc_info=True)
+                else:
+                    logger.warning("[LocaleGuard] run_context is None, cannot save locale diagnostics")
                 return
             
             # ロケールがずれている場合、修正を試みる
@@ -1476,107 +2494,183 @@ class NavigationDriver:
                 ))
                 logger.debug(f"[LocaleGuard] Constructed corrected URL from current URL: {corrected_url}")
             
-            # Location gate の簡易ハンドリングを試みる
-            # 「Select your location」モーダルが開いている場合、GB/ENを選択
-            try:
-                body_text = await page.locator("body").first.inner_text(timeout=2000)
-                if body_text and "Select your location" in body_text:
-                    logger.info("[LocaleGuard] Location gate detected, attempting to select GB/EN")
-                    
-                    # GB / United Kingdom / EN を選択するセレクタを試す
-                    location_selectors = [
-                        "button:has-text('United Kingdom')",
-                        "button:has-text('GB')",
-                        "a:has-text('United Kingdom')",
-                        "a:has-text('GB')",
-                        "[data-country='GB']",
-                        "[data-locale='en-int']",
-                        "button[aria-label*='United Kingdom']",
-                        "button[aria-label*='GB']",
-                    ]
-                    
-                    location_selected = False
-                    for sel in location_selectors:
+            # CR-E2E-003B拡張: モーダル検出→国/言語選択→再矯正→再判定（最大3回）
+            attempt_count = 0
+            while attempt_count < max_attempts:
+                attempt_count += 1
+                attempt_info = {
+                    "attempt": attempt_count,
+                    "url_before": page.url or "",
+                    "modal_detected": False,
+                    "modal_handled": False,
+                    "navigation_performed": False,
+                    "url_after": None,
+                    "stable_after": False,
+                }
+                
+                # beforeスクショを保存
+                screenshot_before = await save_screenshot(f"before_attempt_{attempt_count}")
+                if screenshot_before:
+                    attempt_info["screenshot_before"] = screenshot_before
+                
+                # モーダル検出
+                modal_detected = False
+                if location_modal_cfg.get("enabled", True):
+                    detection_selectors = location_modal_cfg.get("detection_selectors", [])
+                    for sel in detection_selectors:
                         try:
                             locator = page.locator(sel).first
-                            if await locator.count() > 0:
-                                await locator.click(timeout=3000)
-                                await page.wait_for_timeout(1000)  # モーダルが閉じるのを待つ
-                                location_selected = True
-                                logger.info(f"[LocaleGuard] Selected location using selector: {sel}")
-                                break
-                        except Exception:
-                            continue
-                    
-                    if location_selected:
-                        # 選択後にURLが正しくなったか確認
-                        await page.wait_for_timeout(500)
-                        current_url_after = page.url or ""
-                        parsed_after = urlparse(current_url_after)
-                        path_after = parsed_after.path or ""
-                        query_after = parse_qs(parsed_after.query)
-                        ship_to_country_after = query_after.get("shipToCountry", [])
-                        
-                        if (path_after.lower().startswith(expected_locale_path.lower()) and
-                            expected_country in ship_to_country_after):
-                            logger.info(f"[LocaleGuard] Locale normalized via location gate: {current_url} -> {current_url_after}")
-                            return
-                        else:
-                            logger.warning(f"[LocaleGuard] Location gate selection did not fix locale, will navigate to corrected URL")
-            except Exception as e:
-                logger.debug(f"[LocaleGuard] Location gate handling failed: {e}")
-            
-            # 正しいURLに再ナビゲート
-            if corrected_url and corrected_url != current_url:
-                logger.warning(f"[LocaleGuard] Locale normalized: {current_url} -> {corrected_url}")
-                try:
-                    await page.goto(corrected_url, wait_until="domcontentloaded", timeout=30000)
-                    await page.wait_for_timeout(1000)  # ページが安定するのを待つ
-                    
-                    # CR-ATELIER-002 Step 4-2: ナビゲート後に再リダイレクトされていないかチェック
-                    final_url = page.url or ""
-                    parsed_final = urlparse(final_url)
-                    path_final = parsed_final.path or ""
-                    query_final = parse_qs(parsed_final.query)
-                    ship_to_country_final = query_final.get("shipToCountry", [])
-                    
-                    # 二重ロケールパターンが再発していないかチェック
-                    has_double_locale_final = double_locale_pattern.search(path_final) is not None
-                    path_ok_final = path_final.lower().startswith(expected_locale_path.lower()) and not has_double_locale_final
-                    country_ok_final = expected_country in ship_to_country_final if ship_to_country_final else False
-                    
-                    if not path_ok_final or not country_ok_final:
-                        logger.warning(
-                            f"[LocaleGuard] Page redirected back to incorrect locale after navigation: "
-                            f"{final_url} (path_ok={path_ok_final}, country_ok={country_ok_final})"
-                        )
-                        # 再修正を試みる（最大1回）
-                        if has_double_locale_final:
-                            normalized_path_final = re.sub(r"/en-[a-z]{2}/en-int/", "/en-int/", path_final, flags=re.I)
-                            query_final["forceLocale"] = ["en-int"]
-                            query_final["shipToCountry"] = [expected_country]
-                            normalized_query_final = urlencode(query_final, doseq=True)
-                            corrected_url_final = urlunparse((
-                                parsed_final.scheme,
-                                parsed_final.netloc,
-                                normalized_path_final,
-                                parsed_final.params,
-                                normalized_query_final,
-                                parsed_final.fragment
-                            ))
-                            logger.warning(f"[LocaleGuard] Attempting second correction: {final_url} -> {corrected_url_final}")
+                            # count()の代わりに、is_visible()を直接試行（エラーハンドリング付き）
                             try:
-                                await page.goto(corrected_url_final, wait_until="domcontentloaded", timeout=30000)
-                                await page.wait_for_timeout(1000)
-                                logger.info(f"[LocaleGuard] Second correction successful: {page.url}")
-                            except Exception as e2:
-                                logger.warning(f"[LocaleGuard] Second correction failed: {e2}", exc_info=True)
+                                is_visible = await locator.is_visible(timeout=1000)
+                                if is_visible:
+                                    modal_detected = True
+                                    attempt_info["modal_detected"] = True
+                                    logger.info(f"[LocaleGuard] Location modal detected (attempt {attempt_count})")
+                                    
+                                    # modalスクショを保存
+                                    screenshot_modal = await save_screenshot(f"modal_attempt_{attempt_count}")
+                                    if screenshot_modal:
+                                        attempt_info["screenshot_modal"] = screenshot_modal
+                                    
+                                    # 国/言語選択
+                                    country_selectors = location_modal_cfg.get("country_selectors", [])
+                                    location_selected = False
+                                    for country_sel in country_selectors:
+                                        try:
+                                            country_locator = page.locator(country_sel).first
+                                            # count()の代わりに、is_visible()を直接試行
+                                            try:
+                                                country_visible = await country_locator.is_visible(timeout=1000)
+                                                if country_visible:
+                                                    await country_locator.click(timeout=3000)
+                                                    wait_after = location_modal_cfg.get("wait_after_selection_ms", 2000)
+                                                    await page.wait_for_timeout(wait_after)
+                                                    location_selected = True
+                                                    attempt_info["modal_handled"] = True
+                                                    logger.info(f"[LocaleGuard] Selected location using selector: {country_sel}")
+                                                    break
+                                            except Exception:
+                                                continue
+                                        except Exception:
+                                            continue
+                                    
+                                    if not location_selected:
+                                        # モーダルを閉じる試行
+                                        close_selectors = location_modal_cfg.get("close_selectors", [])
+                                        for close_sel in close_selectors:
+                                            try:
+                                                close_locator = page.locator(close_sel).first
+                                                # count()の代わりに、is_visible()を直接試行
+                                                try:
+                                                    close_visible = await close_locator.is_visible(timeout=1000)
+                                                    if close_visible:
+                                                        await close_locator.click(timeout=2000)
+                                                        await page.wait_for_timeout(1000)
+                                                        break
+                                                except Exception:
+                                                    continue
+                                            except Exception:
+                                                continue
+                                    break
+                            except Exception as e:
+                                # is_visible()が失敗した場合は次のセレクタを試す
+                                logger.debug(f"[LocaleGuard] Modal detection selector '{sel}' failed: {e}")
+                                continue
+                        except Exception as e:
+                            logger.debug(f"[LocaleGuard] Modal detection failed for selector '{sel}': {e}")
+                            continue
+                
+                # ロケール安定性チェック
+                current_url_check = page.url or ""
+                is_stable, stability_diag = self._is_locale_stable(current_url_check, site_config)
+                attempt_info["url_after"] = current_url_check
+                attempt_info["stable_after"] = is_stable
+                attempt_info["stability_diagnostics"] = stability_diag
+                
+                if is_stable and require_stable:
+                    logger.info(f"[LocaleGuard] Locale is stable after attempt {attempt_count}: {current_url_check}")
+                    # afterスクショを保存
+                    screenshot_after = await save_screenshot(f"after_attempt_{attempt_count}")
+                    if screenshot_after:
+                        attempt_info["screenshot_after"] = screenshot_after
+                    diagnostics["attempts"].append(attempt_info)
+                    diagnostics["final_url"] = current_url_check
+                    diagnostics["final_stable"] = True
+                    break
+                
+                # まだ安定していない場合、再矯正を試みる
+                if attempt_count < max_attempts:
+                    # 再矯正URLを構築
+                    parsed_current = urlparse(current_url_check)
+                    path_current = parsed_current.path or ""
+                    query_current = parse_qs(parsed_current.query)
+                    
+                    # パスを正規化
+                    if not path_current.lower().startswith(expected_locale_path.lower()):
+                        path_parts = [p for p in path_current.split("/") if p]
+                        while path_parts and _LOCALE_SEG_RE.match(path_parts[0] or ""):
+                            path_parts.pop(0)
+                        normalized_path = f"/{target_locale}/" + "/".join(path_parts)
+                        if not normalized_path.endswith("/") and normalized_path != "/":
+                            normalized_path += "/"
                     else:
-                        logger.info(f"[LocaleGuard] Successfully navigated to corrected URL: {page.url}")
+                        # 二重ロケールパターンを修正
+                        double_locale_pattern = re.compile(r"/en-[a-z]{2}/en-int/", re.I)
+                        if double_locale_pattern.search(path_current):
+                            normalized_path = re.sub(r"/en-[a-z]{2}/en-int/", f"/{target_locale}/", path_current, flags=re.I)
+                        else:
+                            normalized_path = path_current
+                    
+                    # クエリパラメータを修正
+                    query_current["forceLocale"] = [target_locale]
+                    query_current["shipToCountry"] = [target_country]
+                    normalized_query = urlencode(query_current, doseq=True)
+                    
+                    corrected_url = urlunparse((
+                        parsed_current.scheme,
+                        parsed_current.netloc,
+                        normalized_path,
+                        parsed_current.params,
+                        normalized_query,
+                        parsed_current.fragment
+                    ))
+                    
+                    if corrected_url != current_url_check:
+                        logger.warning(f"[LocaleGuard] Attempt {attempt_count}: Navigating to corrected URL: {corrected_url}")
+                        try:
+                            await page.goto(corrected_url, wait_until="domcontentloaded", timeout=30000)
+                            await page.wait_for_timeout(stability_check_delay_ms)
+                            attempt_info["navigation_performed"] = True
+                        except Exception as e:
+                            logger.warning(f"[LocaleGuard] Navigation failed on attempt {attempt_count}: {e}")
+                            attempt_info["navigation_error"] = str(e)
+                
+                diagnostics["attempts"].append(attempt_info)
+            
+            # 最終的な安定性チェック
+            final_url = page.url or ""
+            final_stable, final_diag = self._is_locale_stable(final_url, site_config)
+            diagnostics["final_url"] = final_url
+            diagnostics["final_stable"] = final_stable
+            diagnostics["http_errors"] = http_errors
+            
+            # locale_diagnostics.jsonを保存
+            if run_context:
+                try:
+                    # RunContextはrun_path属性を持つ
+                    diagnostics_path = run_context.run_path / "locale_diagnostics.json"
+                    diagnostics_path.parent.mkdir(parents=True, exist_ok=True)
+                    with open(diagnostics_path, "w", encoding="utf-8") as f:
+                        json.dump(diagnostics, f, indent=2, ensure_ascii=False)
+                    logger.info(f"[LocaleGuard] Saved locale diagnostics to: {diagnostics_path}")
                 except Exception as e:
-                    logger.warning(f"[LocaleGuard] Failed to navigate to corrected URL: {e}", exc_info=True)
-            else:
-                logger.warning(f"[LocaleGuard] Could not determine corrected URL, skipping navigation")
+                    logger.warning(f"[LocaleGuard] Failed to save locale diagnostics: {e}", exc_info=True)
+            
+            if not final_stable and require_stable:
+                logger.warning(f"[LocaleGuard] Locale is not stable after {max_attempts} attempts: {final_url}")
+            
+            # 旧コードの残り部分は削除（上記のwhileループで実装済み）
                 
         except Exception as e:
             logger.warning(f"[LocaleGuard] Failed to normalize locale: {e}", exc_info=True)
@@ -1697,14 +2791,39 @@ class NavigationDriver:
 
     # Stage 3A-2-1: ヘルパーメソッド（BrowserUseAgent から移植）
     def _normalize_abs_url(self, base_url: str, href: str) -> str:
-        """URL を絶対URLに正規化する（query と fragment を除去）"""
+        """
+        CR-E2E-003A拡張: URLを絶対URLに正規化（相対/プロトコル相対/スキーム除外対応）
+        
+        Args:
+            base_url: ベースURL
+            href: 正規化対象のhref（相対/プロトコル相対/絶対）
+        
+        Returns:
+            str: 正規化された絶対URL（query/fragment除去）
+        """
+        if not href:
+            return ""
+        
         try:
+            # プロトコル相対URL（//example.com/path）の処理
+            if href.startswith("//"):
+                base_parsed = urlparse(base_url)
+                href = f"{base_parsed.scheme}:{href}"
+            
+            # 相対URLの処理
             absu = urljoin(base_url, href)
+            
+            # スキーム除外（javascript:, mailto:, tel:など）の処理
+            parsed = urlparse(absu)
+            if parsed.scheme and parsed.scheme.lower() not in ("http", "https"):
+                return href  # 元のhrefを返す（reject理由で処理）
+            
+            # 絶対URLに変換
             parts = list(urlsplit(absu))
             if parts[2].endswith('/'):
                 parts[2] = parts[2].rstrip('/')
-            parts[3] = ""  # query
-            parts[4] = ""  # fragment
+            parts[3] = ""  # query除去
+            parts[4] = ""  # fragment除去
             return urlunsplit(parts)
         except Exception:
             return href

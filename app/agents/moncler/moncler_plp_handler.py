@@ -54,11 +54,11 @@ class MonclerPlpHandler:
         navigation_driver = nav_ctx.navigation_driver if hasattr(nav_ctx, "navigation_driver") else None
         if navigation_driver is None:
             # NavigationDriver が存在しない場合は作成
-            from app.agents.browser.telemetry import TelemetryService
-            telemetry_service = TelemetryService(nav_ctx.run_context) if nav_ctx.run_context else None
+            from app.agents.browser.telemetry import TelemetryClient
+            telemetry = TelemetryClient(run_context=nav_ctx.run_context) if nav_ctx.run_context else None
             navigation_driver = NavigationDriver(
                 page=nav_ctx.page,
-                telemetry=telemetry_service,
+                telemetry=telemetry,
             )
         
         # Moncler 専用の PLP recovery を実行

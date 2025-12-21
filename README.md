@@ -1,5 +1,8 @@
 # Atelier Kyo Manager / BUYMA Growth Hub
 
+> **フレームワークについて**: このプロジェクトは [AI Augmented System Design Framework (AASDF)](https://github.com/fukukei23/ai-augmented-system-design-framework) をベースに開発されています。  
+> フレームワークの詳細・使い方・セキュリティ方針については、上記リポジトリを参照してください。
+
 **Atelier Kyo Manager** は、BUYMA 無在庫転売向けの
 
 - リサーチ
@@ -80,6 +83,19 @@
   - 修正案生成
   - Telemetry ベースの再学習サイクル
 - **パッチ適用ガイド**: Moncler run 失敗時のパッチ候補を手動で適用する手順は [`docs/official/moncler_patch_apply_guide.md`](docs/official/moncler_patch_apply_guide.md) を参照
+
+### 2.7 Self-Healing / Selector-Healing ダッシュボード
+
+- Self-Healing と Selector Auto-Healing の効果・挙動を可視化
+- メトリクス（`docs/reports/self_healing_metrics.jsonl`）を読み込み、以下を表示：
+  - Overall KPIs（総実行回数、成功率、平均試行回数など）
+  - サイト別メトリクス
+  - 日次推移チャート
+  - Selector-Healing フォーカスビュー
+- **起動方法**:
+  ```bash
+  streamlit run dashboard_self_healing.py
+  ```
 
 ---
 
@@ -261,7 +277,11 @@ celery -A app.celery_app beat -l info
 ### 6.3 Streamlit ダッシュボード
 
 ```bash
+# 既存の Streamlit ダッシュボード
 streamlit run app/streamlit_app.py
+
+# Self-Healing / Selector-Healing ダッシュボード（CR-ATELIER-003 Phase D-11）
+streamlit run dashboard_self_healing.py
 ```
 
 ### 6.4 Moncler スクレイピング（調査用）
