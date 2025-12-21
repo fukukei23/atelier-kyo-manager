@@ -104,7 +104,14 @@ Examples:
     
     p.add_argument("--enable-video", action="store_true", help="Enable Playwright video recording")
     p.add_argument("--timeout", type=int, default=60, help="Timeout seconds (default: 60)")
-    p.add_argument("--use-proxy", action="store_true", help="Enable proxy usage if configured")
+    
+    # Proxy mode: auto (default), on (force enable), off (force disable)
+    proxy_group = p.add_mutually_exclusive_group()
+    proxy_group.add_argument("--proxy-mode", choices=["auto", "on", "off"], default="auto",
+                            help="Proxy mode: auto (use config/default), on (force enable), off (force disable)")
+    proxy_group.add_argument("--use-proxy", action="store_true", dest="proxy_mode_on",
+                            help="[Deprecated] Use --proxy-mode on instead. Enable proxy usage if configured")
+    
     p.add_argument("--human-like", action="store_true", help="Enable human-like cursor/scroll pauses")
     
     return p.parse_args()
@@ -237,14 +244,27 @@ async def main() -> int:
         ds["enable_human_like"] = True
     
     run_ctx = RunContext()
+    
+    # Proxy mode設定（--proxy-mode優先、--use-proxyは後方互換性のため）
+    use_proxy_value = None
+    # --proxy-modeが指定されている場合（auto以外）
+    if args.proxy_mode != "auto":
+        use_proxy_value = (args.proxy_mode == "on")
+    # --use-proxyが指定されている場合（後方互換性）
+    elif hasattr(args, "proxy_mode_on") and args.proxy_mode_on:
+        use_proxy_value = True
+    
     runtime_kwargs = {
         "headless": not args.headful,
         "timeout_sec": args.timeout,
         "enable_video": args.enable_video,
-        "use_proxy": args.use_proxy,
         "site": site_name,
         "enable_human_like": args.human_like,
     }
+    
+    # use_proxyは明示指定時のみ設定（Noneの場合は設定しない）
+    if use_proxy_value is not None:
+        runtime_kwargs["use_proxy"] = use_proxy_value
     
     agent = BrowserUseAgent(runtime_kwargs=runtime_kwargs)
     timeout_sec = args.timeout + 60  # buffer for materialize steps
@@ -307,6 +327,15 @@ async def main() -> int:
             "site": getattr(result, 'site', ''),
             "query": getattr(result, 'query', ''),
         }
+    
+    # CR-E2E-001: success_stage と criteria を result.json のトップレベルに追加
+    # （evidence 内にも存在するが、可読性のためトップレベルにも追加）
+    if isinstance(result_dict, dict) and "evidence" in result_dict:
+        evidence = result_dict.get("evidence", {})
+        if "success_stage" in evidence:
+            result_dict["success_stage"] = evidence["success_stage"]
+        if "criteria" in evidence:
+            result_dict["criteria"] = evidence["criteria"]
     
     result_path = run_ctx.get_path("result.json")
     result_path.write_text(json.dumps(result_dict, ensure_ascii=False, indent=2), encoding="utf-8")

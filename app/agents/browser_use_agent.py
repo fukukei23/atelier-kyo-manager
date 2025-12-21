@@ -124,8 +124,8 @@ try:
     from app.utils.visual_regression import compare_and_maybe_update
     from app.models.result_models import DiscoveryResult
     from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
-    from app.agents.browser.telemetry import TelemetryService, TelemetryClient, TelemetryContext
-    # Stage 3B: observability.py の関数は TelemetryService に移行
+    from app.agents.browser.telemetry import TelemetryClient, TelemetryContext
+    # Stage 3B: observability.py の関数は TelemetryClient 経由で利用
     # 後方互換性のため、observability.py も残す（段階的移行）
     from app.utils.observability import (
         save_dom, count_selectors, save_raw_hrefs, write_fail_snapshot
@@ -143,7 +143,7 @@ except ImportError:
         from ..utils.visual_regression import compare_and_maybe_update
         from ..models.result_models import DiscoveryResult
         from .selector_discovery_agent import SelectorDiscoveryAgent
-        from .browser.telemetry import TelemetryService, TelemetryClient, TelemetryContext
+        from .browser.telemetry import TelemetryClient, TelemetryContext
         from ..utils.observability import (
             save_dom, count_selectors, save_raw_hrefs, write_fail_snapshot
         )
@@ -168,7 +168,7 @@ except ImportError:
          def extract_title_price(*args, **kwargs): return {}
          class SelectorDiscoveryAgent:
              def __init__(self, runtime_kwargs: Optional[Dict[str, Any]] = None): pass
-         class TelemetryService: # type: ignore
+         class StubTelemetryService: # type: ignore
              def __init__(self, run_context=None, logger=None, **kwargs): pass
              async def save_dom(self, page, name): pass
              async def save_json(self, name, payload): pass
@@ -182,7 +182,7 @@ except ImportError:
              query: str = ""
              run_id: Optional[str] = None
              stage: Optional[str] = None
-         class TelemetryClient: # type: ignore
+         class StubTelemetryClient: # type: ignore
              def __init__(self, run_context=None, base_dir: str = ""): pass
              async def save_dom(self, page, name, tctx): pass
              async def save_json(self, name, payload, tctx): pass
@@ -454,26 +454,42 @@ class BrowserUseAgent:
         self.logger = logger
         self.run_context: Optional[RunContext] = None # Temporarily attach RunContext during run()
         
-        # Stage 3B: TelemetryService インスタンス（run_context が設定された後に初期化）
-        self._telemetry: Optional[TelemetryService] = None
+        # Stage 3B: TelemetryClient インスタンス（run_context が設定された後に初期化）
+        self._telemetry: Optional[TelemetryClient] = None
 
         # --- V88.6.x: Session handles are managed by SessionManager ---
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
         self._session_manager: Optional[SessionManager] = None
         self.extraction_service = BrowserExtractionService(self.logger, self.runtime_kwargs)
+        
+        # CR-ATELIER-003 Phase C-3: BrowserOrchestrator のインスタンス生成
+        # 現時点ではまだ使用しない（skeleton のみ）
+        try:
+            from app.agents.browser_orchestrator import BrowserOrchestrator
+            self.orchestrator = BrowserOrchestrator(
+                runtime_kwargs=self.runtime_kwargs,
+                analysis_agent=None,  # FailureAnalysisAgent は現時点では None
+                discovery_agent=self.discovery_agent,
+                log=self.logger,
+            )
+        except ImportError:
+            # BrowserOrchestrator がインポートできない場合は None にする
+            self.orchestrator = None  # type: ignore
     
-    def _ensure_telemetry(self) -> TelemetryService:
+    def _ensure_telemetry(self) -> TelemetryClient:
         """
-        TelemetryService インスタンスを取得（遅延初期化）
+        TelemetryClient インスタンスを取得（遅延初期化）
         
         Returns:
-            TelemetryService インスタンス
+            TelemetryClient インスタンス（正規実装）
         """
         if self._telemetry is None:
             if self.run_context is None:
-                raise ValueError("run_context must be set before using TelemetryService")
-            self._telemetry = TelemetryService(run_context=self.run_context, logger=self.logger)
+                raise ValueError("run_context must be set before using TelemetryClient")
+            # 正規実装の TelemetryClient を使用（ローカル import で確実に正規実装を参照）
+            from app.agents.browser.telemetry import TelemetryClient as RealTelemetryClient
+            self._telemetry = RealTelemetryClient(run_context=self.run_context)
         return self._telemetry
 
     def _attach_session(self, session: SessionManager) -> None:
@@ -639,6 +655,14 @@ class BrowserUseAgent:
         settings: Dict[str, Any],
         run_context: RunContext,
     ):
+        """
+        Deprecated: BrowserOrchestrator.run_pdp に移行済み
+        
+        CR-ATELIER-003 Phase D-3: このメソッドは BrowserOrchestrator.run_pdp 内で
+        直接実装されるようになったため、使用されていません。
+        
+        後続フェーズで削除予定。
+        """
         async def _prepare(page: Page):
             # CR-ATELIER-003 Phase C: ui_helpers.py を使用
             if kill_overlays:
@@ -1774,7 +1798,7 @@ class BrowserUseAgent:
         mode = (self.runtime_kwargs or {}).get("mode", "run").lower()
         
         # Stage 3B: TelemetryClient を初期化
-        telemetry = TelemetryClient(run_context)
+        telemetry = self._ensure_telemetry()
         tctx = TelemetryContext(site=site, query=query, run_id=run_context.run_id)
 
         # Stage 3C: Plugin API (Facade化) - 直接 PLUGIN_REGISTRY を import しない
@@ -1898,7 +1922,7 @@ class BrowserUseAgent:
                         context=context,  # Stage 3A-2-4: BrowserContext を追加
                     )
                     # Stage 3B: TelemetryClient を NavigationDriver に渡す
-                    telemetry = TelemetryClient(run_context=run_context)
+                    telemetry = self._ensure_telemetry()
                     # Stage 3A-3: trap_checker を NavigationDriver に渡す（観測用）
                     navigation_driver = NavigationDriver(
                         page=page,
@@ -1957,375 +1981,137 @@ class BrowserUseAgent:
                             *, start_t: float, budget_ms: int, skip_materialize: bool = False,
                             nav_outcome: Optional[Any] = None, plugin: Optional[Any] = None) -> DiscoveryResult:
         """
-        Stage 3A-1: NavigationDriver への最小限の委譲を追加。
+        CR-ATELIER-003 Phase C-4 Final: BrowserOrchestrator への完全委譲
         
-        このステップでは、NavigationDriver を初期化して run_plp_flow を呼び出す配線だけを作成し、
-        実際のナビゲーションロジックは現時点ではまだ旧実装を使います。
+        PLP→PDP の全ロジックは BrowserOrchestrator.run_plp_to_pdp に集約されています。
+        このメソッドは Orchestrator への薄いラッパーとして機能します。
         """
-
-        # --- Stage 3A-1: NavigationDriver への最小限の委譲 ---
-        # NavigationContext を組み立て
-        nav_ctx = NavigationContext(
-            site=site,
-            query=query,
-            site_config=site_config,
-            settings=settings,
-            run_context=run_context,
-            start_t=start_t,
-            budget_ms=budget_ms,
-            entry_url=target_url,
-            context=context,  # Stage 3A-2-4: BrowserContext を追加
-        )
+        # CR-ATELIER-003 Phase C-4 Final: Orchestrator が None の場合はエラー
+        if self.orchestrator is None:
+            raise ValueError("Orchestrator is not initialized. BrowserOrchestrator must be set in __init__.")
         
-        # NavigationDriver を初期化
-        # Stage 3B: TelemetryClient を NavigationDriver に渡す
-        telemetry = TelemetryClient(run_context=run_context)
         # plugin が渡されていない場合は取得
         if plugin is None:
             from app.agents.browser.plugin_api import PluginAPI
             plugin_api = PluginAPI(logger=self.logger)
             plugin = plugin_api.get_plugin(site)
-        # Stage 3A-3: trap_checker を NavigationDriver に渡す（観測用）
-        navigation_driver = NavigationDriver(
-            page=page,
-            trap_checker=lambda url: self._looks_like_trap_or_legal(url),
-            telemetry=telemetry,  # Stage 3B: TelemetryClient を渡す
-            strategy=plugin,
-        )
         
-        # run_plp_flow を呼び出す（現時点ではスタブ実装なので、ctx をそのまま返すだけ）
-        try:
-            nav_outcome = await navigation_driver.run_plp_flow(nav_ctx)
-            self.logger.debug(f"[_run_plp_flow] NavigationDriver.run_plp_flow called (stub): entry_url={nav_outcome.entry_url}")
-        except TrapPageDetected as trap_e:
-            # CR-ATELIER-002 Step 1: Trap ページ検出例外を処理
-            self.logger.warning(
-                f"[_run_plp_flow] Trap page detected by NavigationDriver: "
-                f"type={trap_e.trap_type}, reason={trap_e.reason}, URL={trap_e.url}"
+        # CR-ATELIER-003 Phase D-9: Self-Healing Loop v2 の統合
+        enable_self_healing_loop = settings.get("enable_self_healing_loop", False)
+        self_healing_max_attempts = settings.get("self_healing_max_attempts", None)
+        
+        if enable_self_healing_loop:
+            # Self-Healing Loop v2 を使用
+            self.logger.info(
+                f"[BrowserUseAgent] Self-Healing Loop enabled "
+                f"(max_attempts={self_healing_max_attempts})"
             )
-            # TrapPageDetected 例外をそのまま再スロー（上位の Self-Healing ロジックで扱えるようにする）
-            raise
-        except Exception as nav_e:
-            self.logger.debug(f"[_run_plp_flow] NavigationDriver.run_plp_flow failed (fallback to legacy): {nav_e}")
-            nav_outcome = None
-
-        # --- Stage 3A-2-3: NavigationDriver が trap 判定・復旧を実行済みかチェック ---
-        attempted_recover = False
-        if nav_outcome and nav_outcome.trap_detected:
-            # NavigationDriver が既に trap を検出し、復旧も試行済み
-            if nav_outcome.recovered:
-                self.logger.debug("[_run_plp_flow] NavigationDriver already handled trap detection and recovery")
-                attempted_recover = True
-            else:
-                # NavigationDriver が trap を検出したが復旧に失敗した場合、例外を投げる
-                raise ValueError(
-                    f"Landing page looks like legal/trap (NavigationDriver recovery failed): {nav_outcome.trap_reason}"
-                )
-        elif nav_outcome is None or not nav_outcome.trap_detected:
-            # NavigationDriver が trap を検出していない場合、従来の処理を実行
-            # ★ V88.6.0: 呼び出しを self._looks_like_trap_or_legal に修正
-            # ★ V88.5.9: 1. 入口で trap でも、まず 1 回だけ回復ナビを試みる
-            # Stage 4: site_configを渡す
-            # CR-ATELIER-003 Phase A-1: _force_plp_recover の代わりに NavigationDriver.recover_plp を使用
-            if self._looks_like_trap_or_legal(page.url, site_config):
-                self.logger.warning("[_looks_like_trap] initial trap-like url: %s", page.url)
-                attempted_recover = True
-                try:
-                    recovered = await navigation_driver.recover_plp(nav_ctx)
-                    if not recovered or self._looks_like_trap_or_legal(page.url, site_config):
-                        raise ValueError(f"Landing page looks like legal/trap (even after recovery attempt): {page.url}")
-                    self.logger.info("[_looks_like_trap] Recovery navigation seems successful.")
-                except Exception as e:
-                    self.logger.warning(f"[_run_plp_flow] NavigationDriver.recover_plp failed: {e}", exc_info=True)
-                    raise ValueError(f"Landing page looks like legal/trap (recovery failed): {page.url}")
-
-        # CR-ATELIER-003 Phase C: ui_helpers.py を使用
-        if pause_for_operator:
-            await pause_for_operator(page, run_context, "before_plp_materialize", self.runtime_kwargs, self.logger)
-        else:
-            await self._pause_for_operator(page, run_context, "before_plp_materialize")
-
-        # CR-ATELIER-003 Phase A-1: NavigationDriver への完全移行
-        # NavigationDriver が materialize 済みか、NavigationDriver 経由で materialize を実行
-        if skip_materialize:
-            ok_materialized = True
-        elif nav_outcome and nav_outcome.plp_materialized:
-            # NavigationDriver が既に materialize を実行済み
-            ok_materialized = True
-            self.logger.debug("[_run_plp_flow] NavigationDriver already materialized PLP")
-        else:
-            # NavigationDriver が materialize を実行していない場合、NavigationDriver 経由で実行
-            # CR-ATELIER-003 Phase A-1: _ensure_plp_materialized の代わりに NavigationDriver.ensure_plp_materialized を使用
-            try:
-                ok_materialized = await navigation_driver.ensure_plp_materialized(nav_ctx)
-            except Exception as e:
-                self.logger.warning(f"[_run_plp_flow] NavigationDriver.ensure_plp_materialized failed: {e}", exc_info=True)
-                ok_materialized = False
-
-        # ★ V88.5.7: (Fail Fast) まともなPLP(タイル0枚)が出なかったらすぐ諦める
-        if not ok_materialized:
-            raise ValueError(
-                f"PLP did not materialize (no product tiles). URL={page.url}"
-            )
-
-        # CR-ATELIER-003 Phase A-1: NavigationDriver への完全移行
-        # NavigationDriver が materialize 後の trap 再チェックも処理済みの場合
-        if nav_outcome and nav_outcome.plp_materialized:
-            # NavigationDriver が materialize 後の trap 再チェックも完了している
-            # NavigationDriver の run_plp_flow 内で既に trap 判定・復旧が完了しているため、
-            # ここでの trap 再チェックは不要（NavigationDriver が例外を投げているはず）
-            self.logger.debug("[_run_plp_flow] Using NavigationDriver result (post-materialize trap check already done)")
-        elif ok_materialized:
-            # NavigationDriver が materialize を実行したが、trap 再チェックが未実行の場合
-            # NavigationDriver 経由で trap 再チェックを実行
-            # CR-ATELIER-003 Phase A-1: _force_plp_recover の代わりに NavigationDriver.recover_plp を使用
-            if self._looks_like_trap_or_legal(page.url, site_config):
-                if not attempted_recover:
-                    self.logger.warning("[_run_plp_flow] trap-like url after materialize: %s", page.url)
-                    try:
-                        recovered = await navigation_driver.recover_plp(nav_ctx)
-                        if not recovered or self._looks_like_trap_or_legal(page.url, site_config):
-                            raise ValueError(f"After materialize still on legal/trap page (even after recovery attempt): {page.url}")
-                        self.logger.info("[_run_plp_flow] Recovery navigation (post-materialize) seems successful.")
-                    except Exception as e:
-                        self.logger.warning(f"[_run_plp_flow] NavigationDriver.recover_plp failed: {e}", exc_info=True)
-                        raise ValueError(f"After materialize still on legal/trap page (recovery failed): {page.url}")
-                else:
-                    # 既に回復試行済みで、スクロールしたらまたトラップに戻った場合
-                    raise ValueError(f"After materialize, bounced back to legal/trap page: {page.url}")
-
-        try:
-            # Stage 3B: TelemetryService を使用
-            telemetry = self._ensure_telemetry()
-            pdp_cfg_a = (site_config.get('selectors') or {}).get('pdp', {}) or {}
-            selectors = (
-                (pdp_cfg_a.get('pdp_link_selectors') or []) +
-                (pdp_cfg_a.get('plp_container_selectors') or [])
-            )
-            await telemetry.record_plp_state(
-                page,
-                name="plp_dom_initial_materialized",
-                selectors=selectors,
-                site_config=site_config,
-            )
-        except Exception as e:
-            logger.warning(f"[Hook A1] TelemetryService failed, falling back to observability: {e}")
-            # フォールバック: 既存のobservability.py関数を使用
-            try:
-                # Stage 3B: TelemetryClient 経由で保存（フォールバック時も TelemetryClient を使用）
-                fallback_telemetry = TelemetryClient(run_context)
-                fallback_tctx = TelemetryContext(site=site, query=query, run_id=run_context.run_id, stage="plp")
-                await fallback_telemetry.save_dom(page, "plp_dom_initial_materialized", fallback_tctx)
-                pdp_cfg_a = (site_config.get('selectors') or {}).get('pdp', {}) or {}
-                await count_selectors(
-                    run_context,
-                    page,
-                    (pdp_cfg_a.get('pdp_link_selectors') or []) +
-                    (pdp_cfg_a.get('plp_container_selectors') or []),
-                    name="selector_counts_plp_initial"
-                )
-            except Exception as e2:
-                logger.warning(f"[Hook A1] Fallback also failed: {e2}")
-
-        # Stage 3A-2-4: NavigationDriver が既に PDP リンクを収集している場合はそれを使用
-        # NavigationDriver.run_plp_flow 内で collect_pdp_links と fallback が実行されている
-        if nav_outcome and nav_outcome.pdp_links:
-            # NavigationDriver が既に PDP リンクを収集済み
-            pdp_links = nav_outcome.pdp_links
-            self.logger.debug(f"[_run_plp_flow] Using NavigationDriver result: {len(pdp_links)} PDP links")
-            if nav_outcome.fallback_used:
-                self.logger.info(f"[_run_plp_flow] NavigationDriver used fallback: {nav_outcome.fallback_used}")
-        else:
-            # NavigationDriver が PDP リンクを収集していない場合、従来の処理を実行
-            # Stage 3A-2-1: NavigationDriver を直接使用（既に構築済みの nav_ctx を再利用）
-            navigation_driver = NavigationDriver(
-                page=page,
-                telemetry=self._ensure_telemetry(),
-                trap_checker=None,
-                strategy=None,
-            )
-            pdp_links = await navigation_driver.collect_pdp_links(nav_ctx)
-
-        # Fallback logic (header search, click first card)
-        # V88.5.7: このブロックは ok_materialized=True (タイル1枚以上) だが
-        # pdp_links=[] だった場合にのみ実行される
-        # Stage 3A-2-4: NavigationDriver が既に fallback を実行している場合はスキップ
-        if not pdp_links and (not nav_outcome or not nav_outcome.fallback_used):
-
-            # Stage 4: site_configを渡す
-            # ★ V88.6.0: 呼び出しを self._looks_like_trap_or_legal に修正
-            # ★ 3. ここでも trap判定をはさむ (v88.5.6ロジック)
-            # (V88.5.9: 回復ロジックは既に試したので、ここでは検知のみ)
-            if not pdp_links and self._looks_like_trap_or_legal(page.url, site_config):
-                raise ValueError(
-                    f"No PDP links and URL looks like trap/legal page: {page.url}"
-                )
-
-            try:
-                self.logger.debug("[Fallback] Trying header search UI...")
-                # CR-ATELIER-003 Phase A-1: _plp_header_search_fallback の代わりに NavigationDriver.header_search_fallback を使用
-                did_search = await navigation_driver.header_search_fallback(nav_ctx)
-                if did_search:
-                    # CR-ATELIER-003 Phase C: ui_helpers.py を使用
-                    if click_continue_shopping_if_present:
-                        await click_continue_shopping_if_present(page, site_config)
-                    else:
-                        await self._click_continue_shopping_if_present(page, site_config)
-                    try: anchors = await page.locator("a[href*='/p/'], a[href*='/product/']").count()
-                    except Exception: anchors = 0
-                    if anchors < 6:
-                        self.logger.debug(f"[Fallback] Materializing after search (anchors={anchors}<6)")
-                        # CR-ATELIER-003 Phase A-1: _ensure_plp_materialized の代わりに NavigationDriver.ensure_plp_materialized を使用
-                        try:
-                            await navigation_driver.ensure_plp_materialized(nav_ctx)
-                        except Exception as e:
-                            self.logger.warning(f"[_run_plp_flow] NavigationDriver.ensure_plp_materialized after search failed: {e}", exc_info=True)
-                    try:
-                        # Stage 3B: TelemetryService を使用
-                        telemetry = self._ensure_telemetry()
-                        pdp_cfg_a2 = (site_config.get("selectors") or {}).get("pdp", {}) or {}
-                        selectors = (
-                            (pdp_cfg_a2.get("pdp_link_selectors") or []) +
-                            (pdp_cfg_a2.get("plp_container_selectors") or [])
-                        )
-                        await telemetry.record_plp_state(
-                            page,
-                            name="plp_dom_search_fallback",
-                            selectors=selectors,
-                            site_config=site_config,
-                        )
-                    except Exception as e:
-                        logger.warning(f"[Hook A3] TelemetryService failed, falling back to observability: {e}")
-                        # フォールバック: 既存のobservability.py関数を使用
-                        try:
-                            # Stage 3B: TelemetryClient 経由で保存（フォールバック時も TelemetryClient を使用）
-                            fallback_telemetry = TelemetryClient(run_context)
-                            fallback_tctx = TelemetryContext(site=site, query=query, run_id=run_context.run_id, stage="plp")
-                            await fallback_telemetry.save_dom(page, "plp_dom_search_fallback", fallback_tctx)
-                            pdp_cfg_a2 = (site_config.get("selectors") or {}).get("pdp", {}) or {}
-                            await count_selectors(run_context, page, (pdp_cfg_a2.get("pdp_link_selectors") or []) + (pdp_cfg_a2.get("plp_container_selectors") or []), name="selector_counts_after_search_fallback")
-                        except Exception as e2:
-                            logger.warning(f"[Hook A3] Fallback also failed: {e2}")
-                    # Stage 3A-2-1: NavigationDriver を直接使用（nav_ctx を再利用）
-                    # 注意: NavigationDriver.run_plp_flow が既に fallback を実行している場合は不要
-                    if not nav_outcome or not nav_outcome.fallback_used:
-                        pdp_links = await navigation_driver.collect_pdp_links(nav_ctx)
-                    else:
-                        pdp_links = nav_outcome.pdp_links if nav_outcome else []
-
-                    # --- V88.5.5: 早期失敗ロジック ---
-                    # Task C: PlpDriver を使用してタイルクリック → PDP遷移
-                    # Stage 4: 拡張版 PlpDriver に対応
-                    if not pdp_links:
-                        self.logger.warning("[Fallback] No hrefs after search. Clicking first card using PlpDriver...")
-                        try:
-                            plp_driver = PlpDriver(
-                                page=page,
-                                context=context,
-                                site_config=site_config,
-                                run_context=run_context,
-                                logger=self.logger,
-                                telemetry=self._ensure_telemetry(),
-                            )
-                            # Stage 4: 新しいシグネチャを使用（target_url, timeout_ms を優先）
-                            # Task 1: budget_ms = None 対応で安全化
-                            default_timeout_ms = int(settings.get("timeout_sec", 60)) * 1000
-                            if budget_ms is not None:
-                                timeout_ms = min(budget_ms, default_timeout_ms)
-                            else:
-                                timeout_ms = default_timeout_ms
-                            nav_result = await plp_driver.navigate_to_pdp(
-                                target_url=target_url,
-                                timeout_ms=timeout_ms,
-                                # 後方互換性のため、旧パラメータも渡す（内部で fallback として使用）
-                                start_t=start_t,
-                                budget_ms=budget_ms,
-                            )
-                            
-                            # Stage 4: 新しいフィールドを RunContext に保存
-                            run_context.save_json("plp_navigation_result.json", {
-                                "pdp_url": nav_result.pdp_url,
-                                "plp_url": nav_result.plp_url,
-                                "tiles_seen": nav_result.tiles_seen,
-                                "trap_detected": nav_result.trap_detected,
-                                "trap_reason": nav_result.trap_reason,
-                                "recovery_attempted": nav_result.recovery_attempted,
-                                "recovery_successful": nav_result.recovery_successful,
-                                "overlays_handled": nav_result.overlays_handled,
-                                "navigation_method": nav_result.navigation_method,
-                                "errors": nav_result.errors,
-                                "pdp_opened_in_new_tab": nav_result.pdp_opened_in_new_tab,
-                            })
-                            
-                            # Stage 4: 詳細なログ出力
-                            if nav_result.trap_detected:
-                                if nav_result.recovery_successful:
-                                    self.logger.info(
-                                        f"[PlpDriver] Trap detected and recovered: {nav_result.trap_reason} "
-                                        f"(overlays: {nav_result.overlays_handled}, method: {nav_result.navigation_method})"
-                                    )
-                                else:
-                                    self.logger.warning(
-                                        f"[PlpDriver] Trap detected but recovery failed: {nav_result.trap_reason} "
-                                        f"(errors: {nav_result.errors})"
-                                    )
-                            else:
-                                self.logger.info(
-                                    f"[PlpDriver] Successfully navigated to PDP: {nav_result.pdp_url} "
-                                    f"(tiles_seen: {nav_result.tiles_seen}, "
-                                    f"overlays: {nav_result.overlays_handled}, "
-                                    f"method: {nav_result.navigation_method})"
-                                )
-                            
-                            # エラーがある場合は警告
-                            if nav_result.errors:
-                                for error in nav_result.errors:
-                                    self.logger.warning(f"[PlpDriver] Error: {error}")
-                            
-                            # PlpDriver が PDP に遷移した場合、そのページで PDP 抽出を実行
-                            # PlpDriver 内で既にページ遷移が完了しているので、plp_driver.page を使用
-                            pdp_page = plp_driver.page
-                            return await self._run_pdp_flow(pdp_page, site, query, settings, run_context, site_config)
-                        except Exception as plp_e:
-                            self.logger.warning(f"[Fallback] PlpDriver failed: {plp_e}", exc_info=True)
-                            # CR-ATELIER-003 Phase A-1: _click_first_card_or_link の代わりに NavigationDriver.click_first_card_or_link を使用
-                            try:
-                                clicked_url = await navigation_driver.click_first_card_or_link(nav_ctx)
-                                if clicked_url:
-                                    # NavigationDriver.click_first_card_or_link は URL を返すので、その URL に遷移
-                                    await page.goto(clicked_url, wait_until="domcontentloaded", timeout=30000)
-                                    return await self._run_pdp_flow(page, site, query, settings, run_context, site_config)
-                            except Exception as click_e:
-                                self.logger.warning(f"[Fallback] NavigationDriver.click_first_card_or_link failed: {click_e}", exc_info=True)
-                            # new_page も取れなかった → ここで即ギブアップ (V88.5.5)
-                            raise ValueError("No PDP links and click fallback failed (gave up early for speed).")
-                    # --- V88.5.5: 修正ここまで ---
-
-            except Exception as _e:
-                # _plp_header_search_fallback や _click_first_card_or_link 自体が例外を投げた場合
-                # (V88.5.5: 早期ギブアップの ValueError もここに含まれる)
-                self.logger.warning(f"[Fallback:header-search] failed or gave up early: {_e}", exc_info=True)
-                # 最終手段として、この例外をそのまま投げるか、
-                # あるいは、pdp_links が空のまま次の if pdp_links: に進める
-                # ここでは後者を選択し、最終的に if pdp_links: の外側でエラーになるようにする
-                pass
-
-        if pdp_links:
-            prepare_hook = self._build_pdp_prepare_hook(site_config=site_config, settings=settings, run_context=run_context)
-            return await self.extraction_service.extract_from_pdp_list(
+            result = await self.orchestrator.run_with_self_healing_loop(
                 page=page,
                 context=context,
                 site=site,
                 query=query,
-                pdp_links=pdp_links,
                 site_config=site_config,
                 settings=settings,
                 run_context=run_context,
+                target_url=target_url,
                 start_t=start_t,
                 budget_ms=budget_ms,
-                prepare_page=prepare_hook,
+                max_attempts=self_healing_max_attempts,
+                nav_outcome=nav_outcome,
+                trap_checker=lambda url: self._looks_like_trap_or_legal(url),
+                telemetry=self._ensure_telemetry(),
+                plugin=plugin,
             )
-        raise ValueError("All PDP attempts failed after all recovery attempts.")
+            # run_with_self_healing_loop は DiscoveryResult を返すので、
+            # そのまま返す（PlpNavigationResult の処理は不要）
+            return result
+        
+        # Orchestrator に全処理を委譲（通常フロー）
+        result = await self.orchestrator.run_plp_to_pdp(
+            page=page,
+            context=context,
+            site=site,
+            query=query,
+            site_config=site_config,
+            settings=settings,
+            run_context=run_context,
+            target_url=target_url,
+            start_t=start_t,
+            budget_ms=budget_ms,
+            nav_outcome=nav_outcome,
+            trap_checker=lambda url: self._looks_like_trap_or_legal(url),
+            telemetry=self._ensure_telemetry(),
+            plugin=plugin,
+        )
+        
+        # Orchestrator が PlpNavigationResult を返した場合、_run_pdp_flow を呼び出す
+        if isinstance(result, PlpNavigationResult):
+            # PlpNavigationResult の場合は RunContext に保存してから _run_pdp_flow を呼び出す
+            run_context.save_json("plp_navigation_result.json", {
+                "pdp_url": result.pdp_url,
+                "plp_url": result.plp_url,
+                "tiles_seen": result.tiles_seen,
+                "trap_detected": result.trap_detected,
+                "trap_reason": result.trap_reason,
+                "recovery_attempted": result.recovery_attempted,
+                "recovery_successful": result.recovery_successful,
+                "overlays_handled": result.overlays_handled,
+                "navigation_method": result.navigation_method,
+                "errors": result.errors,
+                "pdp_opened_in_new_tab": result.pdp_opened_in_new_tab,
+            })
+            
+            # trap検知時は早期終了（PDP modeへの移行を抑止）
+            if result.trap_detected:
+                self.logger.warning(
+                    f"[BrowserUseAgent] Trap detected in PlpNavigationResult. Early exit: {result.trap_reason} "
+                    f"(recovery_successful={result.recovery_successful}, overlays={result.overlays_handled})"
+                )
+                # navigation_failed(trap/locale) として DiscoveryResult を返す
+                # DiscoveryResultはok, site, query, message, evidenceパラメータを使用
+                from app.models.result_models import DiscoveryResult
+                return DiscoveryResult(
+                    ok=False,
+                    site=site,
+                    query=query,
+                    message=f"Trap/locale detected: {result.trap_reason}",
+                    evidence={
+                        "error_type": "trap_detected",
+                        "error_class": "PlpDriverTrapDetection",
+                        "trap_reason": result.trap_reason,
+                        "recovery_successful": result.recovery_successful,
+                        "overlays_handled": result.overlays_handled,
+                        "errors": result.errors,
+                    }
+                )
+            
+            # ログ出力（trap_detected=False の場合のみ実行）
+            if result.recovery_successful:
+                self.logger.info(
+                    f"[Orchestrator] Successfully navigated to PDP: {result.pdp_url} "
+                    f"(tiles_seen: {result.tiles_seen}, "
+                    f"overlays: {result.overlays_handled}, "
+                    f"method: {result.navigation_method})"
+                )
+            else:
+                self.logger.info(
+                    f"[Orchestrator] Successfully navigated to PDP: {result.pdp_url} "
+                    f"(tiles_seen: {result.tiles_seen}, "
+                    f"overlays: {result.overlays_handled}, "
+                    f"method: {result.navigation_method})"
+                )
+            
+            # エラーがある場合は警告
+            if result.errors:
+                for error in result.errors:
+                    self.logger.warning(f"[Orchestrator] Error: {error}")
+            
+            # PDP 抽出を実行
+            return await self._run_pdp_flow(page, site, query, settings, run_context, site_config)
+        
+        # DiscoveryResult を返した場合、そのまま返す
+        return result
 
     # CR-ATELIER-003 Phase A-2: _plp_header_search_fallback を削除
     # すべての呼び出し箇所は NavigationDriver.header_search_fallback 経由に置き換え済み
@@ -2376,18 +2162,30 @@ class BrowserUseAgent:
         run_context: RunContext,
         site_config: Dict[str, Any],
     ) -> DiscoveryResult:
+        """
+        CR-ATELIER-003 Phase D-3: BrowserOrchestrator への完全委譲
+        
+        PDP 抽出の全ロジックは BrowserOrchestrator.run_pdp に集約されています。
+        このメソッドは Orchestrator への薄いラッパーとして機能します。
+        
+        例外ハンドリングは BrowserOrchestrator.run_pdp 内で行われるため、
+        このメソッドでは一切 try/except を持たない。
+        """
         logger.info("[Mode] PDP (detail)")
-        prepare_hook = self._build_pdp_prepare_hook(site_config=site_config, settings=settings, run_context=run_context)
-        return await self.extraction_service.extract_single_pdp(
+        
+        # CR-ATELIER-003 Phase D-3: Orchestrator が None の場合はエラー
+        if self.orchestrator is None:
+            raise ValueError("Orchestrator is not initialized. BrowserOrchestrator must be set in __init__.")
+        
+        return await self.orchestrator.run_pdp(
             page=page,
             context=self._context,
             site=site,
             query=query,
+            site_config=site_config,
             settings=settings,
             run_context=run_context,
-            site_config=site_config,
             target_url=page.url,
-            prepare_page=prepare_hook,
         )
 
     # CR-ATELIER-003 Phase A-2: _force_plp_recover と _inline_force_plp_recover を削除
@@ -2426,7 +2224,7 @@ class BrowserUseAgent:
         dom_path_str = None
         try:
             # write_fail_snapshot は active_page (開いている可能性のあるページ) を使う
-            telemetry = TelemetryClient(run_context)
+            telemetry = self._ensure_telemetry()
             tctx = TelemetryContext(site=site, query=query, run_id=run_context.run_id, stage="fail_plp")
             await telemetry.write_fail_snapshot(
                 active_page,
@@ -2444,7 +2242,7 @@ class BrowserUseAgent:
             if dom_guess and Path(dom_guess).exists():
                 dom_path_str = str(dom_guess)
         except Exception as hook_e:
-            logger.warning(f"[Hook C2] TelemetryService.write_fail_snapshot failed, falling back: {hook_e}")
+            logger.warning(f"[Hook C2] TelemetryClient.write_fail_snapshot failed, falling back: {hook_e}")
             # フォールバック: 既存のobservability.py関数を使用
             try:
                 # Stage 3B: TelemetryClient 経由で保存
@@ -2534,7 +2332,7 @@ class BrowserUseAgent:
             entry_url=page.url,
             context=context,
         )
-        telemetry = TelemetryClient(run_context=run_context)
+        telemetry = self._ensure_telemetry()
         navigation_driver = NavigationDriver(
             page=page,
             telemetry=telemetry,
@@ -2548,12 +2346,12 @@ class BrowserUseAgent:
         except Exception as e:
             self.logger.warning(f"[LEARN] NavigationDriver.ensure_plp_materialized failed: {e}", exc_info=True)
             raise ValueError(f"PLP did not materialize for learning flow: {page.url}")
-        # Stage 3B: TelemetryService を使用
+        # Stage 3B: TelemetryClient を使用
         try:
             telemetry = self._ensure_telemetry()
             await telemetry.save_dom(page, "learn_plp_dom_for_discovery")
         except Exception as e:
-            logger.warning(f"[LEARN] TelemetryService.save_dom failed, falling back: {e}")
+            logger.warning(f"[LEARN] TelemetryClient.save_dom failed, falling back: {e}")
             # フォールバック: 既存のobservability.py関数を使用
             await save_dom(run_context, page, "learn_plp_dom_for_discovery")
         try:
@@ -2606,3 +2404,155 @@ class BrowserUseAgent:
             self.logger.info(f"[LEARN] Saved merged selectors to: {learned_path}")
         except Exception as e:
             self.logger.warning(f"[LEARN] Failed to save to instance/sites/: {e}")
+
+    # --- CR-ATELIER-003 Phase D-12: E2E Entrypoint ---
+    async def run_e2e(
+        self,
+        *,
+        plp_url: str,
+        scenario_name: str,
+        use_self_healing: bool,
+        max_attempts: Optional[int] = None,
+    ) -> DiscoveryResult:
+        """
+        E2E 実行のエントリーポイント
+        
+        CR-ATELIER-003 Phase D-12: 実ブラウザ E2E 検証フェーズ
+        
+        Args:
+            plp_url: PLP URL
+            scenario_name: シナリオ名（normal / auto_heal / hard_fail）
+            use_self_healing: Self-Healing を有効化するか
+            max_attempts: 最大再試行回数（None の場合は policy から取得）
+        
+        Returns:
+            DiscoveryResult: 実行結果
+        """
+        from app.agents.browser_orchestrator import BrowserOrchestrator
+        from app.config.sites_loader import SitesConfigLoader
+        from app.agents.self_healing_policy import SelfHealingPolicy
+        from app.core.run_context import RunContext
+        from app.models.result_models import DiscoveryResult
+        import json
+        import os
+        
+        # RunContext を作成（既に作成済みの場合は再利用）
+        if not hasattr(self, 'run_context') or self.run_context is None:
+            self.run_context = RunContext()
+        
+        # run_type と scenario_name を run_context に設定
+        self.run_context.run_type = "e2e"
+        self.run_context.scenario_name = scenario_name
+        
+        # サイト設定を読み込み
+        loader = SitesConfigLoader()
+        sites_config = loader.load_full_config()
+        site_config = sites_config.get("MONCLER_OFFICIAL")
+        
+        if not site_config:
+            return DiscoveryResult(
+                ok=False,
+                site="MONCLER_OFFICIAL",
+                query="",
+                message="MONCLER_OFFICIAL site config not found",
+            )
+        
+        # Self-Healing の有効/無効を環境変数で設定
+        if use_self_healing:
+            os.environ["SELF_HEALING_ENABLED"] = "true"
+        else:
+            os.environ["SELF_HEALING_ENABLED"] = "false"
+        
+        # Policy を読み込み
+        policy_path = Path("app/config/self_healing_policy.json")
+        policy_dict = {}
+        if policy_path.exists():
+            try:
+                policy_dict = json.loads(policy_path.read_text(encoding="utf-8"))
+            except Exception as e:
+                self.logger.warning(f"Failed to load policy: {e}")
+        
+        policy = SelfHealingPolicy(policy_dict)
+        
+        # E2E 用の max_attempts を取得（policy から fallback）
+        e2e_config = policy_dict.get("e2e", {})
+        if max_attempts is None:
+            max_attempts = e2e_config.get("max_attempts", policy.max_attempts())
+        
+        # BrowserOrchestrator を初期化
+        orchestrator = BrowserOrchestrator(
+            runtime_kwargs=self.runtime_kwargs,
+            policy=policy,
+        )
+        
+        # セッションを開く
+        try:
+            page, context = await self._open_session(
+                site="MONCLER_OFFICIAL",
+                site_config=site_config,
+                run_context=self.run_context,
+                settings=self._resolve_run_settings(site_config),
+                target_url=plp_url,
+                timeout_ms=60000,
+                likely_plp=True,
+            )
+        except Exception as e:
+            self.logger.error(f"Failed to open session: {e}", exc_info=True)
+            return DiscoveryResult(
+                ok=False,
+                site="MONCLER_OFFICIAL",
+                query="",
+                message=f"Failed to open session: {e}",
+            )
+        
+        try:
+            import time
+            start_t = time.time()
+            budget_ms = 300000  # 5分
+            
+            # Self-Healing が有効な場合は run_with_self_healing_loop を使用
+            if use_self_healing and policy.enabled() and policy.is_allowed_site("MONCLER_OFFICIAL"):
+                result = await orchestrator.run_with_self_healing_loop(
+                    page=page,
+                    context=context,
+                    site="MONCLER_OFFICIAL",
+                    query="",
+                    site_config=site_config,
+                    settings=self._resolve_run_settings(site_config),
+                    run_context=self.run_context,
+                    target_url=plp_url,
+                    start_t=start_t,
+                    budget_ms=budget_ms,
+                    max_attempts=max_attempts,
+                )
+            else:
+                # Self-Healing が無効な場合は通常実行
+                result = await orchestrator._run_full(
+                    page=page,
+                    context=context,
+                    site="MONCLER_OFFICIAL",
+                    query="",
+                    site_config=site_config,
+                    settings=self._resolve_run_settings(site_config),
+                    run_context=self.run_context,
+                    target_url=plp_url,
+                    start_t=start_t,
+                    budget_ms=budget_ms,
+                )
+            
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"E2E execution failed: {e}", exc_info=True)
+            return DiscoveryResult(
+                ok=False,
+                site="MONCLER_OFFICIAL",
+                query="",
+                message=f"E2E execution failed: {e}",
+            )
+        finally:
+            # セッションを閉じる
+            try:
+                await context.close()
+            except Exception:
+                pass
