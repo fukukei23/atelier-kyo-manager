@@ -245,6 +245,15 @@ async def main() -> int:
     
     run_ctx = RunContext()
     
+    # CR-E2E-003B拡張: system.logをrunディレクトリに確実に出力する
+    try:
+        system_log_handler = run_ctx.setup_system_logger()
+        root_logger = logging.getLogger()
+        root_logger.addHandler(system_log_handler)
+        logger.info(f"[run_site] System log will be saved to: {run_ctx.get_path('system.log')}")
+    except Exception as e:
+        logger.warning(f"[run_site] Failed to setup system logger: {e}", exc_info=True)
+    
     # Proxy mode設定（--proxy-mode優先、--use-proxyは後方互換性のため）
     use_proxy_value = None
     # --proxy-modeが指定されている場合（auto以外）
