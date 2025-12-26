@@ -1,16 +1,28 @@
 {
+  // ================================
+  // Windows 側設定（WSL を使用）
+  // ================================
   "terminal.integrated.defaultProfile.windows": "WSL",
   "terminal.integrated.profiles.windows": {
     "WSL": {
       "path": "wsl.exe",
       "args": []
-    },
-    "Bash": {
-      "path": "wsl.exe",
-      "args": ["-e", "bash"]
     }
   },
-  "terminal.integrated.shell.windows": "wsl.exe",
-  "terminal.integrated.shellArgs.windows": []
-}
 
+  // ================================
+  // Linux 側設定（WSL 内は bash 固定）
+  // ================================
+  "terminal.integrated.defaultProfile.linux": "bash",
+  "terminal.integrated.profiles.linux": {
+    "bash": {
+      "path": "/bin/bash"
+    }
+  },
+
+  // ================================
+  // 安全側の基本挙動
+  // ================================
+  "terminal.integrated.confirmOnExit": "never",
+  "terminal.integrated.scrollback": 10000
+}
