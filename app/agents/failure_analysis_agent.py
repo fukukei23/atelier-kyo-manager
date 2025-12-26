@@ -106,6 +106,117 @@ class FailureAnalysisAgent:
             error_text = f'{{"error": "AI analysis process failed.", "details": "{str(e)}"}}'
             return GenerateResult(text=error_text)
 
+    async def analyze_failure_context(
+        self,
+        failure_context: Dict[str, Any],
+        *,
+        run_context: Optional[RunContext] = None,
+    ) -> Dict[str, Any]:
+        """
+        CR-ATELIER-003 Phase D-5: failure_context を直接受け取って分析する
+        
+        BrowserOrchestrator から呼び出されることを想定したメソッド。
+        failure_context から必要な情報を抽出し、既存の analyze メソッドを呼び出す。
+        
+        Args:
+            failure_context: 標準化された failure_context 辞書
+            run_context: RunContext オブジェクト（オプション、failure_context に含まれている場合は不要）
+        
+        Returns:
+            分析結果の辞書。以下のフィールドを含む:
+                - summary: 人間向け要約
+                - root_causes: 想定される原因リスト
+                - suggested_fixes: 修正案のリスト
+                - confidence: 信頼度（0.0-1.0）
+        """
+        try:
+            # failure_context から必要な情報を抽出
+            site = failure_context.get("site", "unknown")
+            error_type = failure_context.get("error_type", "unknown")
+            error_class = failure_context.get("error_class", "UnknownError")
+            error_message = failure_context.get("error_message", "")
+            site_config_summary = failure_context.get("site_config_summary", {})
+            site_config = {
+                "site_code": site_config_summary.get("site_code", site),
+                "selectors": {
+                    "plp": {} if not site_config_summary.get("has_plp_selectors") else {},
+                    "pdp": {} if not site_config_summary.get("has_pdp_selectors") else {},
+                },
+            }
+            
+            # run_context が提供されていない場合、failure_context から取得を試みる
+            if run_context is None:
+                run_id = failure_context.get("run_id", "unknown")
+                # RunContext の最小限の実装を作成（analyze メソッドが要求するため）
+                class MinimalRunContext:
+                    def __init__(self, run_id: str):
+                        self.run_id = run_id
+                    def get_path(self, name: str) -> Path:
+                        return Path(f"/tmp/{run_id}/{name}")
+                    def save_json(self, name: str, data: Any) -> None:
+                        pass
+                    @property
+                    def screenshots_path(self) -> Path:
+                        return Path(f"/tmp/{run_id}/screenshots")
+                
+                run_context = MinimalRunContext(run_id)
+            
+            # エラーオブジェクトを再構築（既存の analyze メソッドが要求するため）
+            class ReconstructedError(Exception):
+                def __init__(self, error_class: str, error_message: str):
+                    super().__init__(error_message)
+                    self.__class__.__name__ = error_class
+            
+            error = ReconstructedError(error_class, error_message)
+            
+            # HTML コンテンツを取得（可能であれば）
+            html_content = None
+            dom_snapshot_path = failure_context.get("dom_snapshot_path")
+            if dom_snapshot_path and Path(dom_snapshot_path).exists():
+                try:
+                    with open(dom_snapshot_path, "r", encoding="utf-8") as f:
+                        html_content = f.read()
+                except Exception:
+                    pass
+            
+            # 既存の analyze メソッドを呼び出す
+            analysis_result = self.analyze(
+                error=error,
+                site=site,
+                site_config=site_config,
+                html_content=html_content,
+                run_context=run_context,
+            )
+            
+            # GenerateResult を Dict に変換
+            try:
+                parsed_analysis = json.loads(analysis_result.text)
+                return {
+                    "summary": parsed_analysis.get("diagnosis", "分析を実行しました"),
+                    "root_causes": [parsed_analysis.get("root_cause", "原因を特定できませんでした")],
+                    "suggested_fixes": [parsed_analysis.get("recommended_action", "設定を確認してください")],
+                    "confidence": 0.7,  # デフォルト信頼度（将来は LLM の出力から推定）
+                    "raw_analysis": parsed_analysis,
+                }
+            except json.JSONDecodeError:
+                # JSON パースに失敗した場合、テキストをそのまま返す
+                return {
+                    "summary": analysis_result.text[:200],  # 最初の200文字
+                    "root_causes": [],
+                    "suggested_fixes": [],
+                    "confidence": 0.3,
+                    "raw_analysis": {"text": analysis_result.text},
+                }
+        except Exception as e:
+            logger.error(f"FailureAnalysisAgent.analyze_failure_context failed: {e}", exc_info=True)
+            return {
+                "summary": f"分析処理中にエラーが発生しました: {str(e)}",
+                "root_causes": [],
+                "suggested_fixes": [],
+                "confidence": 0.0,
+                "error": str(e),
+            }
+
     def _build_prompt(
         self, *, error: Exception, site: str, html_snippet: str, run_context: RunContext, site_config: Dict[str, Any]
     ) -> str:
