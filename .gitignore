@@ -171,3 +171,6 @@ app/config/secrets.py
 
 # Test result log files (temporary)
 docs/reports/TEST_RESULTS_*.txt
+
+# generated exports (manual runs)
+data/exports/*.json
