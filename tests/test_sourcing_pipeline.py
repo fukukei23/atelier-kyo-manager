@@ -73,8 +73,7 @@ def test_tier_b_complete():
 
 def test_tier_c_partial():
     """Tier C: partial で C（unknown含む）"""
-    # unknown を含む入力（利益率が低い場合）
-    # 仕入れ: 18000, 販売: 20000 → 利益率が低いため Tier C
+    # unknown を含む入力
     input_data = {
         "purchase_price": 18000,
         "selling_price": 20000,
@@ -91,8 +90,22 @@ def test_tier_c_partial():
     profitability = calculate_profitability(validation["normalized"])
     assert profitability["status"] == "partial"
     
+    # partial の場合、profit と profit_rate は null
+    assert profitability["profit"] is None
+    assert profitability["profit_rate"] is None
+    
+    # revenue と known_cost_sum は確定
+    assert profitability["revenue"] is not None
+    assert profitability["known_cost_sum"] is not None
+    
+    # missing_fields と profit_upper_bound が存在
+    assert "missing_fields" in profitability
+    assert profitability["missing_fields"] == ["shipping_cost"]
+    assert "profit_upper_bound" in profitability
+    assert profitability["profit_upper_bound"] is not None
+    
     tier = judge_tier(profitability)
-    # partial で利益率が低い場合は C
+    # partial は原則 Tier C（A/B禁止）
     assert tier["tier"] == "C"
 
 
@@ -166,6 +179,13 @@ def test_pipeline_integration():
         tier_result = json.loads(tier_file.read_text(encoding="utf-8"))
         
         assert profitability_result["status"] == "complete"
+        # complete の場合、profit と profit_rate が確定
+        assert profitability_result["profit"] is not None
+        assert profitability_result["profit_rate"] is not None
+        # complete の場合、known_cost_sum と missing_fields は None
+        assert profitability_result["known_cost_sum"] is None
+        assert profitability_result["missing_fields"] is None
+        
         assert "tier" in tier_result
         assert tier_result["tier"] in ["A", "B", "C", "D"]
 
