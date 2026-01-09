@@ -172,5 +172,10 @@ app/config/secrets.py
 # Test result log files (temporary)
 docs/reports/TEST_RESULTS_*.txt
 
-# generated exports (manual runs)
+# Generated outputs (do not commit)
+data/exports/
 data/exports/*.json
+data/exports/*.jsonl
+
+# Local input files (do not commit)
+data/imports/
