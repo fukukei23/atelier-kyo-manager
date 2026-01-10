@@ -8,11 +8,11 @@ Domain: BUYMA 無在庫転売支援ツール
 
 バージョン情報
 
-Version: 1.0.2
+Version: 1.0.3
 
-LastUpdated: 2026-01-06
+LastUpdated: 2026-01-10
 
-Commit:8f0213be7ecc47c9bab8a369f69e12db667bd540
+Commit:d27937ec0902fa88508f61ab4c313f8f8d5066c
 
 1. 本書の位置づけ（重要）
 
@@ -89,6 +89,40 @@ app/utils/
 Flask / Web に依存しない設計とする
 
 必要に応じて Model や Agent を呼び出す
+
+CSV導線 / Sourcing Evaluation
+
+app/utils/sourcing_csv_adapter.py（adapter）
+
+CSVセルの正規化を担当する
+
+数値パース（カンマ区切り対応）を行う
+
+空欄 / N/A / "-" 等を "unknown" に正規化する
+
+partial / complete の判定は行わない
+
+downstream のロジックを一切知らない
+
+app/utils/sourcing_input_schema.py（schema）
+
+必須項目チェックを行う
+
+型・範囲チェックを行う
+
+unknown を含む場合の partial / complete 判定を行う
+
+business rule の入口とする
+
+app/utils/sourcing_csv_batch_runner.py（batch runner）
+
+I/O（CSV入力・JSONL出力）を担当する
+
+Fail-Fast / Fail-Soft を制御する
+
+invalid 行を downstream に 絶対に流さない
+
+streaming 前提で 1 行ずつ処理する
 
 Agent 層
 
