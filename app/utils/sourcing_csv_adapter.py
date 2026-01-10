@@ -63,6 +63,91 @@ def _parse_numeric_value(value: str | None) -> Tuple[float | None, bool]:
         return None, False
 
 
+def parse_csv_row_dict(row: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    CSV行データ（DictReaderの結果）をSourcingInput v0（フラット）に変換する。
+    
+    公開API。batch runner等から呼び出される。
+    
+    Args:
+        row: CSV行データ（DictReaderの結果）
+        
+    Returns:
+        {
+            "status": "valid" | "invalid",
+            "data": Dict[str, Any] | None,  # SourcingInput v0形式
+            "errors": List[str]
+        }
+    """
+    errors: list[str] = []
+    
+    # 必須列チェック
+    required_columns = ["purchase_price", "selling_price"]
+    for col in required_columns:
+        if col not in row:
+            errors.append(f"必須列 '{col}' が見つかりません")
+    
+    if errors:
+        return {
+            "status": "invalid",
+            "data": None,
+            "errors": errors,
+        }
+    
+    # 各フィールドをパース
+    sourcing_input: Dict[str, Any] = {}
+    
+    # purchase_price（必須）
+    purchase_price_str = _normalize_unknown_value(row.get("purchase_price"))
+    if purchase_price_str == "unknown":
+        sourcing_input["purchase_price"] = "unknown"
+    else:
+        purchase_price, success = _parse_numeric_value(purchase_price_str)
+        if not success:
+            errors.append(f"purchase_price が数値として解釈できません: {row.get('purchase_price')}")
+            return {
+                "status": "invalid",
+                "data": None,
+                "errors": errors,
+            }
+        sourcing_input["purchase_price"] = purchase_price
+    
+    # selling_price（必須）
+    selling_price_str = _normalize_unknown_value(row.get("selling_price"))
+    if selling_price_str == "unknown":
+        sourcing_input["selling_price"] = "unknown"
+    else:
+        selling_price, success = _parse_numeric_value(selling_price_str)
+        if not success:
+            errors.append(f"selling_price が数値として解釈できません: {row.get('selling_price')}")
+            return {
+                "status": "invalid",
+                "data": None,
+                "errors": errors,
+            }
+        sourcing_input["selling_price"] = selling_price
+    
+    # オプション項目
+    optional_fields = ["shipping_cost", "customs_duty", "procurement_fee", "transaction_fee"]
+    for field in optional_fields:
+        value_str = _normalize_unknown_value(row.get(field))
+        if value_str == "unknown":
+            sourcing_input[field] = "unknown"
+        else:
+            value, success = _parse_numeric_value(value_str)
+            if success:
+                sourcing_input[field] = value
+            else:
+                # オプション項目は unknown として扱う
+                sourcing_input[field] = "unknown"
+    
+    return {
+        "status": "valid",
+        "data": sourcing_input,
+        "errors": [],
+    }
+
+
 def parse_csv_row_to_sourcing_input(
     csv_path: str | Path,
     row_index: int = 0,

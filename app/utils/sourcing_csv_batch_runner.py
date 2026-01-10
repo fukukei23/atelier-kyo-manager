@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict
 
-from app.utils.sourcing_csv_adapter import parse_csv_row_to_sourcing_input
+from app.utils.sourcing_csv_adapter import parse_csv_row_dict
 from app.utils.sourcing_input_schema import validate_sourcing_input
 from app.utils.sourcing_profitability import calculate_profitability
 from app.utils.sourcing_tier import judge_tier
@@ -84,28 +84,36 @@ def process_csv_batch(
     # 出力ディレクトリを作成
     output_path.parent.mkdir(parents=True, exist_ok=True)
     
-    # CSVを読み込んで各行を処理
+    # CSVを読み込んで各行を処理（streaming前提：全行読み込みしない）
     try:
         with csv_path.open("r", encoding="utf-8-sig", newline="") as f:
             reader = csv.DictReader(f)
-            rows = list(reader)
-            
-            # 処理範囲を決定
-            end_row = len(rows)
-            if max_rows is not None:
-                end_row = min(start_row + max_rows, len(rows))
             
             processed_count = 0
+            row_index = 0
+            target_rows_processed = 0
             
             with output_path.open("w", encoding="utf-8") as out_f:
-                for row_index in range(start_row, end_row):
+                # iteratorで1行ずつ処理（メモリに全件保持しない）
+                for row in reader:
+                    # start_row未満の行はスキップ
+                    if row_index < start_row:
+                        row_index += 1
+                        continue
+                    
+                    # max_rowsが指定されている場合、上限に達したら終了
+                    if max_rows is not None and target_rows_processed >= max_rows:
+                        break
+                    
                     # 各行を処理（Fail-Soft: エラーでも継続）
-                    result = _process_single_row(row_index, rows[row_index])
+                    result = _process_single_row(row_index, row)
                     
                     # JSON Lines形式で出力
                     json_line = json.dumps(result, ensure_ascii=False)
                     out_f.write(json_line + "\n")
                     
+                    row_index += 1
+                    target_rows_processed += 1
                     processed_count += 1
             
             print(f"処理完了: {processed_count} 行を評価しました", file=sys.stderr)
@@ -121,6 +129,8 @@ def _process_single_row(row_index: int, row: Dict[str, Any]) -> Dict[str, Any]:
     """
     単一行を処理し、結果を返す。
     
+    重要：invalid行は絶対にdownstream（profitability/tier）に流さない。
+    
     Args:
         row_index: 行インデックス（0始まり）
         row: CSV行データ（DictReaderの結果）
@@ -133,100 +143,61 @@ def _process_single_row(row_index: int, row: Dict[str, Any]) -> Dict[str, Any]:
             "tier_judgement": dict
         }
     """
-    # CSV行をSourcingInput v0に変換
-    # 注意: parse_csv_row_to_sourcing_input はファイルパスと行インデックスを要求するが、
-    # ここでは既に読み込んだ行データを使う必要がある
-    # そのため、一時的に行データを辞書として扱う
+    # CSV行をSourcingInput v0に変換（公開APIを使用）
+    adapter_result = parse_csv_row_dict(row)
     
-    # 行データから直接SourcingInput v0を構築
-    sourcing_input: Dict[str, Any] = {}
-    errors: list[str] = []
-    
-    # 必須列チェック
-    required_columns = ["purchase_price", "selling_price"]
-    for col in required_columns:
-        if col not in row:
-            errors.append(f"必須列 '{col}' が見つかりません")
-    
-    if errors:
+    # invalid行はdownstreamに流さず、ここで処理を終了
+    if adapter_result["status"] == "invalid":
         return {
             "row_index": row_index,
             "input": None,
             "profitability": {
                 "status": "invalid",
-                "errors": errors,
+                "errors": adapter_result["errors"],
             },
             "tier_judgement": {
                 "tier": "D",
-                "reason": f"CSV行の解析エラー: {', '.join(errors)}",
+                "reason": f"invalid input: {', '.join(adapter_result['errors'])}",
             },
         }
     
-    # 各フィールドをパース（sourcing_csv_adapterのロジックを再利用）
-    from app.utils.sourcing_csv_adapter import _normalize_unknown_value, _parse_numeric_value
-    
-    # purchase_price（必須）
-    purchase_price_str = _normalize_unknown_value(row.get("purchase_price"))
-    if purchase_price_str == "unknown":
-        sourcing_input["purchase_price"] = "unknown"
-    else:
-        purchase_price, success = _parse_numeric_value(purchase_price_str)
-        if not success:
-            return {
-                "row_index": row_index,
-                "input": None,
-                "profitability": {
-                    "status": "invalid",
-                    "errors": [f"purchase_price が数値として解釈できません: {row.get('purchase_price')}"],
-                },
-                "tier_judgement": {
-                    "tier": "D",
-                    "reason": "purchase_price が数値として解釈できません",
-                },
-            }
-        sourcing_input["purchase_price"] = purchase_price
-    
-    # selling_price（必須）
-    selling_price_str = _normalize_unknown_value(row.get("selling_price"))
-    if selling_price_str == "unknown":
-        sourcing_input["selling_price"] = "unknown"
-    else:
-        selling_price, success = _parse_numeric_value(selling_price_str)
-        if not success:
-            return {
-                "row_index": row_index,
-                "input": None,
-                "profitability": {
-                    "status": "invalid",
-                    "errors": [f"selling_price が数値として解釈できません: {row.get('selling_price')}"],
-                },
-                "tier_judgement": {
-                    "tier": "D",
-                    "reason": "selling_price が数値として解釈できません",
-                },
-            }
-        sourcing_input["selling_price"] = selling_price
-    
-    # オプション項目
-    optional_fields = ["shipping_cost", "customs_duty", "procurement_fee", "transaction_fee"]
-    for field in optional_fields:
-        value_str = _normalize_unknown_value(row.get(field))
-        if value_str == "unknown":
-            sourcing_input[field] = "unknown"
-        else:
-            value, success = _parse_numeric_value(value_str)
-            if success:
-                sourcing_input[field] = value
-            else:
-                sourcing_input[field] = "unknown"
+    # valid行のみ処理を続行
+    sourcing_input = adapter_result["data"]
+    if sourcing_input is None:
+        # 念のため、dataがNoneの場合もinvalidとして扱う
+        return {
+            "row_index": row_index,
+            "input": None,
+            "profitability": {
+                "status": "invalid",
+                "errors": ["sourcing_input data is None"],
+            },
+            "tier_judgement": {
+                "tier": "D",
+                "reason": "invalid input: sourcing_input data is None",
+            },
+        }
     
     # 入力検証
     validation_result = validate_sourcing_input(sourcing_input)
     
-    # 利益計算
-    profitability_result = calculate_profitability(validation_result.get("normalized"))
+    # 検証がinvalidの場合もdownstreamに流さない
+    if not validation_result["valid"] or validation_result["status"] == "invalid":
+        return {
+            "row_index": row_index,
+            "input": sourcing_input,
+            "profitability": {
+                "status": "invalid",
+                "errors": validation_result["errors"],
+            },
+            "tier_judgement": {
+                "tier": "D",
+                "reason": f"invalid input: {', '.join(validation_result['errors'])}",
+            },
+        }
     
-    # Tier判定
+    # 正常行のみ利益計算とTier判定を実行（invalidは絶対に流さない）
+    profitability_result = calculate_profitability(validation_result.get("normalized"))
     tier_result = judge_tier(profitability_result)
     
     return {
