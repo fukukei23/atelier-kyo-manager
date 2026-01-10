@@ -1,13 +1,13 @@
 # PROJECT_PROFILE_BUYMA.md
 ## Project Profile（Phase 0 / 必須）
 
-Version: 0.2.0  
-LastUpdated: 2026-01-06  
+Version: 0.2.1  
+LastUpdated: 2026-01-10  
 
 ArchitectureRef:
   - File: ARCHITECTURE.md
-  - Version: 1.0.2
-  - Commit:8f0213be7ecc47c9bab8a369f69e12db667bd540
+  - Version: 1.0.3
+  - Commit:d27937ec0902fa88508f61ab4c313f8f8d5066c
 
 \---
 
