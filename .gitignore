@@ -132,6 +132,10 @@ sample.html
 output.csv
 catalog_*.csv
 
+# Allow CSV fixtures for tests (override global *.csv ignore)
+!tests/fixtures/**/*.csv
+
+
 # --- Coverage & Test Reports (カバレッジ・テストレポート) ---
 coverage.json
 .coverage
