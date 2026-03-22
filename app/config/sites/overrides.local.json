@@ -658,32 +658,16 @@
   "llm": {
     "enabled": true,
     "order": {
-      "analysis": [
-        "openai:analysis",
-        "gemini:default",
-        "deepseek:default"
-      ],
-      "code": [
-        "openai:code",
-        "gemini:default",
-        "deepseek:default"
-      ],
-      "default": [
-        "openai:analysis",
-        "gemini:default",
-        "deepseek:default"
-      ]
+      "analysis": ["minimax:default", "glm:default"],
+      "code": ["minimax:default", "glm:default"],
+      "default": ["minimax:default", "glm:default"]
     },
     "models": {
-      "openai": {
-        "analysis": "gpt-5",
-        "code": "gpt-5"
+      "minimax": {
+        "default": "MiniMax-M2.7"
       },
-      "gemini": {
-        "default": "gemini-2.5-pro"
-      },
-      "deepseek": {
-        "default": "deepseek-chat"
+      "glm": {
+        "default": "glm-5"
       }
     }
   }

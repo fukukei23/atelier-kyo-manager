@@ -57,9 +57,8 @@ class Config:
     STAGE: Literal["test", "staging", "prod"] = os.getenv("AK_STAGE", "test")
     SITES: Dict[str, Any] = _load_layered_site_config(CONFIG_DIR)
     DB_URL: str = getattr(Secrets, "DB_URL", _sqlite_uri(DATA_DIR / "app.db"))
-    GEMINI_API_KEY: Optional[str] = getattr(Secrets, "GEMINI_API_KEY", None)
-    DEEPSEEK_API_KEY: Optional[str] = getattr(Secrets, "DEEPSEEK_API_KEY", None)
-    OPENAI_API_KEY: Optional[str] = getattr(Secrets, "OPENAI_API_KEY", None)
+    MINIMAX_API_KEY: Optional[str] = getattr(Secrets, "MINIMAX_API_KEY", None)
+    GLM_API_KEY: Optional[str] = getattr(Secrets, "GLM_API_KEY", None)
 
 def setup_logging() -> None:
     logging.basicConfig(level=Config.LOG_LEVEL.value, format=Config.LOG_FORMAT, stream=sys.stdout)
@@ -70,7 +69,6 @@ def log_api_keys_visibility() -> None:
     logger = logging.getLogger(__name__)
     def mask(v: Optional[str]) -> str: return f"{v[:4]}***" if v else "Not Set"
     logger.info("--- API Key Diagnostics ---")
-    logger.info(f"  GEMINI_API_KEY:   {mask(Config.GEMINI_API_KEY)}")
-    logger.info(f"  DEEPSEEK_API_KEY: {mask(Config.DEEPSEEK_API_KEY)}")
-    logger.info(f"  OPENAI_API_KEY:   {mask(Config.OPENAI_API_KEY)}")
+    logger.info(f"  MINIMAX_API_KEY: {mask(Config.MINIMAX_API_KEY)}")
+    logger.info(f"  GLM_API_KEY:     {mask(Config.GLM_API_KEY)}")
     logger.info("---------------------------")

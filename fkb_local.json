@@ -1,0 +1,231 @@
+{
+  "version": "1.0.0",
+  "description": "Failure Knowledge Base - 失敗パターンと対策的记忆",
+  "last_updated": "2026-03-21",
+  "entries": [
+    {
+      "id": "moncler_plp_001",
+      "site": "MONCLER_OFFICIAL",
+      "error_signature": "PLP did not materialize (no product tiles)",
+      "conditions": {
+        "final_url_contains": ["client-service", "contact", "en-jp"],
+        "tile_count": 0
+      },
+      "root_cause": "ロケール・ゲート問題: サイトが /en-jp/ または /client-service/contact/ へリダイレクトしている",
+      "solution_pattern": [
+        "force_locale_to_en_int",
+        "dismiss_one_trust",
+        "retry_with_hard_plp_url"
+      ],
+      "recovery_url": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB",
+      "verified_date": "2025-11-15"
+    },
+    {
+      "id": "moncler_plp_002",
+      "site": "MONCLER_OFFICIAL",
+      "error_signature": "Selector timeout - no elements found",
+      "conditions": {
+        "selectors_tested": ["article[data-testid='product-card']"],
+        "tile_count": 0
+      },
+      "root_cause": "PLP セレクタ不一致: サイトが DOM 構造を変更した可能性",
+      "solution_pattern": [
+        "try_alternate_selectors",
+        "use_fallback_tile_patterns"
+      ],
+      "alternate_selectors": [
+        "div[data-testid='product-tile']",
+        "div[class*='product-card']",
+        "a[data-test='product-card-link']"
+      ],
+      "verified_date": "2025-11-15"
+    },
+    {
+      "id": "moncler_plp_003",
+      "site": "MONCLER_OFFICIAL",
+      "error_signature": "Cookie consent overlay blocking content",
+      "conditions": {
+        "dom_contains": ["onetrust", "cookie"],
+        "tile_count": 0
+      },
+      "root_cause": "OneTrust GDPR バナーがコンテンツを読み込めない",
+      "solution_pattern": [
+        "click_onetrust_accept",
+        "wait_for_content"
+      ],
+      "selectors": {
+        "accept_button": "#onetrust-accept-btn-handler",
+        "accept_alt": "button:has-text('Accept All')"
+      },
+      "verified_date": "2025-11-15"
+    },
+    {
+      "id": "moncler_plp_004",
+      "site": "MONCLER_OFFICIAL",
+      "error_signature": "Locale redirect loop",
+      "conditions": {
+        "url_pattern": "/en-[a-z]{2}/en-[a-z]{2}/"
+      },
+      "root_cause": "二重ロケールURL（例: /en-de/en-int/）が発生している",
+      "solution_pattern": [
+        "normalize_double_locale",
+        "strip_extra_locale_prefix"
+      ],
+      "regex_pattern": "s#/en-[a-z]{2}/en-[a-z]{2}/#/en-int/#g",
+      "verified_date": "2025-11-15"
+    },
+    {
+      "id": "moncler_plp_005",
+      "site": "MONCLER_OFFICIAL",
+      "error_signature": "Homepage detected instead of PLP",
+      "conditions": {
+        "url_pattern": "^https?://www\\.moncler\\.com/en-[a-z]{2}/?$"
+      },
+      "root_cause": "PLP ナビ後にホームページへリダイレクトされている",
+      "solution_pattern": [
+        "navigate_to_hard_plp_url",
+        "handle_locale_modal"
+      ],
+      "recovery_url": "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB",
+      "verified_date": "2025-11-15"
+    },
+    {
+      "id": "generic_timeout_001",
+      "site": "GENERIC",
+      "error_signature": "TimeoutError - navigation or action timed out",
+      "conditions": {
+        "error_type": "TimeoutError",
+        "timeout_ms": 30000
+      },
+      "root_cause": "ネットワーク遅延またはサーバー応答不良",
+      "solution_pattern": [
+        "retry_with_extended_timeout",
+        "check_network_connection",
+        "fallback_to_cache"
+      ],
+      "auto_apply_rules": {
+        "max_retries": 2,
+        "retry_delay_ms": 2000,
+        "increase_timeout_by": 1.5
+      },
+      "verified_date": "2026-03-21"
+    },
+    {
+      "id": "generic_selector_001",
+      "site": "GENERIC",
+      "error_signature": "Element not found - multiple selectors failed",
+      "conditions": {
+        "error_type": "NoSuchElementException",
+        "selector_attempts": 3
+      },
+      "root_cause": "DOM変更または非同期読み込み失敗",
+      "solution_pattern": [
+        "wait_for_element_state",
+        "try_parent_or_child_selectors",
+        "screenshot_and_log"
+      ],
+      "alternate_selectors": [
+        "[data-testid]",
+        "[data-test]",
+        "[class*='product']",
+        "a[href*='/product/']"
+      ],
+      "verified_date": "2026-03-21"
+    },
+    {
+      "id": "generic_network_001",
+      "site": "GENERIC",
+      "error_signature": "net::ERR_INTERNET_DISCONNECTED",
+      "conditions": {
+        "error_message_contains": "ERR_INTERNET_DISCONNECTED"
+      },
+      "root_cause": "インターネット接続断",
+      "solution_pattern": [
+        "check_connectivity",
+        "retry_after_delay",
+        "use_cached_data"
+      ],
+      "auto_apply_rules": {
+        "max_retries": 5,
+        "retry_delay_ms": 5000,
+        "exponential_backoff": true
+      },
+      "verified_date": "2026-03-21"
+    },
+    {
+      "id": "generic_stealth_001",
+      "site": "GENERIC",
+      "error_signature": "Automation-controlled browser detected",
+      "conditions": {
+        "error_message_contains": ["webdriver", "navigator.webdriver", "puppeteer"]
+      },
+      "root_cause": " сайтがボット検出を使用",
+      "solution_pattern": [
+        "enable_stealth_mode",
+        "randomize_user_agent",
+        "add_browser_extensions"
+      ],
+      "verified_date": "2026-03-21"
+    },
+    {
+      "id": "ssense_plp_001",
+      "site": "SSENSE",
+      "error_signature": "PLP did not materialize - empty product grid",
+      "conditions": {
+        "tile_count": 0,
+        "page_contains": ["product-item"]
+      },
+      "root_cause": "ロケールまたはフィルタリングの問題で商品リストが空",
+      "solution_pattern": [
+        "force_locale_en_us",
+        "clear_filters",
+        "retry_with_scroll"
+      ],
+      "alternate_selectors": [
+        "div.product-item",
+        "article.product-item",
+        "a[href*='/product/']"
+      ],
+      "verified_date": "2026-03-22"
+    },
+    {
+      "id": "gucci_plp_001",
+      "site": "GUCCI",
+      "error_signature": "Cookie consent overlay blocking content",
+      "conditions": {
+        "dom_contains": ["onetrust", "cookie-consent"],
+        "tile_count": 0
+      },
+      "root_cause": "OneTrust GDPRバナーがコンテンツを読み込めない",
+      "solution_pattern": [
+        "click_onetrust_accept",
+        "wait_for_content"
+      ],
+      "selectors": {
+        "accept_button": "#onetrust-accept-btn-handler",
+        "accept_alt": "button:has-text('Accept All')"
+      },
+      "verified_date": "2026-03-22"
+    },
+    {
+      "id": "prada_plp_001",
+      "site": "PRADA",
+      "error_signature": "Price range filter causing empty results",
+      "conditions": {
+        "tile_count": 0,
+        "url_contains": ["price"]
+      },
+      "root_cause": "価格フィルタが設定されていて結果がない",
+      "solution_pattern": [
+        "remove_price_filter",
+        "navigate_to_base_plp"
+      ],
+      "verified_date": "2026-03-22"
+    }
+  ],
+  "auto_apply_rules": {
+    "on_error_signature_match": true,
+    "max_retries": 3,
+    "retry_delay_ms": 1000
+  }
+}

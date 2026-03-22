@@ -12,7 +12,7 @@ load_dotenv()
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from app import create_app
-from app.utils.ai_research_orchestrator import ResearchOrchestrator
+from app.utils.ai_research_orchestrator import AiResearchOrchestrator
 
 def run_full_test():
     """シングルセッションで全ワークフローをテストする"""
@@ -24,7 +24,7 @@ def run_full_test():
             # --- ★重要★ ---
             # 常に headless=False で実行し、人間による介入を可能にする
             print("1. ResearchOrchestratorを初期化します... (ブラウザ表示モード)")
-            orchestrator = ResearchOrchestrator(headless=True)
+            orchestrator = AiResearchOrchestrator(headless=True)
             print("   -> 初期化完了。")
 
             brand_to_test = "PRADA"

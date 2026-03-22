@@ -9,14 +9,29 @@ End-to-End Integration Test for Atelier Kyo Manager
 使い方:
     python tests/test_e2e_integration.py
     python tests/test_e2e_integration.py --headful  # ブラウザ表示
+
+Note: This test is designed for Windows environment with subprocess.
+      It WSL environmentではスキップされます。
 """
 
 import argparse
 import subprocess
 import sys
 import json
+import platform
 from pathlib import Path
 from datetime import datetime
+
+import pytest
+
+
+def is_wsl():
+    """Check if running in WSL environment"""
+    return "microsoft" in platform.uname().release.lower() or "wsl" in platform.uname().release.lower()
+
+
+# WSL環境ではE2Eテストをスキップ
+pytestmark = pytest.mark.skipif(is_wsl(), reason="E2E tests require Windows environment with subprocess")
 
 
 class Colors:
@@ -73,12 +88,16 @@ def run_command(cmd: list, timeout: int = 300) -> tuple[int, str, str]:
         return -1, "", str(e)
 
 
-def test_basic_execution(headful: bool = False) -> bool:
+def test_basic_execution(headful: bool = False):
     """Test 1: 基本的な実行"""
     print_test("基本的な実行（最小構成）")
 
+    # Use platform-appropriate Python path
+    import sys
+    python_exec = sys.executable
+
     cmd = [
-        ".venv\\Scripts\\python.exe",
+        python_exec,
         "run_orchestrator.py",
         "--site", "MONCLER_OFFICIAL",
         "--query", "down jacket",
@@ -106,19 +125,19 @@ def test_basic_execution(headful: bool = False) -> bool:
                 if run_json.exists():
                     data = json.loads(run_json.read_text(encoding='utf-8'))
                     print_success(f"run.json 生成: status={data.get('status')}")
-                    return data.get('status') == 'success'
+                    assert data.get('status') == 'success', f"Expected status='success', got {data.get('status')}"
                 else:
                     print_warning("run.json が見つかりません")
 
-        return True
+        assert True  # 基本実行成功
     else:
         print_error(f"実行失敗（Exit code {exit_code}）")
         if stderr:
             print_error(f"エラー: {stderr[:500]}")
-        return False
+        assert False, f"実行失敗（Exit code {exit_code}）"
 
 
-def test_proxy_execution(headful: bool = False) -> bool:
+def test_proxy_execution(headful: bool = False):
     """Test 2: プロキシ機能"""
     print_test("プロキシ機能のテスト")
 
@@ -126,12 +145,13 @@ def test_proxy_execution(headful: bool = False) -> bool:
     proxy_pool = Path("app/config/proxy_pool.json")
     if not proxy_pool.exists():
         print_error("proxy_pool.json が見つかりません")
-        return False
+        assert False, "proxy_pool.json が見つかりません"
 
     print_success("proxy_pool.json 確認")
 
+    python_exec = sys.executable
     cmd = [
-        ".venv\\Scripts\\python.exe",
+        python_exec,
         "run_orchestrator.py",
         "--site", "MONCLER_OFFICIAL",
         "--query", "down jacket",
@@ -152,20 +172,21 @@ def test_proxy_execution(headful: bool = False) -> bool:
 
     if exit_code == 0:
         print_success("プロキシ経由での実行成功")
-        return True
+        assert True
     else:
         print_error(f"実行失敗（Exit code {exit_code}）")
         # プロキシ失敗は想定内（WAFブロック等）
         print_warning("プロキシがWAFにブロックされた可能性があります（仕様内）")
-        return True  # プロキシ機能自体は動作しているのでOK
+        assert True  # プロキシ機能自体は動作しているのでOK
 
 
-def test_auto_heal(headful: bool = False) -> bool:
+def test_auto_heal(headful: bool = False):
     """Test 3: Auto-Heal機能"""
     print_test("Auto-Heal機能のテスト")
 
+    python_exec = sys.executable
     cmd = [
-        ".venv\\Scripts\\python.exe",
+        python_exec,
         "run_orchestrator.py",
         "--site", "MONCLER_OFFICIAL",
         "--query", "down jacket",
@@ -196,21 +217,22 @@ def test_auto_heal(headful: bool = False) -> bool:
                 if data.get("retry"):
                     print_success("リトライが実行されました")
 
-                return True
+                assert True
             else:
                 print_warning("auto_heal_log.json が見つかりません（失敗しなかった可能性）")
                 # 成功した場合はAuto-Healが発動しないので、これもOK
-                return exit_code == 0
+                assert exit_code == 0
 
-    return exit_code == 0
+    assert exit_code == 0
 
 
-def test_video_recording(headful: bool = False) -> bool:
+def test_video_recording(headful: bool = False):
     """Test 4: 動画録画機能"""
     print_test("動画録画機能のテスト")
 
+    python_exec = sys.executable
     cmd = [
-        ".venv\\Scripts\\python.exe",
+        python_exec,
         "run_orchestrator.py",
         "--site", "MONCLER_OFFICIAL",
         "--query", "down jacket",
@@ -236,12 +258,12 @@ def test_video_recording(headful: bool = False) -> bool:
                 for video in videos:
                     size_mb = video.stat().st_size / (1024 * 1024)
                     print_success(f"  - {video.name} ({size_mb:.2f} MB)")
-                return True
+                assert True
             else:
                 print_error("動画ファイルが見つかりません")
-                return False
+                assert False, "動画ファイルが見つかりません"
 
-    return False
+    assert False, "runs ディレクトリが見つかりません"
 
 
 def main():

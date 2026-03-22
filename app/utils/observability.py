@@ -120,3 +120,32 @@ async def write_fail_snapshot(run_context: "RunContext", page: Optional["Page"],
 - `trace.zip`
 """
     await _maybe_await(run_context.save_content("fail_snapshot.md", md_report))
+
+
+async def log_operation_metric(
+    run_context: "RunContext",
+    operation: str,
+    duration_ms: float,
+    success: bool,
+    details: Optional[Dict[str, Any]] = None
+):
+    """
+    操作メトリクスをJSONログファイルに記録する。
+
+    使用例:
+        start = time.time()
+        # 何らかの操作
+        await log_operation_metric(ctx, "page_navigate", (time.time() - start) * 1000, True)
+    """
+    metric = {
+        "operation": operation,
+        "duration_ms": round(duration_ms, 2),
+        "success": success,
+        "timestamp": time.strftime('%Y-%m-%d %H:%M:%S Z', time.gmtime()),
+        "run_id": getattr(run_context, 'run_id', 'unknown'),
+    }
+    if details:
+        metric["details"] = details
+
+    _log(run_context).info(f"[METRIC] {operation}: {duration_ms:.0f}ms {'OK' if success else 'FAIL'}")
+    await save_json(run_context, metric, f"metric_{operation}_{int(time.time())}")

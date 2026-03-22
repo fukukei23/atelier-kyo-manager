@@ -18,23 +18,29 @@ class Test11():
   def teardown_method(self, method):
     self.driver.quit()
 
+  def _wait_for_element(self, by, value, timeout=10):
+    """Helper method to wait for element to be present"""
+    return WebDriverWait(self.driver, timeout).until(
+        expected_conditions.presence_of_element_located((by, value))
+    )
+
   def test_11(self):
     self.driver.get("https://www.buyma.com/")
     self.driver.set_window_size(1215, 775)
-    self.driver.find_element(By.ID, "js-pc-header-login-link").click()
+    self._wait_for_element(By.ID, "js-pc-header-login-link").click()
     self.driver.execute_script("window.scrollTo(0,182)")
     self.driver.execute_script("window.scrollTo(0,280.6666564941406)")
-    self.driver.find_element(By.ID, "txtLoginId").click()
-    self.driver.find_element(By.ID, "txtLoginId").click()
-    self.driver.find_element(By.ID, "txtLoginId").send_keys("y.n.441622@gmail.com")
+    self._wait_for_element(By.ID, "txtLoginId").click()
+    self._wait_for_element(By.ID, "txtLoginId").click()
+    self._wait_for_element(By.ID, "txtLoginId").send_keys("y.n.441622@gmail.com")
     self.driver.find_element(By.ID, "Sale_Bg").click()
-    self.driver.find_element(By.ID, "txtLoginPass").click()
-    self.driver.find_element(By.ID, "txtLoginPass").send_keys("kenshin4416")
-    self.driver.find_element(By.ID, "login_do").click()
-    self.driver.find_element(By.CSS_SELECTOR, ".my-page-profile__btn .fab-icon-dashboard-exhibit").click()
-    element = self.driver.find_element(By.CSS_SELECTOR, ".my-page-profile__btn .fab-icon-dashboard-exhibit")
+    self._wait_for_element(By.ID, "txtLoginPass").click()
+    self._wait_for_element(By.ID, "txtLoginPass").send_keys("kenshin4416")
+    self._wait_for_element(By.ID, "login_do").click()
+    self._wait_for_element(By.CSS_SELECTOR, ".my-page-profile__btn .fab-icon-dashboard-exhibit").click()
+    element = self._wait_for_element(By.CSS_SELECTOR, ".my-page-profile__btn .fab-icon-dashboard-exhibit")
     actions = ActionChains(self.driver)
     actions.move_to_element(element).perform()
-    self.driver.find_element(By.LINK_TEXT, "カタログから出品する").click()
-    self.driver.find_element(By.CSS_SELECTOR, ".catalogs-table__row:nth-child(5) .catalogs-table__image-item:nth-child(1) > .catalogs-table__image").click()
-    self.driver.find_element(By.LINK_TEXT, "利用特約に同意し、画像を保存する").click()
+    self._wait_for_element(By.LINK_TEXT, "カタログから出品する").click()
+    self._wait_for_element(By.CSS_SELECTOR, ".catalogs-table__row:nth-child(5) .catalogs-table__image-item:nth-child(1) > .catalogs-table__image").click()
+    self._wait_for_element(By.LINK_TEXT, "利用特約に同意し、画像を保存する").click()

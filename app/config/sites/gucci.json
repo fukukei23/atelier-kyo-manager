@@ -1,0 +1,45 @@
+{
+    "name": "GUCCI",
+    "home_url": "https://www.gucci.com/",
+    "domains": ["gucci.com"],
+    "search_template": "https://www.gucci.com/us/en/women/handbags?query={q}",
+    "wait_until": "networkidle",
+    "timeout_sec": 45,
+    "selectors": {
+        "results_item": "div.product-item",
+        "first_product_link": "a[href*='/product/']",
+        "pdp": {
+            "title": ["h1.product-title", "h1[data-testid='product-name']"],
+            "price": ["span.price", "span[data-testid='product-price']"]
+        },
+        "plp_tile_container": "div.product-item",
+        "plp_tile_link": "a[href*='/product/']",
+        "cookie_consent": "#onetrust-accept-btn-handler"
+    },
+    "discovery_settings": {
+        "use_low_footprint_mode": false,
+        "use_persistent_context": true,
+        "navigation_tactics": [
+            "direct_brand_url",
+            "bypass_cookie_wall"
+        ],
+        "fingerprint": {
+            "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "viewport": {"width": 1440, "height": 900},
+            "locale": "en-US",
+            "timezone": "America/New_York"
+        },
+        "manual_captcha": false,
+        "max_attempts_per_site": 2,
+        "max_url_candidates": 5,
+        "timeout_sec": 30,
+        "locale_trap_detection": true,
+        "force_locale": "en-US",
+        "fallback_url": "https://www.gucci.com/us/en/women/handbags",
+        "bypass_cookie_consent": true,
+        "bypass_methods": [
+            "click_onetrust",
+            "scroll_and_wait"
+        ]
+    }
+}

@@ -93,7 +93,7 @@ class InteractiveRepairSession:
         snapshot_dir: Optional[str] = None,
     ) -> None:
         """
-        ai_controller: AiLlmController インスタンス (GPT-5, Gemini, DeepSeekの優先順を持ってるやつ)
+        ai_controller: AiLlmController インスタンス (GLMのみ)
         run_context : 実行ログやスクリーンショット保存用のコンテキスト(無くてもOK)
         max_steps   : LLMに指示を何ターンまで実行するか (無限ループ防止)
         snapshot_dir: DOMやスクショを一時保存するディレクトリ。指定なければ ./instance/repair_session/

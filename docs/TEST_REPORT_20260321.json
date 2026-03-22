@@ -1,0 +1,113 @@
+{
+  "report_date": "2026-03-21T00:45:00JST",
+  "project": "atelier-kyo-manager",
+  "environment": {
+    "os": "WSL Ubuntu 24.04",
+    "python": "3.12.3",
+    "pytest": "9.0.1"
+  },
+  "summary": {
+    "total": 10,
+    "passed": 5,
+    "failed": 4,
+    "skipped": 1,
+    "pass_rate": "50%",
+    "execution_time_seconds": 149.95
+  },
+  "test_results": {
+    "passed": [
+      {
+        "name": "test_basic_execution",
+        "file": "test_e2e_integration.py",
+        "status": "PASSED"
+      },
+      {
+        "name": "test_proxy_execution",
+        "file": "test_e2e_integration.py",
+        "status": "PASSED"
+      },
+      {
+        "name": "test_auto_heal",
+        "file": "test_e2e_integration.py",
+        "status": "PASSED"
+      },
+      {
+        "name": "test_video_recording",
+        "file": "test_e2e_integration.py",
+        "status": "PASSED"
+      },
+      {
+        "name": "test_session_manager_open_and_close",
+        "file": "test_session_manager.py",
+        "status": "PASSED"
+      }
+    ],
+    "failed": [
+      {
+        "name": "test_11",
+        "file": "test_11.py",
+        "error": "selenium.common.exceptions.NoSuchElementException: Unable to locate element: [id=\"txtLoginPass\"]",
+        "reason": "WebDriverで要素が見つからない"
+      },
+      {
+        "name": "test_app_factory_creates_flask_app",
+        "file": "test_app_smoke.py",
+        "error": "ImportError: cannot import name 'Product' from 'app.models'",
+        "reason": "app/models/__init__.pyが空のためProductをインポートできない"
+      },
+      {
+        "name": "test_app_has_blueprint",
+        "file": "test_app_smoke.py",
+        "error": "ImportError: cannot import name 'Product' from 'app.models'",
+        "reason": "app/models/__init__.pyが空のためProductをインポートできない"
+      },
+      {
+        "name": "test_deepseek_connection",
+        "file": "test_llm_controller.py",
+        "error": "ImportError: cannot import name 'Product' from 'app.models'",
+        "reason": "app/models/__init__.pyが空のためProductをインポートできない"
+      }
+    ],
+    "skipped": [
+      {
+        "name": "test_rembg_background_removal",
+        "file": "test_rembg.py",
+        "reason": "テストデータファイルが見つかりません: D:\\catalog_images\\GUCCI\\..."
+      }
+    ]
+  },
+  "root_cause": {
+    "import_error": {
+      "cause": "Productモデルはapp/models.pyに定義されているが、app/models/__init__.pyが空のためインポートに失敗",
+      "affected_tests": [
+        "test_app_smoke.py (2 tests)",
+        "test_llm_controller.py (1 test)",
+        "test_orchestrator.py (implied)"
+      ]
+    },
+    "selenium_error": {
+      "cause": "WebDriverで要素が見つからない。ページ読み込みの完了を待っていない可能性",
+      "affected_tests": ["test_11.py"]
+    }
+  },
+  "fix_recommendations": [
+    {
+      "priority": "HIGH",
+      "action": "app/models/__init__.pyにProductを再エクスポートする",
+      "code": "from ..models import Product\n__all__ = ['Product', 'GenerateResult', 'DiscoveryResult']"
+    },
+    {
+      "priority": "MEDIUM",
+      "action": "Seleniumテストに明示的な待機処理を追加する",
+      "code": "from selenium.webdriver.support.ui import WebDriverWait\nfrom selenium.webdriver.support import expected_conditions as EC"
+    },
+    {
+      "priority": "LOW",
+      "action": "test_e2e_integration.pyのbool戻り値を修正する",
+      "code": "assert True  # return True を削除"
+    }
+  ],
+  "warnings": [
+    "PytestReturnNotNoneWarning: test_e2e_integration.pyのテストがbool値を返している"
+  ]
+}

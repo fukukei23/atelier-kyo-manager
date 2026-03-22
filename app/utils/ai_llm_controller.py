@@ -75,18 +75,17 @@ def _load_config() -> Dict[str, Any]:
             return dict(os.environ)
 
 # ---------- ポリシー ----------
-TASK_TO_MODEL_FAMILY: Dict[str, Literal["gemini", "deepseek", "openai", "local"]] = {
-    "default": "openai",
-    "analysis": "gemini",
-    "code": "deepseek",
-    "summarize": "openai",
+TASK_TO_MODEL_FAMILY: Dict[str, Literal["minimax", "glm", "local"]] = {
+    "default": "minimax",
+    "analysis": "minimax",
+    "code": "minimax",
+    "summarize": "minimax",
 }
 
 # ---------- コスト計算 ----------
 MODEL_COST = {
-    "gemini": {"input": 0.50/1_000_000, "output": 1.50/1_000_000},
-    "openai": {"input": 5.00/1_000_000, "output": 15.00/1_000_000},
-    "deepseek": {"input": 0.50/1_000_000, "output": 1.50/1_000_000},
+    "minimax": {"input": 0.10/1_000_000, "output": 0.50/1_000_000},  # MiniMax pricing
+    "glm": {"input": 0.10/1_000_000, "output": 0.50/1_000_000},  # GLM pricing
     "local": {"input": 0, "output": 0},
 }
 
@@ -104,22 +103,17 @@ class AILlmController:
         if self._initialized:
             return
         self.cfg = _load_config()
-        self.gemini_model = None
-        self.deepseek_client = None
-        self.openai_client = None
-        if genai:
-            key = self.cfg.get("GEMINI_API_KEY")
-            if key:
-                genai.configure(api_key=key)
-                self.gemini_model = genai.GenerativeModel("gemini-1.5-flash-latest")
+        self.minimax_client = None
+        self.glm_client = None
         if OpenAI:
-            d_key = self.cfg.get("DEEPSEEK_API_KEY")
-            d_base = self.cfg.get("DEEPSEEK_API_BASE", "https://api.deepseek.com")
-            o_key = self.cfg.get("OPENAI_API_KEY")
-            if d_key:
-                self.deepseek_client = OpenAI(api_key=d_key, base_url=d_base)
-            if o_key:
-                self.openai_client = OpenAI(api_key=o_key)
+            m_key = self.cfg.get("MINIMAX_API_KEY")
+            m_base = self.cfg.get("MINIMAX_API_BASE", "https://api.minimax.chat")
+            g_key = self.cfg.get("GLM_API_KEY")
+            g_base = self.cfg.get("GLM_API_BASE", "https://open.bigmodel.cn/api/paas/v4")
+            if m_key:
+                self.minimax_client = OpenAI(api_key=m_key, base_url=m_base)
+            if g_key:
+                self.glm_client = OpenAI(api_key=g_key, base_url=g_base)
         self._initialized = True
 
     # ---- 公開 generate ----
@@ -143,24 +137,26 @@ class AILlmController:
                 return GenerateResult(**cached, cached=True)
 
             result = self._generate_with_retry(family, prompt, tools, stream, chunk_callback)
+            if result is None:
+                raise ValueError(f"All LLM providers failed for task_type={family}")
             CACHE.set(cache_key, result.to_dict(), expire=300)  # 5分TTL
             return result
 
     # ---- キックロジック（リトライ＋フォールバック） ----
     def _generate_with_retry(
         self,
-        family: Literal["gemini", "deepseek", "openai", "local"],
+        family: Literal["minimax", "glm", "local"],
         prompt: str,
         tools: Optional[List[Dict[str, Any]]],
         stream: bool,
         chunk_callback: Optional[Callable[[str], None]],
     ) -> GenerateResult:
-        families = [family, "openai", "deepseek", "local"] if family != "local" else ["local"]
+        families = [family, "glm", "local"] if family != "local" else ["local"]
         for attempt, fam in enumerate(families, 1):
-            if fam == 'local' and not LOCAL_LLAMA: continue # ローカルモデルがなければスキップ
+            if fam == 'local' and not LOCAL_LLAMA: continue
             try:
                 logger.info(f"Attempt {attempt} with {fam}")
-                if stream and fam != "local":
+                if stream and fam in ("minimax", "glm"):
                     text, usage = self._stream_call(fam, prompt, chunk_callback)
                 else:
                     text, usage = self._raw_call(fam, prompt, tools)
@@ -171,22 +167,19 @@ class AILlmController:
                 logger.warning(f"{fam} failed: {e}")
                 if attempt == len(families):
                     raise
-                time.sleep(1.5 ** attempt) # 指数バックオフ
+                time.sleep(1.5 ** attempt)
 
     # ---- 生呼び出し ----
     def _raw_call(self, fam: str, prompt: str, tools: Optional[List[Dict[str, Any]]]) -> tuple[str, dict[str, int]]:
-        if fam == "gemini" and self.gemini_model:
-            response = self.gemini_model.generate_content(prompt)
-            usage = {"input": len(prompt) // 4, "output": len(response.text) // 4}
-            return response.text, usage
-        if fam == "deepseek" and self.deepseek_client:
-            cmpl = self.deepseek_client.chat.completions.create(model="deepseek-chat", messages=[{"role": "user", "content": prompt}], tools=tools or [])
+        if fam == "minimax" and self.minimax_client:
+            cmpl = self.minimax_client.chat.completions.create(model="MiniMax-M2.7", messages=[{"role": "user", "content": prompt}], tools=tools or [])
             txt = cmpl.choices[0].message.content or ""
             usage = cmpl.usage.model_dump() if cmpl.usage else {}
             return txt, usage
-        if fam == "openai" and self.openai_client:
-            cmpl = self.openai_client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}], tools=tools or [])
-            txt = cmpl.choices[0].message.content or ""
+        if fam == "glm" and self.glm_client:
+            cmpl = self.glm_client.chat.completions.create(model="glm-5", messages=[{"role": "user", "content": prompt}], tools=tools or [])
+            msg = cmpl.choices[0].message
+            txt = msg.content or msg.reasoning_content or ""  # GLM uses reasoning_content
             usage = cmpl.usage.model_dump() if cmpl.usage else {}
             return txt, usage
         if fam == "local" and LOCAL_LLAMA:
@@ -199,14 +192,21 @@ class AILlmController:
     # ---- ストリーミング ----
     def _stream_call(self, fam: str, prompt: str, chunk_callback: Callable[[str], None]) -> tuple[str, dict[str, int]]:
         text = ""
-        if fam == "openai" and self.openai_client:
-            for chunk in self.openai_client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}], stream=True):
+        if fam == "minimax" and self.minimax_client:
+            for chunk in self.minimax_client.chat.completions.create(model="MiniMax-M2.7", messages=[{"role": "user", "content": prompt}], stream=True):
                 delta = chunk.choices[0].delta.content or ""
                 text += delta
                 if chunk_callback: chunk_callback(delta)
             usage = {"input": len(prompt) // 4, "output": len(text) // 4}
             return text, usage
-        raise RuntimeError(f"Streaming is only supported for OpenAI at the moment, but got {fam}")
+        if fam == "glm" and self.glm_client:
+            for chunk in self.glm_client.chat.completions.create(model="glm-5", messages=[{"role": "user", "content": prompt}], stream=True):
+                delta = chunk.choices[0].delta.content or chunk.choices[0].delta.reasoning_content or ""
+                text += delta
+                if chunk_callback: chunk_callback(delta)
+            usage = {"input": len(prompt) // 4, "output": len(text) // 4}
+            return text, usage
+        raise RuntimeError(f"Streaming not supported for {fam}")
 
     # ---- ユーティリティ ----
     def _cache_key(self, fam: str, prompt: str, tools: Optional[List[Dict[str, Any]]]) -> str:

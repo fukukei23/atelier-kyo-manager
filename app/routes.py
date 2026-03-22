@@ -34,7 +34,7 @@ from flask import (
 )
 
 from .extensions import db
-from .models import Product
+from .models import Product  # Product is now exported from app.models package
 from .forms import ProductForm, AutoResearchForm
 
 # ---- Blueprint --------------------------------------------------------
