@@ -34,8 +34,8 @@ from flask import (
 )
 
 from .extensions import db
-from .models import Product  # Product is now exported from app.models package
-from .forms import ProductForm, AutoResearchForm
+from app.models import Product  # Product is exported from app.models package
+from app.forms import ProductForm, AutoResearchForm
 
 # ---- Blueprint --------------------------------------------------------
 bp = Blueprint("main", __name__)

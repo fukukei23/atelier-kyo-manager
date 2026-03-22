@@ -15,7 +15,7 @@ from logging.handlers import RotatingFileHandler
 from flask import Flask
 
 # ★ ここがポイント：自前で SQLAlchemy() を作らない。extensions の単一インスタンスを使う
-from .extensions import db, migrate, csrf
+from app.extensions import db, migrate, csrf
 
 
 def _load_config(app: Flask, config_name: str | None = None) -> None:
@@ -107,11 +107,11 @@ def create_app(config_name: str | None = None) -> Flask:
     csrf.init_app(app)
 
     # モデルは init_app の後で import（順序が重要）
-    from . import models  # noqa: F401
+    from app import models  # noqa: F401
     app.logger.info("Models imported for metadata binding.")
 
     # ルート登録
-    from .routes import bp as main_bp
+    from app.routes import bp as main_bp
     app.register_blueprint(main_bp)
     app.logger.info("Blueprint main_bp registered.")
 
