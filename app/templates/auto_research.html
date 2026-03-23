@@ -2,7 +2,7 @@
 ==============================================================================
 ファイル名 : auto_research.html
 配置      : app/templates/
-目的      : /auto-research 画面（フォーム未定義エラーを解消）
+目的      : /auto-research 画面
 使い方    : 既存のファイルをこの内容で「全置換」→ 保存
 ==============================================================================
 -->
@@ -12,11 +12,22 @@
   <h1 class="text-2xl font-bold text-gray-800 mb-4">AI 自動リサーチ</h1>
 
   <div class="bg-white p-6 rounded-lg shadow">
+    <!-- 開発中バッジ -->
+    <div class="bg-amber-50 border-l-4 border-amber-400 p-4 mb-6 rounded">
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+        </svg>
+        <p class="text-amber-800 font-medium">開発中</p>
+      </div>
+      <p class="text-amber-700 text-sm mt-1">この機能は現在開発中です。詳細なリサーチ機能の実装 예정。</p>
+    </div>
+
     <p class="text-gray-600 mb-4">
-      条件に基づいて自動でリサーチを行う画面です（内容は環境により実装差があります）。
+      条件に基づいて自動でリサーチを行う画面です。ブランド・カテゴリ・価格範囲などを指定して、商品を探索します。
     </p>
 
-    <!-- CSRF を持つ最小フォーム。brand 等のフィールドはありません -->
+    <!-- CSRF を持つ最小フォーム -->
     <form method="POST" class="space-y-4">
       {{ form.hidden_tag() }}
       {{ form.submit(class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700") }}
@@ -35,16 +46,23 @@
         </select>
         <button id="btnFetch" class="px-3 py-1 bg-gray-700 text-white rounded">取得</button>
       </div>
-      <pre id="result" class="bg-gray-100 p-3 rounded mt-3 text-sm"></pre>
+      <pre id="result" class="bg-gray-100 p-3 rounded mt-3 text-sm hidden"></pre>
     </div>
   </div>
 
   <script>
     document.getElementById('btnFetch')?.addEventListener('click', async (e) => {
       e.preventDefault();
+      const resultEl = document.getElementById('result');
       const code = document.getElementById('country').value;
-      const res = await fetch(`/api/warehouses?country=${encodeURIComponent(code)}`);
-      document.getElementById('result').textContent = await res.text();
+      resultEl.textContent = '取得中...';
+      resultEl.classList.remove('hidden');
+      try {
+        const res = await fetch(`/api/warehouses?country=${encodeURIComponent(code)}`);
+        resultEl.textContent = await res.text();
+      } catch (err) {
+        resultEl.textContent = `エラー: ${err.message}`;
+      }
     });
   </script>
 {% endblock %}
