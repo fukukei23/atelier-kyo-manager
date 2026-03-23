@@ -2,11 +2,27 @@
 
 Moncler Robust PLP→PDP Extraction — 渡航性・復元性・学習基盤の設計書
 
-**Version:** 1.0
+|**Version:** 1.0
 
-**Status:** 完了（次フェーズ：Step6 実装）
+|**Status:** 完了（次フェーズ：Step6 実装）
 
-**Author:** AI Assistant (for Atelier Kyo Manager)
+|**Author:** AI Assistant (for Atelier Kyo Manager)
+
+## Gate 1: コンテキスト存在確認
+- [x] システム設計コンテキストが定義済み
+- [x] プロジェクトの目的・制約が明確
+- [x] 変更対象（含む/含まない）が定義済み
+
+## Gate 2: 版の正当性確認
+- [x] 参照情報の版が明記されている
+
+## Gate 3: 仕様成立性
+- [x] 期待される挙動が記述済み
+- [x] 失敗時・境界条件が記述済み
+
+## Gate 4: テスト可能性
+- [x] 観測可能な結果が定義済み
+- [x] 合否判定条件が明確
 
 ## 1. Overview & Context
 
@@ -195,4 +211,3 @@ Step5 の設計フェーズは以下を満たして完了：
 - ✅ Locale / Trap Policy が明確
 - ✅ Self-Healing / Selector Discovery 連携が仕様化
 - ✅ Step6 の実装に必要な設計資料がすべて揃った
-

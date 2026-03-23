@@ -46,6 +46,26 @@ except ImportError:
         return True
     VISIBLE_PRICE_SELECTORS = ["[itemprop=price]", "[class*=price]", "[data-testid*=price]"]
 
+# 責務分割: UI 操作・URL 正規化は ui_helpers / navigation_helpers に委譲
+try:
+    from app.agents.browser.ui_helpers import (
+        safe_wait_selector as ui_safe_wait_selector,
+        accept_cookies_if_present as ui_accept_cookies_if_present,
+        click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
+        kill_overlays as ui_kill_overlays,
+    )
+    from app.agents.browser.navigation_helpers import (
+        normalize_url as nav_normalize_url,
+        normalize_abs_url as nav_normalize_abs_url,
+    )
+except ImportError:
+    ui_safe_wait_selector = None
+    ui_accept_cookies_if_present = None
+    ui_click_continue_shopping_if_present = None
+    ui_kill_overlays = None
+    nav_normalize_url = None
+    nav_normalize_abs_url = None
+
 logger = logging.getLogger(__name__)
 
 # Stage 3A-2-2: ロケールセグメント判定用の正規表現
@@ -2935,44 +2955,43 @@ class NavigationDriver:
     # Stage 3A-2-1: ヘルパーメソッド（BrowserUseAgent から移植）
     def _normalize_abs_url(self, base_url: str, href: str) -> str:
         """
-        CR-E2E-003A拡張: URLを絶対URLに正規化（相対/プロトコル相対/スキーム除外対応）
-        
-        Args:
-            base_url: ベースURL
-            href: 正規化対象のhref（相対/プロトコル相対/絶対）
-        
-        Returns:
-            str: 正規化された絶対URL（query/fragment除去）
+        CR-E2E-003A拡張: URLを絶対URLに正規化。navigation_helpers に委譲可能なら委譲。
+        プロトコル相対・スキーム除外は自前で処理。
         """
         if not href:
             return ""
-        
+        if nav_normalize_abs_url is not None:
+            try:
+                out = nav_normalize_abs_url(base_url, href)
+                if out:
+                    parsed = urlparse(out)
+                    if parsed.scheme and parsed.scheme.lower() not in ("http", "https"):
+                        pass  # スキーム除外は下の自前処理へ
+                    else:
+                        return out
+            except Exception:
+                pass
         try:
-            # プロトコル相対URL（//example.com/path）の処理
             if href.startswith("//"):
                 base_parsed = urlparse(base_url)
                 href = f"{base_parsed.scheme}:{href}"
-            
-            # 相対URLの処理
             absu = urljoin(base_url, href)
-            
-            # スキーム除外（javascript:, mailto:, tel:など）の処理
             parsed = urlparse(absu)
             if parsed.scheme and parsed.scheme.lower() not in ("http", "https"):
-                return href  # 元のhrefを返す（reject理由で処理）
-            
-            # 絶対URLに変換
+                return href
             parts = list(urlsplit(absu))
             if parts[2].endswith('/'):
                 parts[2] = parts[2].rstrip('/')
-            parts[3] = ""  # query除去
-            parts[4] = ""  # fragment除去
+            parts[3] = ""
+            parts[4] = ""
             return urlunsplit(parts)
         except Exception:
             return href
 
     async def safe_wait_selector(self, page: Page, selector: str, *, timeout_ms: int, state: str = "visible") -> bool:
-        """セレクタが出現するまで安全に待機する（Stage 4: タイムアウト処理改善）"""
+        """セレクタが出現するまで安全に待機する。ui_helpers に委譲。"""
+        if ui_safe_wait_selector is not None:
+            return await ui_safe_wait_selector(page, selector, timeout_ms=timeout_ms, state=state)
         if not page or page.is_closed():
             return False
         try:
@@ -3250,86 +3269,9 @@ class NavigationDriver:
         return f"{u.scheme}://{u.netloc}{norm}"
 
     async def _accept_cookies_if_present(self, page: Page, site_config: Dict[str, Any]) -> bool:
-        """Cookie 同意バナーがあればクリックする（強化版）"""
-        # Stage 3A-2-5: site_config["navigation"]["overlays"]["cookie_banner_selectors"] から取得
-        nav_cfg = (site_config.get("navigation", {}) or {})
-        overlays_cfg = nav_cfg.get("overlays", {}) or {}
-        cookie_selectors = overlays_cfg.get("cookie_banner_selectors", [])
-        
-        # フォールバック: 既存の ui 構造もサポート
-        ui = (site_config.get("selectors", {}) or {}).get("ui", {}) or {}
-        
-        # Moncler OneTrust バナーのセレクタを優先的に追加
-        candidates = _dedupe_keep_order(
-            (cookie_selectors or []) +
-            (ui.get("cookie_accept", []) or []) + [
-                # OneTrust バナーのセレクタ（優先順位順）
-                "#onetrust-accept-btn-handler",
-                "button#onetrust-accept-btn-handler",
-                "button[aria-label*='Accept'][id*='onetrust']",
-                "button[aria-label*='Accept all']",
-                "button[aria-label*='agree']",
-                "[id^='onetrust-'] button",
-                "button.ot-pc-refuse-all-handler",  # REFUSE ALL ボタンも試す
-                "button.save-preference-btn-handler.onetrust-close-btn-handler",  # SAVE MY SETTINGS ボタン
-                # 汎用セレクタ
-                "button:has-text('ACCEPT ALL')",
-                "button:has-text('ACCEPT')",
-                "button:has-text('CONTINUE WITHOUT ACCEPTING')",
-                "button[aria-label*='Accept' i]",
-            ]
-        )
-        
-        # 最大3回試行（バナーが再表示される可能性があるため）
-        for attempt in range(3):
-            clicked = False
-            for sel in candidates:
-                try:
-                    node = page.locator(sel).first
-                    count = await node.count()
-                    if count > 0:
-                        is_visible = await node.is_visible()
-                        if is_visible:
-                            await node.click(timeout=2000)
-                            await asyncio.sleep(0.3)  # クリック後の待機時間を延長
-                            clicked = True
-                            logger.debug(f"[CookieBanner] Clicked selector: {sel} (attempt {attempt + 1})")
-                            break
-                except Exception as e:
-                    continue
-            
-            if clicked:
-                # バナーが閉じられたか確認（OneTrust バナーのコンテナが非表示になったか）
-                try:
-                    banner_container = page.locator("#onetrust-banner-sdk, #onetrust-pc-sdk")
-                    if await banner_container.count() > 0:
-                        # バナーがまだ表示されている場合は少し待って再確認
-                        await asyncio.sleep(0.5)
-                        is_visible = await banner_container.first.is_visible()
-                        if not is_visible:
-                            logger.debug("[CookieBanner] Banner closed successfully")
-                            return True
-                    else:
-                        # バナーコンテナ自体が存在しない場合は成功とみなす
-                        logger.debug("[CookieBanner] Banner container not found (already closed)")
-                        return True
-                except Exception:
-                    # 確認に失敗した場合は成功とみなす（クリックは成功している）
-                    return True
-            
-            # バナーが見つからない場合は成功とみなす
-            if attempt == 0:
-                # 最初の試行でバナーが見つからない場合は、バナーが存在しない可能性
-                try:
-                    banner_container = page.locator("#onetrust-banner-sdk, #onetrust-pc-sdk")
-                    if await banner_container.count() == 0:
-                        logger.debug("[CookieBanner] No banner found")
-                        return True
-                except Exception:
-                    pass
-            
-            await asyncio.sleep(0.2)
-        
+        """Cookie 同意バナーがあればクリックする。ui_helpers に委譲。"""
+        if ui_accept_cookies_if_present is not None:
+            return await ui_accept_cookies_if_present(page, site_config)
         return False
 
     async def _dismiss_geo_modal(self, page: Page, site_config: Optional[Dict[str, Any]] = None) -> None:
@@ -3459,31 +3401,18 @@ class NavigationDriver:
             logger.warning(f"[GeoModal] Locale gate handling failed: {e}")
 
     async def _kill_overlays(self, page: Page, site_config: Optional[Dict[str, Any]] = None) -> None:
-        """オーバーレイを削除する"""
-        # Stage 3A-2-5: site_config["navigation"]["overlays"]["generic_close_buttons"] から取得
-        overlay_selectors = []
-        if site_config:
-            nav_cfg = (site_config.get("navigation", {}) or {})
-            overlays_cfg = nav_cfg.get("overlays", {}) or {}
-            overlay_selectors = overlays_cfg.get("generic_close_buttons", [])
-        
-        # フォールバック: 空の場合はデフォルトセレクタを使用
-        if not overlay_selectors:
-            overlay_selectors = [
-                '.overlay', '.backdrop', '.modal-backdrop', '#onetrust-banner-sdk',
-                '.cookie-banner', '[aria-modal="true"]', '.cmp-ui-overlay', '.cmp-modal', '.drawer--open'
-            ]
-        
+        """オーバーレイを削除する。ui_helpers に委譲。"""
+        if ui_kill_overlays is not None:
+            await ui_kill_overlays(page)
+            return
         try:
-            # JavaScript の配列として渡す
-            sels_str = ','.join([f"'{s}'" for s in overlay_selectors])
-            await page.evaluate(f"""
-              (() => {{
-                const sels = [{sels_str}];
+            await page.evaluate("""
+              (() => {
+                const sels = ['.overlay','.backdrop','.modal-backdrop','#onetrust-banner-sdk','.cookie-banner','[aria-modal="true"]','.cmp-ui-overlay','.cmp-modal','.drawer--open'];
                 document.querySelectorAll(sels.join(',')).forEach(el => el.remove());
-                const b = document.body; if (b) {{ b.classList.remove('modal-open','locked','no-scroll','overflow-hidden'); b.style.overflow=''; }}
-                const html=document.documentElement; if (html) {{ html.style.overflow=''; html.classList.remove('no-scroll','overflow-hidden'); }}
-              }})();
+                const b = document.body; if (b) { b.classList.remove('modal-open','locked','no-scroll','overflow-hidden'); b.style.overflow=''; }
+                const html=document.documentElement; if (html) { html.style.overflow=''; html.classList.remove('no-scroll','overflow-hidden'); }
+              })();
             """)
         except Exception:
             pass
@@ -3736,33 +3665,9 @@ class NavigationDriver:
         return False
 
     async def _click_continue_shopping_if_present(self, page: Page, site_config: Dict[str, Any]) -> bool:
-        """CONTINUE SHOPPING ボタンがあればクリックする"""
-        ui = (site_config.get("selectors", {}) or {}).get("ui", {}) or {}
-        candidates = _dedupe_keep_order(
-            (ui.get("continue_shopping", []) or []) + [
-                "a:has-text('CONTINUE SHOPPING')",
-                "button:has-text('CONTINUE SHOPPING')",
-                "[role='button']:has-text('CONTINUE SHOPPING')",
-                "text=/\\bCONTINUE\\s+SHOPPING\\b/i",
-            ]
-        )
-        for _ in range(3):
-            try:
-                await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
-            except Exception:
-                pass
-            for sel in candidates:
-                try:
-                    el = page.locator(sel).first
-                    if await el.count() > 0 and await el.is_visible():
-                        await el.click(timeout=3000)
-                        try:
-                            await page.wait_for_load_state("domcontentloaded", timeout=3000)
-                        except Exception:
-                            pass
-                        return True
-                except Exception:
-                    continue
+        """CONTINUE SHOPPING ボタンがあればクリックする。ui_helpers に委譲。"""
+        if ui_click_continue_shopping_if_present is not None:
+            return await ui_click_continue_shopping_if_present(page, site_config)
         return False
 
     async def _click_and_capture_navigation(

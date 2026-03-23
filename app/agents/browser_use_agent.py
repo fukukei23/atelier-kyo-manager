@@ -448,12 +448,21 @@ class BrowserUseAgent:
         driver = NavigationDriver(page=None)  # type: ignore
         return driver._looks_like_trap_or_legal(url, site_config)
 
-    def __init__(self, runtime_kwargs: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        runtime_kwargs: Optional[Dict[str, Any]] = None,
+        config_provider: Optional[Any] = None,
+        llm_client: Optional[Any] = None,
+    ):
         self.runtime_kwargs = runtime_kwargs or {}
         self.discovery_agent = SelectorDiscoveryAgent(runtime_kwargs=self.runtime_kwargs)
         self.logger = logger
         self.run_context: Optional[RunContext] = None # Temporarily attach RunContext during run()
-        
+        # 設定の抽象化: 未指定時は run_e2e 等で DefaultSiteConfigProvider を都度利用
+        self._config_provider = config_provider
+        # LLM の抽象化: 未指定時は run_with_repair 内で AILlmController を都度生成
+        self._llm_client = llm_client
+
         # Stage 3B: TelemetryClient インスタンス（run_context が設定された後に初期化）
         self._telemetry: Optional[TelemetryClient] = None
 
@@ -874,18 +883,20 @@ class BrowserUseAgent:
                     del self.run_context
             return base_result
 
-        # LLMコントローラを用意
-        try:
-            from app.utils.ai_llm_controller import AiLlmController
-            llm_ctrl = AiLlmController(mode="Chat/Default")
-        except Exception as e:
-            self.logger.error(f"[run_with_repair] Failed to instantiate AiLlmController: {e}. Aborting repair.")
+        # LLM クライアントを用意（注入済みならそれを使用、未指定時は AILlmController を生成）
+        llm_ctrl = self._llm_client
+        if llm_ctrl is None:
             try:
-                await self._close_session(run_context, settings)
-            finally:
-                if hasattr(self, "run_context"):
-                    del self.run_context
-            return base_result
+                from app.utils.ai_llm_controller import AILlmController
+                llm_ctrl = AILlmController()
+            except Exception as e:
+                self.logger.error(f"[run_with_repair] Failed to instantiate LLM client: {e}. Aborting repair.")
+                try:
+                    await self._close_session(run_context, settings)
+                finally:
+                    if hasattr(self, "run_context"):
+                        del self.run_context
+                return base_result
 
         # failure_contextをまとめて InteractiveRepairSession に渡すために整形
         failure_ev = base_result.evidence or {}
@@ -2444,10 +2455,14 @@ class BrowserUseAgent:
         self.run_context.run_type = "e2e"
         self.run_context.scenario_name = scenario_name
         
-        # サイト設定を読み込み
-        loader = SitesConfigLoader()
-        sites_config = loader.load_full_config()
-        site_config = sites_config.get("MONCLER_OFFICIAL")
+        # サイト設定を読み込み（SiteConfigProvider 経由、未注入時は DefaultSiteConfigProvider）
+        try:
+            from app.config.protocols import DefaultSiteConfigProvider
+            provider = self._config_provider or DefaultSiteConfigProvider()
+            site_config = provider.get_site_config("MONCLER_OFFICIAL")
+        except ImportError:
+            from app.config.loader import get_site_config
+            site_config = get_site_config("MONCLER_OFFICIAL")
         
         if not site_config:
             return DiscoveryResult(
