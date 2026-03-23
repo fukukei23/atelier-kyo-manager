@@ -1,0 +1,36 @@
+{
+  "report_type": "FKB構築・Auto-Heal強化 完了レポート",
+  "generated_at": "2026-03-23T21:44:20.530843",
+  "fkb_summary": {
+    "total_entries": 22,
+    "new_entries_added": 5,
+    "entries_removed": 1,
+    "coverage": [
+      "MONCLER_OFFICIAL",
+      "SSENSE",
+      "GUCCI",
+      "PRADA",
+      "GENERIC"
+    ]
+  },
+  "test_summary": {
+    "total": 179,
+    "passed": 179,
+    "failed": 0,
+    "skipped": 5,
+    "success_rate": "100%"
+  },
+  "auto_heal_enhancements": {
+    "circuit_breaker_added": true,
+    "cb_threshold": 5,
+    "cb_cooldown_seconds": 300,
+    "fkb_integration": true,
+    "strategies_count": 3
+  },
+  "changed_files": [
+    "fkb_local.json",
+    "app/agents/self_healing_agent.py",
+    "app/agents/failure_analysis_agent.py",
+    "tests/test_self_healing_agent.py"
+  ]
+}
