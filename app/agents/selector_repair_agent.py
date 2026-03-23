@@ -23,20 +23,30 @@ except Exception:
     from core.run_context import RunContext
 
 try:
-    from app.utils.ai_llm_controller import AiLlmController
+    from app.utils.ai_llm_controller import AILlmController
     from app.models.result_models import GenerateResult
+    from app.utils.llm_protocol import LLMClient
 except ImportError:
+    AILlmController = None  # type: ignore
+    GenerateResult = None  # type: ignore
+    LLMClient = None  # type: ignore
+
+try:
+    if AILlmController is None:
+        raise ImportError("AILlmController not available")
+    _DefaultLLM = AILlmController
+except Exception:
     # フォールバック: スタブクラス
-    class GenerateResult:
+    class GenerateResult:  # type: ignore
         def __init__(self, text: str, cost_usd: float = 0.0):
             self.text = text
             self.cost_usd = cost_usd
-    
-    class AiLlmController:
-        async def generate(self, prompt: str, task_type: str) -> GenerateResult:
+
+    class _DefaultLLM:  # type: ignore
+        def generate(self, prompt: str, task_type: str = "default", **kwargs: Any) -> Any:
             logging.info("AiLlmController (Stub): AIへの非同期リクエストをシミュレートします。")
-            import asyncio
-            await asyncio.sleep(0.1)  # I/Oバウンドな処理を模倣
+            import time
+            time.sleep(0.1)  # I/Oバウンドな処理を模倣
             dummy_response = {
                 "site": "MONCLER_OFFICIAL",
                 "page_type": "pdp",
@@ -66,16 +76,16 @@ class SelectorRepairAgent:
     def __init__(self, llm_client: Optional[Any] = None):
         """
         SelectorRepairAgent を初期化
-        
+
         Args:
-            llm_client: AiLlmController インスタンス（省略時は新規作成）
+            llm_client: LLMClient プロトコルを満たすインスタンス（省略時は AILlmController を新規作成）
         """
         if llm_client is None:
             try:
-                self.llm_client = AiLlmController(mode="Chat/Default")
+                self.llm_client = _DefaultLLM() if _DefaultLLM else None
             except Exception as e:
-                logger.warning(f"[SelectorRepair] Failed to initialize AiLlmController: {e}, using stub")
-                self.llm_client = AiLlmController()  # スタブ
+                logger.warning(f"[SelectorRepair] Failed to initialize LLM client: {e}, using stub")
+                self.llm_client = _DefaultLLM() if _DefaultLLM else None
         else:
             self.llm_client = llm_client
     
