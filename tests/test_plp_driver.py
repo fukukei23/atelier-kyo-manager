@@ -7,6 +7,9 @@ PlpDriver の主要な機能をテストする：
 - (b) Trap / Legal page detection
 - (c) Overlay handling
 - (d) Config getter methods (Stage 4)
+
+Related Spec: docs/spec/CR-ATELIER-002_STEP5_SPEC.md
+Test ID Prefix: PLP
 """
 
 import pytest
@@ -168,19 +171,18 @@ async def test_plp_driver_trap_detection(mock_page, mock_context, site_config, r
             target_url="https://example.com/products",
         )
         
-        # アサーション
+        # アサーション（Stage 5: 早期トラップ検出によりrecovery_attempted=False）
         assert result.trap_detected is True
         assert result.trap_reason is not None
         assert len(result.trap_reason) > 0
-        assert result.recovery_attempted is True
-        assert result.recovery_successful is True  # Stage 4: 新しいフィールド
-        # リカバリが呼ばれたことを確認
-        mock_recover.assert_called_once()
+        # 早期検出のため、リカバリ処理は呼ばれない
+        assert result.recovery_attempted is False
+        assert result.recovery_successful is False
 
 
 @pytest.mark.asyncio
 async def test_plp_driver_trap_detection_no_recovery(mock_page, mock_context, site_config, run_context):
-    """Trap検出後、リカバリに失敗するケース"""
+    """Trap検出後、早期検出で即座にリターンする（リカバリなし）"""
     driver = PlpDriver(
         page=mock_page,
         context=mock_context,
@@ -193,21 +195,18 @@ async def test_plp_driver_trap_detection_no_recovery(mock_page, mock_context, si
         "trap_url_patterns": ["/legal"],
     }
     
-    start_t = time.time()
-    budget_ms = 30000
+    # Stage 5: 早期トラップ検出のため、例外ではなく結果オブジェクトが返る
+    result = await driver.navigate_to_pdp(
+        start_t=time.time(),
+        budget_ms=30000,
+        target_url="https://example.com/products",
+    )
     
-    # リカバリ後もTrapページのまま
-    with patch.object(driver, '_materialize_tiles', return_value=5), \
-         patch.object(driver, '_is_trap_page', return_value=True), \
-         patch.object(driver, '_recover_from_trap', new_callable=AsyncMock, return_value=False):
-        
-        # リカバリに失敗するケース → 例外が発生する
-        with pytest.raises(ValueError, match="Trap recovery failed"):
-            await driver.navigate_to_pdp(
-                start_t=start_t,
-                budget_ms=budget_ms,
-                target_url="https://example.com/products",
-            )
+    # 早期検出で即座にリターン（リカバリ処理は呼ばれない）
+    assert result.trap_detected is True
+    assert result.recovery_attempted is False
+    assert result.recovery_successful is False
+    assert result.tiles_seen == 0
 
 
 @pytest.mark.asyncio
