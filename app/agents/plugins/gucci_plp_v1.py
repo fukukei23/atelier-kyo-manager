@@ -8,7 +8,7 @@ import re
 import json
 from typing import List, Dict, Set, Optional
 from urllib.parse import urlparse
-from .base import StrategyPlugin
+from .base import StrategyPlugin, _apply_stealth
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,7 @@ class GucciPLPStrategy(StrategyPlugin):
     - ロケールトラップ回避 (/us/en/, /it/it/, etc.)
     - 遅延読み込み対応（段階的スクロール + Load Moreボタン）
     - JSON-LD製品抽出
+    - Stealthモード対応（Bot検出回避）
     """
     site = "GUCCI"
     _DEFAULT_LOCALE = "en-US"
@@ -36,6 +37,7 @@ class GucciPLPStrategy(StrategyPlugin):
         "li[class*='product']",
         "div[data-testid='product-item']",
     )
+    _stealth_applied: bool = False
 
     def before_navigate(self, url: str, ctx) -> str:
         """URLを補正してlocaleトラップを回避"""
@@ -68,7 +70,15 @@ class GucciPLPStrategy(StrategyPlugin):
         return url
 
     async def after_navigate(self, page, ctx) -> None:
-        """Cookieバナー処理とページ安定待機"""
+        """Cookieバナー処理とStealth適用"""
+        if not GucciPLPStrategy._stealth_applied:
+            try:
+                _apply_stealth(page)
+                GucciPLPStrategy._stealth_applied = True
+                logger.info("[GUCCI] Stealth mode applied")
+            except Exception as e:
+                logger.warning(f"[GUCCI] Stealth apply failed: {e}")
+
         await self.dismiss_consent(page)
         await page.wait_for_timeout(2500)
 
