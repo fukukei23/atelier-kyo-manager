@@ -80,19 +80,34 @@
   <!-- CSVインポート/エクスポート -->
   <div class="mt-6">
     <h3 class="text-xl font-semibold mb-2 text-gray-700">CSVインポート/エクスポート</h3>
-    <form action="{{ url_for('main.import_csv') }}" method="POST" enctype="multipart/form-data" class="space-y-4">
-      {{ form.csrf_token }}
-      <input type="file" name="file" accept=".csv" class="block w-full text-sm text-gray-500
-        file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0
-        file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"/>
-      <button type="submit" class="py-2 px-4 rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none">
-        CSVインポート
-      </button>
-      <a href="{{ url_for('main.export_csv') }}"
-         class="ml-2 py-2 px-4 rounded-md text-white bg-purple-600 hover:bg-purple-700 inline-block">
-        CSVエクスポート
-      </a>
-    </form>
+    <div class="grid md:grid-cols-2 gap-4">
+      <!-- インポート -->
+      <div class="border-2 border-dashed border-gray-300 rounded-lg p-4 hover:border-blue-400 transition" id="csv-drop-zone">
+        <p class="text-sm text-gray-500 mb-2">ドラッグ&ドロップ または クリックして選択</p>
+        <form action="{{ url_for('main.import_csv') }}" method="POST" enctype="multipart/form-data">
+          {{ form.csrf_token }}
+          <input type="file" name="file" accept=".csv" id="csv-file-input" class="hidden" onchange="handleFileSelect(this)">
+          <label for="csv-file-input" class="cursor-pointer flex flex-col items-center">
+            <svg class="w-8 h-8 text-gray-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
+            <span id="csv-file-name" class="text-sm text-gray-600">CSVファイルを選択</span>
+          </label>
+          <div class="flex gap-2 mt-3">
+            <button type="submit" id="csv-import-btn" class="flex-1 py-2 px-4 rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none disabled:opacity-50" disabled>
+              CSVインポート
+            </button>
+            <button type="button" onclick="clearCsvInput()" class="py-2 px-4 rounded-md border border-gray-300 text-gray-600 hover:bg-gray-50">クリア</button>
+          </div>
+        </form>
+      </div>
+      <!-- エクスポート -->
+      <div class="border border-gray-200 rounded-lg p-4 flex flex-col justify-center">
+        <p class="text-sm text-gray-600 mb-3">現在登録されている商品をCSV形式でダウンロードできます。</p>
+        <a href="{{ url_for('main.export_csv') }}"
+           class="py-2 px-4 rounded-md text-white bg-purple-600 hover:bg-purple-700 inline-block text-center">
+          CSVエクスポート
+        </a>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -208,6 +223,32 @@
 </div>
 
 <script>
+// CSV drag & drop
+const dropZone = document.getElementById('csv-drop-zone');
+if (dropZone) {
+  dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('border-blue-400', 'bg-blue-50'); });
+  dropZone.addEventListener('dragleave', e => { e.preventDefault(); dropZone.classList.remove('border-blue-400', 'bg-blue-50'); });
+  dropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    dropZone.classList.remove('border-blue-400', 'bg-blue-50');
+    const file = e.dataTransfer.files[0];
+    if (file) { document.getElementById('csv-file-input').files = e.dataTransfer.files; handleFileSelect(document.getElementById('csv-file-input')); }
+  });
+  dropZone.addEventListener('click', e => { if (e.target.tagName !== 'INPUT') document.getElementById('csv-file-input').click(); });
+}
+function handleFileSelect(input) {
+  const file = input.files[0];
+  if (file) {
+    document.getElementById('csv-file-name').textContent = file.name;
+    document.getElementById('csv-import-btn').disabled = false;
+  }
+}
+function clearCsvInput() {
+  document.getElementById('csv-file-input').value = '';
+  document.getElementById('csv-file-name').textContent = 'CSVファイルを選択';
+  document.getElementById('csv-import-btn').disabled = true;
+}
+
 // アクションドロップダウンのトグル
 function toggleActionMenu(btn) {
   const menu = btn.nextElementSibling;

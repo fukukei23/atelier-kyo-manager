@@ -1,5 +1,40 @@
 // app.js - Atelier Kyo Manager カスタムJS
 
+/* =============================================
+   テーマ切り替え（ライト/ダークモード）
+   ============================================= */
+(function initTheme() {
+  const stored = localStorage.getItem('theme');
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  if (stored === 'dark' || (!stored && prefersDark)) {
+    document.documentElement.classList.add('dark');
+  }
+  updateThemeIcons();
+})();
+
+function toggleTheme() {
+  const html = document.documentElement;
+  const isDark = html.classList.toggle('dark');
+  localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  updateThemeIcons();
+}
+
+function updateThemeIcons() {
+  const isDark = document.documentElement.classList.contains('dark');
+  const sun = document.getElementById('icon-sun');
+  const moon = document.getElementById('icon-moon');
+  if (sun) sun.classList.toggle('hidden', !isDark);
+  if (moon) moon.classList.toggle('hidden', isDark);
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  const btn = document.getElementById('theme-toggle');
+  if (btn) btn.addEventListener('click', toggleTheme);
+});
+
+/* =============================================
+   削除確認モーダル
+   ============================================= */
 /**
  * 削除確認モーダルを表示
  * @param {string} productId - 削除する商品的ID
