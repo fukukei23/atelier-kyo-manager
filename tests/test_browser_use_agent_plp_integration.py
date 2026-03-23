@@ -4,6 +4,9 @@ Task 1-2: BrowserUseAgent と PlpDriver の統合テスト
 
 BrowserUseAgent が PlpDriver を正しく使用しているかを確認する。
 Stage 4: 拡張版 PlpDriver に対応
+
+Related Spec: docs/spec/CR-ATELIER-003_BROWSER_AGENT_REFACTOR.md
+Test ID Prefix: INT
 """
 
 import pytest

@@ -32,9 +32,11 @@ from app.utils.observability import write_fail_snapshot
 
 try:
     from app.config.loader import load_full_config, get_site_config
+    from app.config.protocols import DefaultSiteConfigProvider
 except ImportError:
     load_full_config = None
     get_site_config = None
+    DefaultSiteConfigProvider = None
 
 logger = logging.getLogger(__name__)
 
@@ -67,8 +69,17 @@ def resolve_site_name(site_input: str) -> str:
     if site_lower in SITE_ALIASES:
         return SITE_ALIASES[site_lower]
     
-    # Try to find in config
-    if get_site_config:
+    # Try to find in config (SiteConfigProvider or loader)
+    if DefaultSiteConfigProvider is not None:
+        try:
+            provider = DefaultSiteConfigProvider()
+            full_config = provider.get_full_config()
+            for site_name in (full_config or {}).keys():
+                if site_name.upper() == site_upper:
+                    return site_name.upper()
+        except Exception:
+            pass
+    elif get_site_config and load_full_config:
         try:
             full_config = load_full_config()
             for site_name in full_config.keys():
@@ -152,21 +163,34 @@ async def main() -> int:
         last_run_json.write_text(json.dumps(last_run_data, indent=2), encoding="utf-8")
         logger.info(f"[run_site] Created {last_run_json}")
     
-    # Load site config
-    if not get_site_config:
-        logger.error("[run_site] Failed to import get_site_config. Cannot load site configuration.")
-        return 1
-    
-    try:
-        site_config = get_site_config(site_name)
-        if not site_config:
-            logger.error(f"[run_site] Site config not found for '{site_name}'. Available sites: {list(load_full_config().keys())}")
+    # Load site config (SiteConfigProvider or loader)
+    config_provider = None
+    if DefaultSiteConfigProvider is not None:
+        try:
+            config_provider = DefaultSiteConfigProvider()
+            site_config = config_provider.get_site_config(site_name)
+        except Exception as e:
+            logger.error(f"[run_site] Failed to load site_config via SiteConfigProvider: {e}", exc_info=True)
             return 1
-        logger.info(f"[run_site] Loaded site_config for '{site_name}'")
-    except Exception as e:
-        logger.error(f"[run_site] Failed to load site_config: {e}", exc_info=True)
+    elif get_site_config:
+        try:
+            site_config = get_site_config(site_name)
+        except Exception as e:
+            logger.error(f"[run_site] Failed to load site_config: {e}", exc_info=True)
+            return 1
+    else:
+        logger.error("[run_site] Failed to import config loader. Cannot load site configuration.")
         return 1
-    
+
+    if not site_config:
+        try:
+            avail = (config_provider or DefaultSiteConfigProvider()).get_full_config().keys() if DefaultSiteConfigProvider else (load_full_config().keys() if load_full_config else [])
+        except Exception:
+            avail = []
+        logger.error(f"[run_site] Site config not found for '{site_name}'. Available sites: {list(avail)}")
+        return 1
+    logger.info(f"[run_site] Loaded site_config for '{site_name}'")
+
     # Determine target URL
     target_url = args.url
     if not target_url:
@@ -275,7 +299,10 @@ async def main() -> int:
     if use_proxy_value is not None:
         runtime_kwargs["use_proxy"] = use_proxy_value
     
-    agent = BrowserUseAgent(runtime_kwargs=runtime_kwargs)
+    agent = BrowserUseAgent(
+        runtime_kwargs=runtime_kwargs,
+        config_provider=config_provider,
+    )
     timeout_sec = args.timeout + 60  # buffer for materialize steps
     
     run_task = asyncio.create_task(

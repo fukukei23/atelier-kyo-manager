@@ -5,7 +5,7 @@ import os
 os.chdir("/home/yn441611/atelier-kyo-manager")
 
 result = subprocess.run(
-    ["git", "commit", "-m", "Refactor test_product_extractor.py with proper Mock setup"],
+    ["git", "commit", "-m", "Archive old docs, cleanup root scripts, update README"],
     capture_output=True,
     text=True
 )
