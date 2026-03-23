@@ -15,7 +15,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title or 'Atelier Kyo Manager' }} - Atelier Kyo Manager</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?version=3.4.1"></script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
 </head>
 <body class="bg-gray-100 font-sans leading-normal tracking-normal">
@@ -36,8 +36,7 @@
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
                 {% for category, message in messages %}
-                {% set color = 'green' if category == 'success' else 'red' %}
-                <div class="bg-{{ color }}-100 border-l-4 border-{{ color }}-500 text-{{ color }}-700 p-4 mb-4" role="alert">
+                <div class="{% if category == 'success' %}bg-green-50 border-green-500 text-green-800{% else %}bg-red-50 border-red-500 text-red-800{% endif %} border-l-4 p-4 mb-4" role="alert">
                     <p class="font-bold">{% if category == 'success' %}成功{% else %}エラー{% endif %}</p>
                     <p>{{ message }}</p>
                 </div>

@@ -12,7 +12,8 @@
 
 <div class="bg-white p-6 rounded-lg shadow-md">
   {% if products %}
-  <div class="overflow-x-auto">
+  <!-- デスクトップ: テーブル -->
+  <div class="hidden md:block overflow-x-auto">
     <table class="min-w-full divide-y divide-gray-200 border border-gray-300 rounded-lg">
       <thead class="bg-gray-100">
         <tr>
@@ -40,6 +41,31 @@
       </tbody>
     </table>
   </div>
+    </table>
+  </div>
+
+  <!-- モバイル: カード列表 -->
+  <div class="md:hidden space-y-4">
+    {% for product in products %}
+    <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition">
+      <div class="flex justify-between items-start mb-2">
+        <span class="text-xs text-gray-500">ID: {{ product.id }}</span>
+        {% if product.brand %}
+        <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded">{{ product.brand }}</span>
+        {% endif %}
+      </div>
+      <p class="font-medium text-gray-900 mb-1">
+        <a href="{{ product.supplier_url }}" target="_blank" class="text-blue-700 underline">{{ product.name }}</a>
+      </p>
+      <div class="grid grid-cols-3 gap-2 mt-3 text-sm">
+        <div><span class="text-gray-500 block text-xs">仕入</span><span class="font-medium">¥{{ (product.purchase_price or 0) | int }}</span></div>
+        <div><span class="text-gray-500 block text-xs">販売</span><span class="font-medium">¥{{ (product.selling_price or 0) | int }}</span></div>
+        <div><span class="text-gray-500 block text-xs">利益</span><span class="font-medium {{ 'text-green-600' if product.calculate_profit() > 0 else 'text-red-600' }}">¥{{ product.calculate_profit() | int }}</span></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
   {% else %}
   <p class="text-gray-600">登録データはありません。</p>
   {% endif %}
