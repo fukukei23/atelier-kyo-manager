@@ -5,79 +5,222 @@
   <title>{{ brand }} 価格ダッシュボード (直近 {{ days }} 日)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <style>
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans JP',sans-serif;margin:16px;color:#222;background:#fdfdfd}
-    h1{font-size:20px;margin:0 0 12px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:16px}
-    .card{border:1px solid #ddd;border-radius:8px;padding:12px}
-    .title{font-size:14px;margin:0 0 8px}
-    .alerts{color:#b00;font-size:12px;margin:6px 0 0;padding-left:18px}
-    .row{margin-bottom:16px}
-    .small{color:#666;font-size:12px}
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
 </head>
 
 <body>
 <h1>{{ brand }} 価格ダッシュボード <span class="small">(直近 {{ days }} 日)</span></h1>
+
 <div class="row">
-  <form method="get" action="/brand/{{ brand }}">
-    日数: <input type="number" name="days" value="{{ days }}" min="7" max="365">
-    <button type="submit">更新</button>
-  </form>
+  <div class="controls">
+    <form method="get" action="/brand/{{ brand }}" style="display:flex;gap:8px;align-items:center">
+      日数: <input type="number" name="days" value="{{ days }}" min="7" max="365" style="width:70px;padding:4px">
+      仕入れ価格: <input type="number" name="purchase_price" placeholder="例: 50000" style="width:90px;padding:4px">
+      <button type="submit" class="btn btn-primary">更新</button>
+    </form>
+    <button class="btn btn-secondary" onclick="exportData('csv')">📥 CSV出力</button>
+    <button class="btn btn-secondary" onclick="exportData('json')">📥 JSON出力</button>
+  </div>
 </div>
+
+<div id="summary" class="profit-summary" style="display:none">
+  <h2>📊 収益性サマリー</h2>
+  <div id="summary_grid" class="summary-grid"></div>
+</div>
+
+<div id="loading" class="loading">
+  <div class="spinner"></div> データを読み込み中...
+</div>
+<div id="error" class="error-state" style="display:none"></div>
 <div id="cards" class="grid"></div>
 
 <script>
+let loadingDiv = document.getElementById('loading');
+let errorDiv = document.getElementById('error');
+let cardsDiv = document.getElementById('cards');
+let summaryDiv = document.getElementById('summary');
+
 async function load() {
-  const resp = await fetch(`/api/history?brand={{ brand }}&days={{ days }}`);
-  if (!resp.ok) {
-    document.getElementById('cards').innerHTML = `<div class="card">APIエラー: ${resp.status}</div>`;
-    return;
-  }
-  const data = await resp.json();
-  const root = document.getElementById('cards');
-  root.innerHTML = '';
-  if (!data.series || data.series.length === 0) {
-    root.innerHTML = `<div class="card">データがありません。まず price-history を実行してください。</div>`;
-    return;
+  // ローディング表示
+  loadingDiv.style.display = 'block';
+  errorDiv.style.display = 'none';
+  cardsDiv.innerHTML = '';
+  summaryDiv.style.display = 'none';
+
+  const params = new URLSearchParams({
+    brand: '{{ brand }}',
+    days: '{{ days }}'
+  });
+  const urlParams = new URLSearchParams(window.location.search);
+  if (urlParams.get('purchase_price')) {
+    params.set('purchase_price', urlParams.get('purchase_price'));
   }
 
-  for (const s of data.series) {
-    const card = document.createElement('div');
-    card.className = 'card';
-    const id = 'c_' + Math.random().toString(36).slice(2);
-    card.innerHTML = `
-      <div class="title"><a href="${s.url}" target="_blank" rel="noopener">${s.name || s.url}</a></div>
-      <canvas id="${id}" height="180"></canvas>
-      ${s.alerts && s.alerts.length ? `<ul class="alerts">${s.alerts.map(a => `<li>${a}</li>`).join('')}</ul>` : ''}
-    `;
-    root.appendChild(card);
+  try {
+    const resp = await fetch(`/api/history?${params.toString()}`);
+    if (!resp.ok) {
+      throw new Error(`APIエラー: ${resp.status} ${resp.statusText}`);
+    }
 
-    const ctx = document.getElementById(id).getContext('2d');
-    new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: s.labels, // ISO8601
-        datasets: [
-          { label: '価格',   data: s.prices, borderColor: '#1976d2', backgroundColor: 'rgba(25,118,210,0.08)', spanGaps: true, tension: 0.2 },
-          { label: 'EMA7',   data: s.ema7,   borderColor: '#2e7d32', borderDash: [3,3], spanGaps: true, tension: 0.2, pointRadius: 0 },
-          { label: 'EMA28',  data: s.ema28,  borderColor: '#ef6c00', borderDash: [6,3], spanGaps: true, tension: 0.2, pointRadius: 0 },
-          { label: 'EMA180', data: s.ema180, borderColor: '#8844ff', borderDash: [10,4], spanGaps: true, tension: 0.2, pointRadius: 0, hidden: true },
-          { label: 'EMA365', data: s.ema365, borderColor: '#ff4455', borderDash: [15,5], spanGaps: true, tension: 0.2, pointRadius: 0, hidden: true }
-        ]
-      },
-      options: {
-        responsive: true,
-        interaction: { mode: 'index', intersect: false },
-        plugins: { title: { display: false }, legend: { position: 'bottom' } },
-        scales: {
-          x: { type: 'time', time: { displayFormats: { day: 'MM/DD' } }, ticks: { maxTicksLimit: 7 } },
-          y: { beginAtZero: false, ticks: { callback: v => '¥' + v.toLocaleString() } }
-        }
-      }
-    });
+    const data = await resp.json();
+    loadingDiv.style.display = 'none';
+
+    if (!data.series || data.series.length === 0) {
+      cardsDiv.innerHTML = `<div class="card">データがありません。まず price-history を実行してください。</div>`;
+      return;
+    }
+
+    updateSummary(data.series);
+    renderCards(data.series);
+
+  } catch (err) {
+    loadingDiv.style.display = 'none';
+    errorDiv.style.display = 'block';
+    errorDiv.innerHTML = `<strong>エラー:</strong> ${err.message}<br><small>ページを更新してください</small>`;
+    console.error('Dashboard load error:', err);
   }
 }
+
+function renderCards(series) {
+  for (let i = 0; i < series.length; i++) {
+    const s = series[i];
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const profit = s.profitability || {};
+    const profitClass = getProfitClass(profit.current_profit_rate);
+    const trendIcon = getTrendIcon(profit.trend_direction);
+
+    const alertsHtml = s.alerts && s.alerts.length
+      ? `<ul class="alerts">${s.alerts.map(a => `<li>${a}</li>`).join('')}</ul>`
+      : '';
+
+    card.innerHTML = `
+      <div class="title">
+        <a href="${s.url}" target="_blank" rel="noopener">${s.name || s.url}</a>
+        ${profit.current_profit_rate !== null && profit.current_profit_rate !== undefined
+          ? `<span class="profit-badge ${profitClass}">${profit.current_profit_rate >= 0 ? '+' : ''}${profit.current_profit_rate}%</span>`
+          : ''}
+      </div>
+      <canvas id="chart-${s.url ? s.url.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30) : 'product_' + i}" height="160"></canvas>
+      ${alertsHtml}
+      ${renderProfitabilityMeta(profit)}
+    `;
+    cardsDiv.appendChild(card);
+
+    const canvasId = card.querySelector('canvas').id;
+    renderChart(canvasId, s);
+  }
+  summaryDiv.style.display = 'block';
+}
+
+function getProfitClass(rate) {
+  if (rate === null || rate === undefined) return '';
+  if (rate >= 15) return 'profit-high';
+  if (rate >= 5) return 'profit-mid';
+  if (rate >= 0) return 'profit-low';
+  return 'profit-caution';
+}
+
+function getTrendIcon(direction) {
+  if (direction === 'rising') return '📈';
+  if (direction === 'falling') return '📉';
+  return '➡️';
+}
+
+function renderProfitabilityMeta(profit) {
+  if (!profit || Object.keys(profit).length === 0) return '';
+
+  const items = [];
+
+  if (profit.current_profit !== null && profit.current_profit !== undefined) {
+    items.push(`<div class="meta-item"><span>推定利益</span><span>¥${profit.current_profit.toLocaleString()}</span></div>`);
+  }
+  if (profit.best_price_date) {
+    items.push(`<div class="meta-item"><span>最安値</span><span>¥${profit.best_price?.toLocaleString()} (${formatDate(profit.best_price_date)})</span></div>`);
+  }
+  if (profit.price_volatility !== null && profit.price_volatility !== undefined) {
+    items.push(`<div class="meta-item"><span>変動係数</span><span>${profit.price_volatility}%</span></div>`);
+  }
+  if (profit.trend_direction) {
+    const icon = getTrendIcon(profit.trend_direction);
+    items.push(`<div class="meta-item"><span>トレンド</span><span class="trend-${profit.trend_direction}">${icon} ${profit.trend_direction}</span></div>`);
+  }
+  if (profit.recommendation) {
+    items.push(`<div class="meta-item" style="grid-column:1/-1"><span>💡 推奨</span><span>${profit.recommendation}</span></div>`);
+  }
+
+  return items.length ? `<div class="meta-grid">${items.join('')}</div>` : '';
+}
+
+function updateSummary(series) {
+  const grid = document.getElementById('summary_grid');
+
+  const profitable = series.filter(s => s.profitability?.current_profit_rate >= 10).length;
+  const total = series.length;
+  const avgProfitRate = series.reduce((sum, s) => sum + (s.profitability?.current_profit_rate || 0), 0) / (total || 1);
+  const totalEstimatedProfit = series.reduce((sum, s) => sum + (s.profitability?.current_profit || 0), 0);
+
+  grid.innerHTML = `
+    <div class="summary-item">
+      <div class="summary-label">SKU数</div>
+      <div class="summary-value">${total}</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">推奨SKU (利益率10%+)</div>
+      <div class="summary-value positive">${profitable}/${total}</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">平均利益率</div>
+      <div class="summary-value ${avgProfitRate >= 5 ? 'positive' : 'negative'}">${avgProfitRate >= 0 ? '+' : ''}${avgProfitRate.toFixed(1)}%</div>
+    </div>
+    <div class="summary-item">
+      <div class="summary-label">推定総利益</div>
+      <div class="summary-value ${totalEstimatedProfit >= 0 ? 'positive' : 'negative'}">¥${totalEstimatedProfit.toLocaleString()}</div>
+    </div>
+  `;
+}
+
+function renderChart(canvasId, s) {
+  const ctx = document.getElementById(canvasId);
+  if (!ctx) return;
+  new Chart(ctx.getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: s.labels,
+      datasets: [
+        { label: '価格', data: s.prices, borderColor: '#1976d2', backgroundColor: 'rgba(25,118,210,0.08)', spanGaps: true, tension: 0.2 },
+        { label: 'EMA7', data: s.ema7, borderColor: '#2e7d32', borderDash: [3,3], spanGaps: true, tension: 0.2, pointRadius: 0 },
+        { label: 'EMA28', data: s.ema28, borderColor: '#ef6c00', borderDash: [6,3], spanGaps: true, tension: 0.2, pointRadius: 0 },
+      ]
+    },
+    options: {
+      responsive: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { title: { display: false }, legend: { position: 'bottom' } },
+      scales: {
+        x: { ticks: { maxTicksLimit: 7 }, title: { display: false } },
+        y: { beginAtZero: false, ticks: { callback: v => '¥' + v.toLocaleString() } }
+      }
+    }
+  });
+}
+
+function formatDate(isoString) {
+  if (!isoString) return '';
+  const d = new Date(isoString);
+  return `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+function exportData(format) {
+  const params = new URLSearchParams({
+    brand: '{{ brand }}',
+    days: '{{ days }}',
+    format: format
+  });
+  window.open(`/api/history/export?${params.toString()}`, '_blank');
+}
+
 load();
 </script>
 </body>

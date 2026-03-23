@@ -5,6 +5,9 @@
 使用方法: この内容で既存のファイルを完全に上書きしてください。
 改良点:
 - ナビゲーションバーに「AI自動リサーチ」へのリンクを追加しました。
+- static/css/custom.css を読み込み
+- static/js/app.js を読み込み
+- 削除確認モーダルを追加
 -->
 <!doctype html>
 <html lang="ja">
@@ -13,6 +16,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{ title or 'Atelier Kyo Manager' }} - Atelier Kyo Manager</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
 </head>
 <body class="bg-gray-100 font-sans leading-normal tracking-normal">
 
@@ -43,5 +47,21 @@
 
         {% block content %}{% endblock %}
     </main>
+
+    <!-- 削除確認モーダル -->
+    <dialog id="delete-modal" style="border:none;border-radius:8px;padding:0;max-width:400px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,0.15)">
+        <form id="delete-form" method="POST" style="padding:24px">
+            <h3 class="modal-title">商品を削除しますか？</h3>
+            <p style="color:#666;font-size:14px;margin:8px 0">
+                「<span id="delete-product-name" style="font-weight:600"></span>」を削除します。この操作は取り消せません。
+            </p>
+            <div class="modal-buttons">
+                <button type="button" class="modal-btn-cancel" onclick="closeDeleteModal()">キャンセル</button>
+                <button type="submit" class="modal-btn-delete">削除</button>
+            </div>
+        </form>
+    </dialog>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 </body>
 </html>

@@ -1,0 +1,260 @@
+/* custom.css - Atelier Kyo Manager カスタムスタイル */
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans JP', sans-serif;
+  margin: 16px;
+  color: #222;
+  background: #fdfdfd;
+}
+h1 {
+  font-size: 20px;
+  margin: 0 0 12px;
+}
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(480px, 1fr));
+  gap: 16px;
+}
+.card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+}
+.title {
+  font-size: 14px;
+  margin: 0 0 8px;
+  font-weight: 600;
+}
+.alerts {
+  color: #b00;
+  font-size: 12px;
+  margin: 6px 0 0;
+  padding-left: 18px;
+}
+.row {
+  margin-bottom: 16px;
+}
+.small {
+  color: #666;
+  font-size: 12px;
+}
+.profit-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.profit-high {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.profit-mid {
+  background: #fff3e0;
+  color: #e65100;
+}
+.profit-low {
+  background: #ffebee;
+  color: #c62828;
+}
+.profit-caution {
+  background: #fff8e1;
+  color: #f57f17;
+}
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+  font-size: 11px;
+  color: #555;
+  margin-top: 8px;
+}
+.meta-item {
+  display: flex;
+  justify-content: space-between;
+}
+.risk-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+.risk-low {
+  background: #e8f5e9;
+  color: #2e7d32;
+}
+.risk-medium {
+  background: #fff3e0;
+  color: #e65100;
+}
+.risk-high {
+  background: #ffebee;
+  color: #c62828;
+}
+.trend-rising {
+  color: #d32f2f;
+}
+.trend-falling {
+  color: #1976d2;
+}
+.trend-stable {
+  color: #666;
+}
+.controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.btn {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+}
+.btn-primary {
+  background: #1976d2;
+  color: #fff;
+}
+.btn-secondary {
+  background: #eee;
+  color: #333;
+}
+.btn:hover {
+  opacity: 0.85;
+}
+.profit-summary {
+  background: #f5f5f5;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+.profit-summary h2 {
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+}
+.summary-item {
+  background: #fff;
+  border-radius: 4px;
+  padding: 8px;
+}
+.summary-label {
+  font-size: 11px;
+  color: #666;
+}
+.summary-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1976d2;
+}
+.summary-value.positive {
+  color: #2e7d32;
+}
+.summary-value.negative {
+  color: #c62828;
+}
+/* Loading indicator */
+.loading {
+  text-align: center;
+  padding: 40px;
+  color: #666;
+}
+.spinner {
+  display: inline-block;
+  width: 30px;
+  height: 30px;
+  border: 3px solid #ddd;
+  border-top-color: #1976d2;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  vertical-align: middle;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+/* Error state */
+.error-state {
+  background: #ffebee;
+  border: 1px solid #c62828;
+  border-radius: 8px;
+  padding: 16px;
+  color: #c62828;
+  text-align: center;
+}
+/* Delete confirmation modal */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal-box {
+  background: #fff;
+  border-radius: 8px;
+  padding: 24px;
+  max-width: 400px;
+  width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+.modal-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 12px;
+}
+.modal-buttons {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+.modal-btn-cancel {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.modal-btn-cancel:hover {
+  background: #f5f5f5;
+}
+.modal-btn-delete {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: none;
+  background: #c62828;
+  color: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.modal-btn-delete:hover {
+  background: #a52020;
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+  body {
+    background: #1a1a1a;
+    color: #eee;
+  }
+  .card {
+    background: #2d2d2d;
+    border-color: #444;
+  }
+  .summary-item {
+    background: #2d2d2d;
+  }
+  .profit-summary {
+    background: #2d2d2d;
+  }
+}
