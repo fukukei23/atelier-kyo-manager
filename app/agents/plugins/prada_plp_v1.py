@@ -8,37 +8,17 @@ import re
 import json
 from typing import List, Dict, Set
 from urllib.parse import urlparse
-from .base import StrategyPlugin
+from .base import StrategyPlugin, _apply_stealth
 
 logger = logging.getLogger(__name__)
 
-# Stealth設定（Bot回避用）
-_STEALTH_CONFIG = {
-    "navigator_webdriver": True,
-    "navigator_vendor": True,
-    "navigator_platform": True,
-    "navigator_languages": True,
-    "navigator_plugins": True,
-    "navigator_hardware_concurrency": True,
-    "chrome_load_times": True,
-    "chrome_csi": True,
-    "iframe_content_window": True,
-    "media_codecs": True,
-    "hairline": True,
-    "error_prototype": True,
-    "webgl_vendor": True,
-    "sec_ch_ua": True,
-}
-
-
-def _apply_stealth(page_or_context) -> None:
-    """Stealth設定を適用"""
-    try:
-        from playwright_stealth.stealth import Stealth
-        stealth = Stealth(**_STEALTH_CONFIG)
-        stealth.apply_stealth_async(page_or_context)
-    except ImportError:
-        logger.warning("[PRADA] playwright-stealth not installed")
+# マジックナンバー定数
+DEFAULT_STEALTH_TIMEOUT_MS = 2500
+MAX_SCROLL_ITERATIONS = 25
+SCROLL_BASE_DISTANCE = 300
+SCROLL_INCREMENT_PER_ITERATION = 25
+MAX_LOAD_MORE_CLICKS = 8
+LOAD_MORE_WAIT_MS = 300
 
 
 class PradaPLPStrategy(StrategyPlugin):
@@ -107,7 +87,7 @@ class PradaPLPStrategy(StrategyPlugin):
                 logger.warning(f"[PRADA] Stealth apply failed: {e}")
 
         await self.dismiss_consent(page)
-        await page.wait_for_timeout(2500)
+        await page.wait_for_timeout(DEFAULT_STEALTH_TIMEOUT_MS)
 
     async def materialize(self, page, ctx) -> bool:
         """
@@ -123,8 +103,8 @@ class PradaPLPStrategy(StrategyPlugin):
             logger.info("[PRADA] Step 1: Progressive scrolling...")
             no_change_count = 0
 
-            for scroll_idx in range(25):
-                await page.evaluate(f"window.scrollBy(0, {300 + scroll_idx * 25})")
+            for scroll_idx in range(MAX_SCROLL_ITERATIONS):
+                await page.evaluate(f"window.scrollBy(0, {SCROLL_BASE_DISTANCE + scroll_idx * SCROLL_INCREMENT_PER_ITERATION})")
                 await page.wait_for_timeout(400)
 
                 current_urls = await self._get_product_urls(page)
@@ -154,14 +134,14 @@ class PradaPLPStrategy(StrategyPlugin):
                 "button[class*='show-more']",
             ]
 
-            for _ in range(8):
+            for _ in range(MAX_LOAD_MORE_CLICKS):
                 clicked = False
                 for sel in load_more_selectors:
                     try:
                         btn = page.locator(sel)
                         if await btn.count() > 0 and await btn.is_visible():
                             await btn.scroll_into_view_if_needed()
-                            await page.wait_for_timeout(300)
+                            await page.wait_for_timeout(LOAD_MORE_WAIT_MS)
                             await btn.click()
                             await page.wait_for_timeout(1500)
                             logger.info("[PRADA] Load More clicked")

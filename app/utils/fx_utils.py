@@ -18,11 +18,14 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 import json
+import logging
 import os
 import xml.etree.ElementTree as ET
 import urllib.request
 from datetime import datetime, timedelta
 from typing import Dict, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 # --- 共通 ---
 def _now_iso() -> str:
@@ -40,7 +43,8 @@ def _load_json(path: str) -> Optional[dict]:
     try:
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except Exception:
+    except Exception as e:
+        logger.warning(f"[FX] Failed to load JSON from {path}: {e}")
         return None
 
 def _save_json(path: str, payload: dict) -> None:
@@ -48,8 +52,8 @@ def _save_json(path: str, payload: dict) -> None:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w", encoding="utf-8") as f:
             json.dump(payload, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[FX] Failed to save JSON to {path}: {e}")
 
 # --- 手動レート "USD=155,EUR=170,..." を dict へ ---
 def parse_fx_rates_str(rates_str: str) -> Dict[str, float]:
@@ -81,8 +85,8 @@ def _ecb_fetch_xml(timeout_sec: int = 10) -> Tuple[str, str]:
             if "Cube" in node.tag and node.attrib.get("time"):
                 asof = node.attrib["time"]
                 break
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[FX] Failed to parse ECB XML timestamp: {e}")
     return asof, xml_text
 
 def _ecb_xml_to_eur_table(xml_text: str) -> Dict[str, float]:
@@ -94,8 +98,8 @@ def _ecb_xml_to_eur_table(xml_text: str) -> Dict[str, float]:
                 ccy = node.attrib["currency"].upper()
                 rate = float(node.attrib["rate"])
                 table[ccy] = rate
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning(f"[FX] Failed to parse ECB XML rates: {e}")
     return table
 
 def build_jpy_table_from_eur(eur_table: Dict[str, float]) -> Dict[str, float]:
@@ -148,8 +152,8 @@ def get_fx_table_jpy(
                         if tbl:
                             meta.update({"source": "ecb(cache)", "asof": asof_str, "cache": True})
                             return {k.upper(): float(v) for k, v in tbl.items()}, meta
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"[FX] Failed to parse cache: {e}")
         # live
         try:
             _asof, xml_text = _ecb_fetch_xml()
@@ -160,7 +164,8 @@ def get_fx_table_jpy(
                 _save_json(cache_file, payload)
                 meta.update({"source": "ecb(live)", "asof": payload["asof"], "cache": False})
                 return jpy_table, meta
-        except Exception:
+        except Exception as e:
+            logger.warning(f"[FX] Live ECB fetch failed: {e}")
             # fallback to old cache
             if cached and cached.get("table"):
                 meta.update({"source": "ecb(cache-fallback)", "asof": cached.get("asof"), "cache": True})

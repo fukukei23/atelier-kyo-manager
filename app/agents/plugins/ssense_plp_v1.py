@@ -1,16 +1,33 @@
 # -*- coding: utf-8 -*-
 # File: app/agents/plugins/ssense_plp_v1.py
-# Version: 0.3.1
+# Version: 0.4.0
 # Purpose: SSENSE サイト用スクレイピング戦略プラグイン
 
 import logging
 import re
 import json
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Set, Optional
 from urllib.parse import urljoin, urlparse
-from .base import StrategyPlugin
+from .base import StrategyPlugin, _apply_stealth
 
 logger = logging.getLogger(__name__)
+
+# Bot検出リスクが高いページをスキップするパターン
+_SKIP_PATTERNS = [
+    "/checkout/",
+    "/cart/",
+    "/account/",
+    "/login/",
+    "/search?q=",
+]
+
+# 商品候補になるパス
+_PRODUCT_PATTERNS = [
+    "/product/",
+    "/p/",
+    "/p-",
+    "/products/",
+]
 
 
 class SSENSEPLPStrategy(StrategyPlugin):
@@ -21,7 +38,11 @@ class SSENSEPLPStrategy(StrategyPlugin):
     - Cookie同意バナー (OneTrust)
     - ロケールトラップ回避
     - 遅延読み込み対応（段階的スクロール + Load Moreボタン）
-    - Cloudflare Bot検出克服（stealth設定）
+    - Stealthモード対応（Bot検出回避）
+    - JSON-LD製品抽出
+
+    注意: SSENSEは高度なBot検出を使用しています。
+    完全な回避にはプロキシ/IP回転が必要な場合があります。
     """
     site = "SSENSE"
     _DEFAULT_LOCALE = "en-US"
@@ -34,9 +55,18 @@ class SSENSEPLPStrategy(StrategyPlugin):
         "article[class*='product']",
     )
 
+    # Stealth適用済みフラグ
+    _stealth_applied: bool = False
+
     def before_navigate(self, url: str, ctx) -> str:
         """URLを補正してlocaleトラップを回避"""
         url = self.strip_fragment(url)
+
+        # リスクページパスはPLPに強制リダイレクト
+        for skip in _SKIP_PATTERNS:
+            if skip in url:
+                logger.info(f"[SSENSE] Risky path detected ({skip}), redirecting to PLP")
+                return self._HARD_PLP_URL
 
         if re.search(r'/en-(us|gb|de|fr|it|es)/', url, re.IGNORECASE):
             if '/en-us/' not in url.lower():
@@ -52,9 +82,18 @@ class SSENSEPLPStrategy(StrategyPlugin):
         return url
 
     async def after_navigate(self, page, ctx) -> None:
-        """Cookieバナー処理とページ安定待機"""
+        """Cookieバナー処理とStealth適用"""
+        # Stealthを初めて適用
+        if not SSENSEPLPStrategy._stealth_applied:
+            try:
+                _apply_stealth(page)
+                SSENSEPLPStrategy._stealth_applied = True
+                logger.info("[SSENSE] Stealth mode applied")
+            except Exception as e:
+                logger.warning(f"[SSENSE] Stealth apply failed: {e}")
+
         await self.dismiss_consent(page)
-        await page.wait_for_timeout(3000)
+        await page.wait_for_timeout(2000)
 
     async def materialize(self, page, ctx) -> bool:
         """
@@ -65,20 +104,15 @@ class SSENSEPLPStrategy(StrategyPlugin):
             await page.evaluate("window.scrollTo(0, 0)")
             await page.wait_for_timeout(1000)
 
-            all_product_urls = set()
+            all_product_urls: Set[str] = set()
 
-            # 初期商品取得
-            initial_urls = await self._get_product_urls(page)
-            all_product_urls.update(initial_urls)
-            logger.info(f"[SSENSE] Initial products: {len(all_product_urls)}")
-
-            # === 段階的スクロール ===
-            logger.info("[SSENSE] Progressive scrolling...")
+            # === 手法1: 段階的スクロール ===
+            logger.info("[SSENSE] Step 1: Progressive scrolling...")
             no_change_count = 0
 
             for scroll_idx in range(25):
                 await page.evaluate(f"window.scrollBy(0, {300 + scroll_idx * 20})")
-                await page.wait_for_timeout(500)
+                await page.wait_for_timeout(400)
 
                 current_urls = await self._get_product_urls(page)
                 new_found = current_urls - all_product_urls
@@ -94,8 +128,8 @@ class SSENSEPLPStrategy(StrategyPlugin):
                     logger.info("[SSENSE] No new products after 3 scrolls")
                     break
 
-            # === Load Moreボタン ===
-            logger.info("[SSENSE] Clicking Load More...")
+            # === 手法2: Load Moreボタン ===
+            logger.info("[SSENSE] Step 2: Clicking Load More...")
             load_more_selectors = [
                 "button:has-text('Load More')",
                 "button:has-text('LOAD MORE')",
@@ -113,7 +147,7 @@ class SSENSEPLPStrategy(StrategyPlugin):
                             await btn.scroll_into_view_if_needed()
                             await page.wait_for_timeout(300)
                             await btn.click()
-                            await page.wait_for_timeout(1500)
+                            await page.wait_for_timeout(1200)
                             logger.info("[SSENSE] Load More clicked")
 
                             current_urls = await self._get_product_urls(page)
@@ -128,8 +162,8 @@ class SSENSEPLPStrategy(StrategyPlugin):
                 if not clicked:
                     break
 
-            # === JSON-LD製品 ===
-            logger.info("[SSENSE] Extracting JSON-LD...")
+            # === 手法3: JSON-LD製品 ===
+            logger.info("[SSENSE] Step 3: Extracting JSON-LD...")
             jsonld_products = await self._extract_jsonld_products(page)
             if jsonld_products:
                 for p in jsonld_products:
@@ -152,9 +186,9 @@ class SSENSEPLPStrategy(StrategyPlugin):
             logger.warning(f"[SSENSE] Materialize error: {e}")
             return False
 
-    async def _get_product_urls(self, page) -> set:
+    async def _get_product_urls(self, page) -> Set[str]:
         """ページから商品URLを全て取得"""
-        urls = set()
+        urls: Set[str] = set()
         try:
             links = await page.locator("a[href*='/product/']").all()
             for link in links:
@@ -172,7 +206,7 @@ class SSENSEPLPStrategy(StrategyPlugin):
 
     async def _extract_jsonld_products(self, page) -> List[Dict]:
         """JSON-LDから製品情報を抽出"""
-        products = []
+        products: List[Dict] = []
         try:
             scripts = await page.query_selector_all('script[type="application/ld+json"]')
             for script in scripts:
