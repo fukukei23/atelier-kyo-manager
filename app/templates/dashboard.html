@@ -5,65 +5,24 @@
   <title>{{ brand }} 価格ダッシュボード (直近 {{ days }} 日)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <style>
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans JP',sans-serif;margin:16px;color:#222;background:#fdfdfd}
-    h1{font-size:20px;margin:0 0 12px}
-    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(480px,1fr));gap:16px}
-    .card{border:1px solid #ddd;border-radius:8px;padding:12px}
-    .title{font-size:14px;margin:0 0 8px;font-weight:600}
-    .alerts{color:#b00;font-size:12px;margin:6px 0 0;padding-left:18px}
-    .row{margin-bottom:16px}
-    .small{color:#666;font-size:12px}
-    .profit-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600}
-    .profit-high{background:#e8f5e9;color:#2e7d32}
-    .profit-mid{background:#fff3e0;color:#e65100}
-    .profit-low{background:#ffebee;color:#c62828}
-    .profit-caution{background:#fff8e1;color:#f57f17}
-    .meta-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;font-size:11px;color:#555;margin-top:8px}
-    .meta-item{display:flex;justify-content:space-between}
-    .risk-badge{display:inline-block;padding:1px 6px;border-radius:3px;font-size:10px}
-    .risk-low{background:#e8f5e9;color:#2e7d32}
-    .risk-medium{background:#fff3e0;color:#e65100}
-    .risk-high{background:#ffebee;color:#c62828}
-    .trend-rising{color:#d32f2f}
-    .trend-falling{color:#1976d2}
-    .trend-stable{color:#666}
-    .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-    .btn{padding:4px 12px;border-radius:4px;border:none;cursor:pointer;font-size:12px}
-    .btn-primary{background:#1976d2;color:#fff}
-    .btn-secondary{background:#eee;color:#333}
-    .btn:hover{opacity:0.85}
-    .profit-summary{background:#f5f5f5;border-radius:8px;padding:12px;margin-bottom:16px}
-    .profit-summary h2{font-size:14px;margin:0 0 8px}
-    .summary-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
-    .summary-item{background:#fff;border-radius:4px;padding:8px}
-    .summary-label{font-size:11px;color:#666}
-    .summary-value{font-size:18px;font-weight:600;color:#1976d2}
-    .summary-value.positive{color:#2e7d32}
-    .summary-value.negative{color:#c62828}
-    /* Loading indicator */
-    .loading{text-align:center;padding:40px;color:#666}
-    .spinner{display:inline-block;width:30px;height:30px;border:3px solid #ddd;border-top-color:#1976d2;border-radius:50%;animation:spin 1s linear infinite;vertical-align:middle}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    /* Error state */
-    .error-state{background:#ffebee;border:1px solid #c62828;border-radius:8px;padding:16px;color:#c62828;text-align:center}
-    /* Dark mode support */
-    @media(prefers-color-scheme:dark){body{background:#1a1a1a;color:#eee}.card{background:#2d2d2d;border-color:#444}.summary-item{background:#2d2d2d}.profit-summary{background:#2d2d2d}}
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
 </head>
 
-<body>
-<h1>{{ brand }} 価格ダッシュボード <span class="small">(直近 {{ days }} 日)</span></h1>
+<body class="dark:bg-gray-900 dark:text-gray-100">
+<h1 class="text-xl font-bold text-gray-800 dark:text-white mb-4">{{ brand }} 価格ダッシュボード <span class="small text-gray-500 dark:text-gray-400">(直近 {{ days }} 日)</span></h1>
 
-<div class="row">
-  <div class="controls">
-    <form method="get" action="/brand/{{ brand }}" style="display:flex;gap:8px;align-items:center">
-      日数: <input type="number" name="days" value="{{ days }}" min="7" max="365" style="width:70px;padding:4px">
-      仕入れ価格: <input type="number" name="purchase_price" placeholder="例: 50000" style="width:90px;padding:4px">
+<!-- コントロール bar -->
+<div class="row mb-4">
+  <div class="controls flex flex-wrap gap-3 items-center p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+    <form method="get" action="/brand/{{ brand }}" class="flex flex-wrap gap-2 items-center">
+      <label class="text-sm text-gray-700 dark:text-gray-300">日数</label>
+      <input type="number" name="days" value="{{ days }}" min="7" max="365" class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 w-16 text-sm dark:bg-gray-700 dark:text-white">
+      <label class="text-sm text-gray-700 dark:text-gray-300 ml-2">仕入れ価格</label>
+      <input type="number" name="purchase_price" placeholder="例: 50000" class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 w-24 text-sm dark:bg-gray-700 dark:text-white">
       <button type="submit" class="btn btn-primary">更新</button>
     </form>
-    <button class="btn btn-secondary" onclick="exportData('csv')">📥 CSV出力</button>
-    <button class="btn btn-secondary" onclick="exportData('json')">📥 JSON出力</button>
+    <button class="btn btn-secondary" onclick="exportData('csv')">CSV出力</button>
+    <button class="btn btn-secondary" onclick="exportData('json')">JSON出力</button>
   </div>
 </div>
 
@@ -126,26 +85,29 @@ async function load() {
 }
 
 function renderCards(series) {
-  for (const s of series) {
+  for (let i = 0; i < series.length; i++) {
+    const s = series[i];
     const card = document.createElement('div');
-    card.className = 'card';
+    card.className = 'card dark:bg-gray-800 dark:border-gray-700';
 
     const profit = s.profitability || {};
     const profitClass = getProfitClass(profit.current_profit_rate);
     const trendIcon = getTrendIcon(profit.trend_direction);
+    const recBadge = getRecommendationBadge(profit.recommendation);
 
     const alertsHtml = s.alerts && s.alerts.length
-      ? `<ul class="alerts">${s.alerts.map(a => `<li>${a}</li>`).join('')}</ul>`
+      ? `<ul class="alerts dark:text-red-400">${s.alerts.map(a => `<li>${a}</li>`).join('')}</ul>`
       : '';
 
     card.innerHTML = `
-      <div class="title">
-        <a href="${s.url}" target="_blank" rel="noopener">${s.name || s.url}</a>
+      <div class="title dark:text-gray-100">
+        <a href="${s.url}" target="_blank" rel="noopener" class="text-blue-600 dark:text-blue-400 hover:underline">${s.name || s.url}</a>
+        ${recBadge}
         ${profit.current_profit_rate !== null && profit.current_profit_rate !== undefined
           ? `<span class="profit-badge ${profitClass}">${profit.current_profit_rate >= 0 ? '+' : ''}${profit.current_profit_rate}%</span>`
           : ''}
       </div>
-      <canvas id="${'c_' + Math.random().toString(36).slice(2)}" height="160"></canvas>
+      <canvas id="chart-${s.url ? s.url.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30) : 'product_' + i}" height="160"></canvas>
       ${alertsHtml}
       ${renderProfitabilityMeta(profit)}
     `;
@@ -155,6 +117,17 @@ function renderCards(series) {
     renderChart(canvasId, s);
   }
   summaryDiv.style.display = 'block';
+}
+
+function getRecommendationBadge(rec) {
+  if (!rec) return '';
+  if (rec.includes('上昇') || rec.includes('仕入れ的最佳')) {
+    return '<span class="inline-block px-2 py-0.5 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 ml-2">买入シグナル</span>';
+  }
+  if (rec.includes('下跌') || rec.includes('销售的最佳')) {
+    return '<span class="inline-block px-2 py-0.5 text-xs rounded bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300 ml-2">卖出シグナル</span>';
+  }
+  return '<span class="inline-block px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 ml-2">監視継続</span>';
 }
 
 function getProfitClass(rate) {
@@ -177,23 +150,24 @@ function renderProfitabilityMeta(profit) {
   const items = [];
 
   if (profit.current_profit !== null && profit.current_profit !== undefined) {
-    items.push(`<div class="meta-item"><span>推定利益</span><span>¥${profit.current_profit.toLocaleString()}</span></div>`);
+    items.push(`<div class="meta-item"><span class="text-gray-500 dark:text-gray-400">推定利益</span><span class="font-medium ${profit.current_profit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">¥${profit.current_profit.toLocaleString()}</span></div>`);
   }
   if (profit.best_price_date) {
-    items.push(`<div class="meta-item"><span>最安値</span><span>¥${profit.best_price?.toLocaleString()} (${formatDate(profit.best_price_date)})</span></div>`);
+    items.push(`<div class="meta-item"><span class="text-gray-500 dark:text-gray-400">最安値</span><span class="text-gray-800 dark:text-gray-200">¥${profit.best_price?.toLocaleString()} (${formatDate(profit.best_price_date)})</span></div>`);
   }
   if (profit.price_volatility !== null && profit.price_volatility !== undefined) {
-    items.push(`<div class="meta-item"><span>変動係数</span><span>${profit.price_volatility}%</span></div>`);
+    const volClass = profit.price_volatility > 20 ? 'text-red-600' : profit.price_volatility > 10 ? 'text-amber-600' : 'text-green-600';
+    items.push(`<div class="meta-item"><span class="text-gray-500 dark:text-gray-400">変動係数</span><span class="${volClass} dark:text-${volClass.replace('text-', 'gray-')}">${profit.price_volatility}%</span></div>`);
   }
   if (profit.trend_direction) {
     const icon = getTrendIcon(profit.trend_direction);
-    items.push(`<div class="meta-item"><span>トレンド</span><span class="trend-${profit.trend_direction}">${icon} ${profit.trend_direction}</span></div>`);
+    items.push(`<div class="meta-item"><span class="text-gray-500 dark:text-gray-400">トレンド</span><span class="trend-${profit.trend_direction} dark:text-${profit.trend_direction === 'rising' ? 'red-400' : profit.trend_direction === 'falling' ? 'blue-400' : 'gray-400'}">${icon} ${profit.trend_direction}</span></div>`);
   }
   if (profit.recommendation) {
-    items.push(`<div class="meta-item" style="grid-column:1/-1"><span>💡 推奨</span><span>${profit.recommendation}</span></div>`);
+    items.push(`<div class="meta-item" style="grid-column:1/-1"><span class="text-gray-500 dark:text-gray-400">💡 推奨</span><span class="text-sm text-gray-700 dark:text-gray-200">${profit.recommendation}</span></div>`);
   }
 
-  return items.length ? `<div class="meta-grid">${items.join('')}</div>` : '';
+  return items.length ? `<div class="meta-grid dark:bg-gray-700/50 dark:rounded">${items.join('')}</div>` : '';
 }
 
 function updateSummary(series) {
@@ -205,21 +179,21 @@ function updateSummary(series) {
   const totalEstimatedProfit = series.reduce((sum, s) => sum + (s.profitability?.current_profit || 0), 0);
 
   grid.innerHTML = `
-    <div class="summary-item">
-      <div class="summary-label">SKU数</div>
-      <div class="summary-value">${total}</div>
+    <div class="summary-item dark:bg-gray-800 dark:border-gray-700">
+      <div class="summary-label dark:text-gray-400">SKU数</div>
+      <div class="summary-value dark:text-white">${total}</div>
     </div>
-    <div class="summary-item">
-      <div class="summary-label">推奨SKU (利益率10%+)</div>
-      <div class="summary-value positive">${profitable}/${total}</div>
+    <div class="summary-item dark:bg-gray-800 dark:border-gray-700">
+      <div class="summary-label dark:text-gray-400">推奨SKU (利益率10%+)</div>
+      <div class="summary-value positive dark:text-green-400">${profitable}/${total}</div>
     </div>
-    <div class="summary-item">
-      <div class="summary-label">平均利益率</div>
-      <div class="summary-value ${avgProfitRate >= 5 ? 'positive' : 'negative'}">${avgProfitRate >= 0 ? '+' : ''}${avgProfitRate.toFixed(1)}%</div>
+    <div class="summary-item dark:bg-gray-800 dark:border-gray-700">
+      <div class="summary-label dark:text-gray-400">平均利益率</div>
+      <div class="summary-value ${avgProfitRate >= 5 ? 'positive' : 'negative'} dark:text-${avgProfitRate >= 5 ? 'green-400' : 'red-400'}">${avgProfitRate >= 0 ? '+' : ''}${avgProfitRate.toFixed(1)}%</div>
     </div>
-    <div class="summary-item">
-      <div class="summary-label">推定総利益</div>
-      <div class="summary-value ${totalEstimatedProfit >= 0 ? 'positive' : 'negative'}">¥${totalEstimatedProfit.toLocaleString()}</div>
+    <div class="summary-item dark:bg-gray-800 dark:border-gray-700">
+      <div class="summary-label dark:text-gray-400">推定総利益</div>
+      <div class="summary-value ${totalEstimatedProfit >= 0 ? 'positive' : 'negative'} dark:text-${totalEstimatedProfit >= 0 ? 'green-400' : 'red-400'}">¥${totalEstimatedProfit.toLocaleString()}</div>
     </div>
   `;
 }
@@ -227,23 +201,44 @@ function updateSummary(series) {
 function renderChart(canvasId, s) {
   const ctx = document.getElementById(canvasId);
   if (!ctx) return;
+  const isDark = document.documentElement.classList.contains('dark');
+  const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+  const tickColor = isDark ? '#9ca3af' : '#6b7280';
+
+  // 仕入れ価格から損益分岐点ラインを計算
+  const datasets = [
+    { label: '価格', data: s.prices, borderColor: '#1976d2', backgroundColor: 'rgba(25,118,210,0.08)', spanGaps: true, tension: 0.2 },
+    { label: 'EMA7', data: s.ema7, borderColor: '#2e7d32', borderDash: [3,3], spanGaps: true, tension: 0.2, pointRadius: 0 },
+    { label: 'EMA28', data: s.ema28, borderColor: '#ef6c00', borderDash: [6,3], spanGaps: true, tension: 0.2, pointRadius: 0 },
+  ];
+
+  // 仕入れ価格があれば損益分岐点ラインを追加
+  const urlParams = new URLSearchParams(window.location.search);
+  const purchasePrice = parseFloat(urlParams.get('purchase_price'));
+  if (purchasePrice > 0 && s.prices.length > 0) {
+    const breakeven = purchasePrice * 1.178; // 関税10%+送料+手数料8%概算
+    datasets.push({
+      label: '損益分岐点',
+      data: Array(s.prices.length).fill(breakeven),
+      borderColor: '#dc2626',
+      borderDash: [8, 4],
+      spanGaps: true,
+      pointRadius: 0,
+      borderWidth: 1.5,
+      fill: false,
+    });
+  }
+
   new Chart(ctx.getContext('2d'), {
     type: 'line',
-    data: {
-      labels: s.labels,
-      datasets: [
-        { label: '価格', data: s.prices, borderColor: '#1976d2', backgroundColor: 'rgba(25,118,210,0.08)', spanGaps: true, tension: 0.2 },
-        { label: 'EMA7', data: s.ema7, borderColor: '#2e7d32', borderDash: [3,3], spanGaps: true, tension: 0.2, pointRadius: 0 },
-        { label: 'EMA28', data: s.ema28, borderColor: '#ef6c00', borderDash: [6,3], spanGaps: true, tension: 0.2, pointRadius: 0 },
-      ]
-    },
+    data: { labels: s.labels, datasets: datasets },
     options: {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
-      plugins: { title: { display: false }, legend: { position: 'bottom' } },
+      plugins: { title: { display: false }, legend: { position: 'bottom', labels: { color: tickColor } } },
       scales: {
-        x: { ticks: { maxTicksLimit: 7 }, title: { display: false } },
-        y: { beginAtZero: false, ticks: { callback: v => '¥' + v.toLocaleString() } }
+        x: { ticks: { maxTicksLimit: 7, color: tickColor }, grid: { color: gridColor }, title: { display: false } },
+        y: { beginAtZero: false, ticks: { callback: v => '¥' + v.toLocaleString(), color: tickColor }, grid: { color: gridColor } }
       }
     }
   });

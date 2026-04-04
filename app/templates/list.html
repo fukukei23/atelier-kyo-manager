@@ -1,51 +1,117 @@
 <!--
 ファイル名: list.html
 フォルダ: app/templates/
-用途: 登録データ一覧を表示する（シンプル版）
-注意: 不要な form.brand を削除済み
-日付: 2025-08-24
+用途: 登録データ一覧を表示する（検索・フィルタ・ソート対応版）
+日付: 2026-04-04
 -->
 
 {% extends "base.html" %}
 {% block content %}
-<h1 class="text-3xl font-bold mb-6 text-gray-800">登録データ一覧</h1>
+<h1 class="text-3xl font-bold mb-6 text-gray-800 dark:text-white">登録データ一覧</h1>
 
-<div class="bg-white p-6 rounded-lg shadow-md">
+<!-- 検索・フィルタバー -->
+<div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow-md mb-6">
+  <form method="get" action="{{ url_for('main.product_list') }}" class="flex flex-wrap gap-3 items-end">
+    <div class="flex-1 min-w-[200px]">
+      <label for="search-q" class="block text-sm text-gray-600 dark:text-gray-400 mb-1">キーワード検索</label>
+      <input id="search-q" type="text" name="q" value="{{ current_q }}" placeholder="商品名・ブランド名" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+    </div>
+    <div class="min-w-[150px]">
+      <label for="filter-brand" class="block text-sm text-gray-600 dark:text-gray-400 mb-1">ブランド</label>
+      <select id="filter-brand" name="brand" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500">
+        <option value="">すべて</option>
+        {% for b in brands %}
+        <option value="{{ b }}" {{ 'selected' if b == current_brand }}>{{ b }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="min-w-[150px]">
+      <label for="sort-select" class="block text-sm text-gray-600 dark:text-gray-400 mb-1">並び順</label>
+      <select id="sort-select" name="sort" class="w-full border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500">
+        <option value="id_desc" {{ 'selected' if current_sort == 'id_desc' }}>新着順</option>
+        <option value="id_asc" {{ 'selected' if current_sort == 'id_asc' }}>古い順</option>
+        <option value="name_asc" {{ 'selected' if current_sort == 'name_asc' }}>名前順</option>
+        <option value="profit_desc" {{ 'selected' if current_sort == 'profit_desc' }}>販売価格 高い順</option>
+        <option value="profit_asc" {{ 'selected' if current_sort == 'profit_asc' }}>販売価格 低い順</option>
+        <option value="price_desc" {{ 'selected' if current_sort == 'price_desc' }}>仕入価格 高い順</option>
+        <option value="price_asc" {{ 'selected' if current_sort == 'price_asc' }}>仕入価格 低い順</option>
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition text-sm">検索</button>
+      <a href="{{ url_for('main.product_list') }}" class="px-4 py-2 bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded hover:bg-gray-300 transition text-sm">クリア</a>
+    </div>
+  </form>
+  {% if current_q or current_brand %}
+  <div class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+    フィルタ:
+    {% if current_q %}<span class="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-2 py-0.5 rounded mr-1">キーワード: {{ current_q }}</span>{% endif %}
+    {% if current_brand %}<span class="bg-green-100 dark:bg-green-900/50 text-green-700 dark:text-green-300 px-2 py-0.5 rounded mr-1">ブランド: {{ current_brand }}</span>{% endif %}
+    <span class="text-gray-400">{{ products|length }}件</span>
+  </div>
+  {% endif %}
+</div>
+
+<div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
   {% if products %}
-  <div class="overflow-x-auto">
-    <table class="min-w-full divide-y divide-gray-200 border border-gray-300 rounded-lg">
-      <thead class="bg-gray-100">
+  <!-- デスクトップ: テーブル -->
+  <div class="hidden md:block overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg">
+      <thead class="bg-gray-100 dark:bg-gray-700">
         <tr>
-          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">ID</th>
-          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">商品名</th>
-          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">ブランド</th>
-          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">仕入価格</th>
-          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">販売価格</th>
-          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700">利益</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300">ID</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300">商品名</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300">ブランド</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300">仕入価格</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300">販売価格</th>
+          <th class="px-4 py-2 text-left text-xs font-bold text-gray-700 dark:text-gray-300">利益</th>
         </tr>
       </thead>
-      <tbody class="bg-white divide-y divide-gray-200">
+      <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
         {% for product in products %}
-        <tr class="hover:bg-gray-50">
-          <td class="px-4 py-2 text-sm text-gray-900">{{ product.id }}</td>
-          <td class="px-4 py-2 text-sm text-blue-700 underline">
+        <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+          <td class="px-4 py-2 text-sm text-gray-900 dark:text-gray-100">{{ product.id }}</td>
+          <td class="px-4 py-2 text-sm text-blue-700 dark:text-blue-400 underline">
             <a href="{{ product.supplier_url }}" target="_blank">{{ product.name }}</a>
           </td>
-          <td class="px-4 py-2 text-sm text-gray-700">{{ product.brand or '' }}</td>
-          <td class="px-4 py-2 text-sm text-gray-700">¥{{ (product.purchase_price or 0) | int }}</td>
-          <td class="px-4 py-2 text-sm text-gray-700">¥{{ (product.selling_price or 0) | int }}</td>
-          <td class="px-4 py-2 text-sm text-gray-700">¥{{ product.calculate_profit() | int }}</td>
+          <td class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">{{ product.brand or '' }}</td>
+          <td class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">&yen;{{ (product.purchase_price or 0) | int }}</td>
+          <td class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">&yen;{{ (product.selling_price or 0) | int }}</td>
+          <td class="px-4 py-2 text-sm {% if product.calculate_profit() > 0 %}text-green-600 dark:text-green-400{% else %}text-red-600 dark:text-red-400{% endif %}">&yen;{{ product.calculate_profit() | int }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+
+  <!-- モバイル: カード列表 -->
+  <div class="md:hidden space-y-4">
+    {% for product in products %}
+    <div class="border border-gray-200 dark:border-gray-600 rounded-lg p-4 hover:shadow-md transition">
+      <div class="flex justify-between items-start mb-2">
+        <span class="text-xs text-gray-500 dark:text-gray-400">ID: {{ product.id }}</span>
+        {% if product.brand %}
+        <span class="text-xs bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded">{{ product.brand }}</span>
+        {% endif %}
+      </div>
+      <p class="font-medium text-gray-900 dark:text-gray-100 mb-1">
+        <a href="{{ product.supplier_url }}" target="_blank" class="text-blue-700 dark:text-blue-400 underline">{{ product.name }}</a>
+      </p>
+      <div class="grid grid-cols-3 gap-2 mt-3 text-sm">
+        <div><span class="text-gray-500 dark:text-gray-400 block text-xs">仕入</span><span class="font-medium dark:text-gray-200">&yen;{{ (product.purchase_price or 0) | int }}</span></div>
+        <div><span class="text-gray-500 dark:text-gray-400 block text-xs">販売</span><span class="font-medium dark:text-gray-200">&yen;{{ (product.selling_price or 0) | int }}</span></div>
+        <div><span class="text-gray-500 dark:text-gray-400 block text-xs">利益</span><span class="font-medium {{ 'text-green-600 dark:text-green-400' if product.calculate_profit() > 0 else 'text-red-600 dark:text-red-400' }}">&yen;{{ product.calculate_profit() | int }}</span></div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
   {% else %}
-  <p class="text-gray-600">登録データはありません。</p>
+  <p class="text-gray-600 dark:text-gray-400">該当するデータはありません。</p>
   {% endif %}
 </div>
 
 <div class="mt-4">
-  <a href="{{ url_for('main.index') }}" class="text-blue-600 hover:underline">戻る</a>
+  <a href="{{ url_for('main.index') }}" class="text-blue-600 dark:text-blue-400 hover:underline">戻る</a>
 </div>
 {% endblock %}

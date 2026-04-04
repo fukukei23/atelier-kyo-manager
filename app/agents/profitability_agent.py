@@ -156,18 +156,35 @@ class ProfitabilityAgent:
 
     def _resolve_customs_rate(self, category: Optional[str], material: Optional[str]) -> float:
         """商品情報に基づき、関税率を決定する。"""
-        if material and any(m in material for m in ["レザー", "革", "革製品"]):
-            return 0.12  # 革製品: 12%
+        # 素材ベース判定（優先度高）
+        if material:
+            mat_lower = material.lower()
+            if any(m in mat_lower for m in ["レザー", "革", "革製品", "leather"]):
+                return 0.12  # 革製品: 12%
+            if any(m in mat_lower for m in ["シルク", "絹", "silk"]):
+                return 0.095  # 絹製品: 9.5%
+            if any(m in mat_lower for m in ["カシミヤ", "cashmere"]):
+                return 0.095  # カシミヤ: 9.5%
+            if any(m in mat_lower for m in ["ダウン", "feather", "down"]):
+                return 0.10  # 羽毛: 10%
+
         if category:
             cat_lower = category.lower()
-            if any(c in cat_lower for c in ["バッグ", "かばん", "鞄"]):
+            # バッグ・鞄（素材問わず）
+            if any(c in cat_lower for c in ["バッグ", "かばん", "鞄", "bag", "handbag"]):
                 return 0.11
-            if any(c in cat_lower for c in ["シューズ", "靴", "スニーカー"]):
+            # 靴・スニーカー
+            if any(c in cat_lower for c in ["シューズ", "靴", "スニーカー", "shoes", "sneaker"]):
                 return 0.11
-            if any(c in cat_lower for c in ["アパレル", "衣服", "コート", "ジャケット"]):
+            # 服飾全般
+            if any(c in cat_lower for c in ["アパレル", "衣服", "コート", "ジャケット", "apparel", "coat", "jacket", "t-shirt", "シャツ", "セーター"]):
                 return 0.127  # 服飾用: 12.7%
-            if any(c in cat_lower for c in ["ウォッチ", "時計", "宝飾", "アクセサリー"]):
+            # 時計・宝飾
+            if any(c in cat_lower for c in ["ウォッチ", "時計", "宝飾", "アクセサリー", "watch", "jewelry", "ring"]):
                 return 0.057  # 装飾用: 5.7%
+            # サングラス・メガネ
+            if any(c in cat_lower for c in ["サングラス", "メガネ", "sunglasses", "glasses"]):
+                return 0.057
         return 0.10  # デフォルト: 10%
 
     def _calculate_buyma_commission(self, price: float) -> float:
@@ -205,6 +222,12 @@ class ProfitabilityAgent:
         customs_duty = cost_before_customs * customs_rate
         total_cost = cost_before_customs + customs_duty
 
+        # 簡易税率: 課税価格が1万円以下なら簡易税率適用（2,000円免税）
+        simplified_tax_threshold = 10000
+        if cost_before_customs <= simplified_tax_threshold:
+            customs_duty = max(0, cost_before_customs * customs_rate - 2000)
+            total_cost = cost_before_customs + customs_duty
+
         # 消費税率 (深化の場合)
         consumption_tax = total_cost * 0.10
         total_cost_with_tax = total_cost + consumption_tax
@@ -218,6 +241,7 @@ class ProfitabilityAgent:
             "total_cost_jpy": int(round(total_cost)),
             "consumption_tax": int(round(consumption_tax)),
             "total_cost_with_tax": int(round(total_cost_with_tax)),
+            "simplified_tax_applied": cost_before_customs <= simplified_tax_threshold,
         }
 
     def _analyze_risk(

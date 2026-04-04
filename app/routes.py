@@ -94,10 +94,55 @@ def manage_products():
 
 @bp.get("/products")
 def product_list():
-    """登録データ一覧（シンプル）"""
-    products = Product.query.order_by(Product.id.desc()).all()
-    # シンプル版テンプレは templates/list.html を想定
-    return render_template("list.html", products=products)
+    """登録データ一覧（シンプル）+ 検索・フィルタ"""
+    query = Product.query
+
+    # キーワード検索（商品名・ブランド）
+    q = request.args.get("q", "").strip()
+    if q:
+        keyword = f"%{q}%"
+        query = query.filter(
+            db.or_(Product.name.ilike(keyword), Product.brand.ilike(keyword))
+        )
+
+    # ブランドフィルタ
+    brand_filter = request.args.get("brand", "").strip()
+    if brand_filter:
+        query = query.filter(Product.brand == brand_filter)
+
+    # ソート
+    sort = request.args.get("sort", "id_desc")
+    sort_map = {
+        "id_desc": Product.id.desc(),
+        "id_asc": Product.id.asc(),
+        "name_asc": Product.name.asc(),
+        "profit_desc": Product.selling_price.desc(),
+        "profit_asc": Product.selling_price.asc(),
+        "price_asc": Product.purchase_price.asc(),
+        "price_desc": Product.purchase_price.desc(),
+    }
+    query = query.order_by(sort_map.get(sort, Product.id.desc()))
+
+    products = query.all()
+
+    # ブランド一覧（フィルタ用ドロップダウン）
+    brands = [
+        row[0]
+        for row in db.session.query(Product.brand)
+        .filter(Product.brand.isnot(None), Product.brand != "")
+        .distinct()
+        .order_by(Product.brand)
+        .all()
+    ]
+
+    return render_template(
+        "list.html",
+        products=products,
+        brands=brands,
+        current_q=q,
+        current_brand=brand_filter,
+        current_sort=sort,
+    )
 
 @bp.route("/products/<int:product_id>/edit", methods=["GET", "POST"])
 def edit_product(product_id: int):
