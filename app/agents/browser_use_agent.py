@@ -26,26 +26,22 @@ import logging
 import os
 import re
 import time
-from dataclasses import dataclass, field
-from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Set, Callable, TypeVar, Awaitable
+from typing import Any, Dict, List, Optional, Tuple, Set
 from urllib.parse import urljoin, urlparse, urlunparse, urlencode, parse_qsl, quote_plus, urlsplit, urlunsplit
 
 # --- Playwright imports (robust) ---
 from playwright.async_api import Page, BrowserContext, Locator, ElementHandle
 try:
-    from playwright.async_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
+    from playwright.async_api import Error as PlaywrightError
 except Exception:
     try:
-        from playwright.sync_api import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
+        from playwright.sync_api import Error as PlaywrightError
     except Exception:
         try:
-            from playwright._impl._errors import Error as PlaywrightError, TimeoutError as PlaywrightTimeoutError
+            from playwright._impl._errors import Error as PlaywrightError
         except Exception:
             class PlaywrightError(Exception):
-                pass
-            class PlaywrightTimeoutError(Exception):
                 pass
 # === InteractiveRepairSession (Atlas-style guided loop) tentative import ===
 try:
@@ -56,66 +52,29 @@ except Exception:
 
 # --- Session manager (Stage 1 extraction) ---
 from app.agents.browser.session_manager import SessionManager, EXTERNAL_BLOCKLIST_HOSTS
-from app.agents.browser.navigation_driver import NavigationContext, NavigationDriver, TrapPageDetected
-from app.agents.browser.plp_driver import PlpDriver, PlpNavigationResult
+from app.agents.browser.navigation_driver import NavigationContext, NavigationDriver
 from app.agents.browser.extractor import (
     BrowserExtractionService,
     PDPSizeSelectPolicy,
     VISIBLE_PRICE_SELECTORS,
     DEFAULT_PDP_PARALLEL_LIMIT,
+    looks_like_product_url,
 )
 
-# PRICE_SELECTORS のエイリアス（互換性のため）
-PRICE_SELECTORS = VISIBLE_PRICE_SELECTORS
+# --- 専用パッチの動的インポート ---
+try:
+    from app.agents.browser_use_moncler_patch import moncler_plp_recovery
+except Exception:
+    moncler_plp_recovery = None
+# ---
 
 # --- Strategy Plugins ---
 try:
     from app.agents.plugins.base import StrategyPlugin
+    from app.agents.plugins.moncler_plp_v1 import MonclerPLPStrategy
 except Exception:
     StrategyPlugin = None  # type: ignore
-# ---
-
-# --- Moncler Handler (CR-ATELIER-003 Phase B) ---
-try:
-    from app.agents.moncler.moncler_plp_handler import MonclerPlpHandler
-except Exception:
-    MonclerPlpHandler = None  # type: ignore
-# ---
-
-# --- UI Helpers (CR-ATELIER-003 Phase C) ---
-try:
-    from app.agents.browser.ui_helpers import (
-        kill_overlays,
-        click_continue_shopping_if_present,
-        pause_for_operator,
-        accept_cookies_if_present,
-        dismiss_geo_modal,
-        safe_wait_selector as ui_safe_wait_selector,
-    )
-except Exception:
-    # Fallback: 既存のメソッドを使用
-    kill_overlays = None  # type: ignore
-    click_continue_shopping_if_present = None  # type: ignore
-    pause_for_operator = None  # type: ignore
-    accept_cookies_if_present = None  # type: ignore
-    dismiss_geo_modal = None  # type: ignore
-    ui_safe_wait_selector = None  # type: ignore
-# ---
-
-# --- Navigation Helpers (CR-ATELIER-003 Phase C) ---
-try:
-    from app.agents.browser.navigation_helpers import (
-        normalize_url as nav_normalize_url,
-        normalize_abs_url as nav_normalize_abs_url,
-        is_redirect_loop,
-        is_wrong_locale,
-    )
-except Exception:
-    # Fallback: 既存のメソッドを使用
-    nav_normalize_url = None  # type: ignore
-    nav_normalize_abs_url = None  # type: ignore
-    is_redirect_loop = None  # type: ignore
-    is_wrong_locale = None  # type: ignore
+    MonclerPLPStrategy = None  # type: ignore
 # ---
 
 # 堅牢なインポート試行
@@ -124,17 +83,11 @@ try:
     from app.utils.visual_regression import compare_and_maybe_update
     from app.models.result_models import DiscoveryResult
     from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
-    from app.agents.browser.telemetry import TelemetryClient, TelemetryContext
-    # Stage 3B: observability.py の関数は TelemetryClient 経由で利用
-    # 後方互換性のため、observability.py も残す（段階的移行）
     from app.utils.observability import (
         save_dom, count_selectors, save_raw_hrefs, write_fail_snapshot
     )
     # V88.5.1: (Patch) AiLlmController は run_with_repair 内部でのみ import
     # from app.utils.ai_llm_controller import AiLlmController
-    # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
-    # MonclerDrissionHandler は MonclerPlpHandler 内で処理される
-    MonclerDrissionHandler = None  # type: ignore
 except ImportError:
     # 実行環境によってはパスが通っていない可能性を考慮
     logging.warning("Failed to import modules from standard paths. Trying relative imports...")
@@ -143,61 +96,17 @@ except ImportError:
         from ..utils.visual_regression import compare_and_maybe_update
         from ..models.result_models import DiscoveryResult
         from .selector_discovery_agent import SelectorDiscoveryAgent
-        from .browser.telemetry import TelemetryClient, TelemetryContext
         from ..utils.observability import (
             save_dom, count_selectors, save_raw_hrefs, write_fail_snapshot
         )
-        # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
-        MonclerDrissionHandler = None  # type: ignore
     except ImportError as e:
          logging.critical(f"Relative import also failed: {e}. Some functionalities might be broken.")
          # 最低限動作するためのモックやプレースホルダを定義する (必要に応じて)
          class RunContext: pass # type: ignore
-         @dataclass
-         class DiscoveryResult: # type: ignore
-             ok: bool = False
-             site: str = ""
-             query: str = ""
-             proposal: Dict[str, Any] = field(default_factory=dict)
-             evidence: Dict[str, Any] = field(default_factory=dict)
-             ai_analysis: Optional[Any] = None
-             message: Optional[str] = None
-             screenshot: Optional[str] = None
-             file_path: Optional[str] = None
+         class DiscoveryResult: pass # type: ignore
          def compare_and_maybe_update(*args, **kwargs): pass
          def extract_title_price(*args, **kwargs): return {}
-         class SelectorDiscoveryAgent:
-             def __init__(self, runtime_kwargs: Optional[Dict[str, Any]] = None): pass
-         class StubTelemetryService: # type: ignore
-             def __init__(self, run_context=None, logger=None, **kwargs): pass
-             async def save_dom(self, page, name): pass
-             async def save_json(self, name, payload): pass
-             async def save_screenshot(self, page, name): pass
-             async def write_fail_snapshot(self, page, reason, tctx, extra=None): pass
-         # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
-         MonclerDrissionHandler = None  # type: ignore
-         @dataclass
-         class TelemetryContext: # type: ignore
-             site: str = ""
-             query: str = ""
-             run_id: Optional[str] = None
-             stage: Optional[str] = None
-         class StubTelemetryClient: # type: ignore
-             def __init__(self, run_context=None, base_dir: str = ""): pass
-             async def save_dom(self, page, name, tctx): pass
-             async def save_json(self, name, payload, tctx): pass
-             async def save_screenshot(self, page, name, tctx): pass
-             async def write_fail_snapshot(self, page, reason, tctx, extra=None): pass
-             async def record_plp_state(
-                 self,
-                 page,
-                 *,
-                 name: str = "plp_dom_initial_materialized",
-                 selectors=None,
-                 site_config=None,
-             ):
-                 """Import が壊れている環境用なので no-op で良い"""
-                 pass
+         class SelectorDiscoveryAgent: pass
          def save_dom(*args, **kwargs): pass
          def count_selectors(*args, **kwargs): pass
          def save_raw_hrefs(*args, **kwargs): pass
@@ -209,43 +118,8 @@ _LOCALE_SEG_RE = re.compile(r"^[a-z]{2}-[a-z]{2}$", re.IGNORECASE)
 
 OVERALL_PLP_BUDGET_MS_DEFAULT = 120000  # 120s watchdog
 
+# Pluginレジストリは遅延読み込みで自動登録
 PLUGIN_REGISTRY: Dict[str, StrategyPlugin] = {}
-
-# ==============================================================================
-# Exception Classification & Retry Logic
-# ==============================================================================
-
-class BrowserErrorType(Enum):
-    """ブラウザ操作の例外タイプ分類"""
-    TIMEOUT = "timeout"  # PlaywrightTimeoutError, asyncio.TimeoutError
-    NAVIGATION = "navigation"  # ナビゲーション関連エラー（goto失敗、リダイレクトループ等）
-    SELECTOR = "selector"  # セレクタが見つからない（0件）
-    NETWORK = "network"  # ネットワークエラー（接続失敗、DNSエラー等）
-    UNKNOWN = "unknown"  # その他の例外
-
-
-@dataclass
-class BrowserOperationResult:
-    """ブラウザ操作の結果を保持するデータクラス"""
-    success: bool
-    error_type: Optional[BrowserErrorType] = None
-    error_message: Optional[str] = None
-    retry_count: int = 0
-    operation_name: str = ""
-    context: Optional[Dict[str, Any]] = None
-
-    def to_failure_context(self) -> Dict[str, Any]:
-        """FailureAnalysisAgent / SelfHealingAgent に渡す failure_context を生成"""
-        return {
-            "error_type": self.error_type.value if self.error_type else "unknown",
-            "error_message": self.error_message or "",
-            "operation": self.operation_name,
-            "retry_count": self.retry_count,
-            "context": self.context or {},
-        }
-
-
-T = TypeVar('T')
 
 # ==============================================================================
 # Helper Functions
@@ -286,220 +160,79 @@ class BrowserUseAgent:
 
     TODO: LocaleGateHandler などの共通クラスにロケーションゲート処理を抽象化予定。
     """
-    
-    # ==============================================================================
-    # Exception Classification & Retry Logic
-    # ==============================================================================
-    
-    @staticmethod
-    def _classify_exception(e: Exception, operation_name: str = "") -> BrowserErrorType:
-        """
-        例外を分類して BrowserErrorType を返す。
-        
-        Args:
-            e: 発生した例外
-            operation_name: 操作名（コンテキスト情報として使用）
-            
-        Returns:
-            BrowserErrorType: 分類された例外タイプ
-        """
-        # Playwright TimeoutError
-        if isinstance(e, PlaywrightTimeoutError):
-            return BrowserErrorType.TIMEOUT
-        
-        # asyncio TimeoutError
-        if isinstance(e, asyncio.TimeoutError):
-            return BrowserErrorType.TIMEOUT
-        
-        # PlaywrightError のサブクラス（ネットワークエラー等）
-        if isinstance(e, PlaywrightError):
-            error_msg = str(e).lower()
-            if "timeout" in error_msg or "timed out" in error_msg:
-                return BrowserErrorType.TIMEOUT
-            if "navigation" in error_msg or "redirect" in error_msg or "net::" in error_msg:
-                return BrowserErrorType.NAVIGATION
-            if "network" in error_msg or "connection" in error_msg or "dns" in error_msg:
-                return BrowserErrorType.NETWORK
-        
-        # セレクタ関連のエラー（メッセージから判定）
-        error_msg = str(e).lower()
-        if "selector" in error_msg or "locator" in error_msg or "element" in error_msg:
-            if "not found" in error_msg or "timeout" in error_msg:
-                return BrowserErrorType.SELECTOR
-        
-        # デフォルト: UNKNOWN
-        return BrowserErrorType.UNKNOWN
-    
-    async def _run_with_retry(
-        self,
-        operation: Callable[[], Awaitable[T]],
-        operation_name: str,
-        *,
-        max_retries: int = 3,
-        retry_delay_ms: int = 1000,
-        timeout_ms: Optional[int] = None,
-        run_context: Optional[RunContext] = None,
-        context: Optional[Dict[str, Any]] = None,
-    ) -> BrowserOperationResult:
-        """
-        ブラウザ操作を retry ロジックでラップし、例外を分類して返す。
-        
-        Args:
-            operation: 実行する非同期操作（コルーチン関数）
-            operation_name: 操作名（ログ・エラー分類用）
-            max_retries: 最大リトライ回数（デフォルト: 3）
-            retry_delay_ms: リトライ間の待機時間（ミリ秒）
-            timeout_ms: 操作のタイムアウト（None の場合はデフォルトタイムアウトを使用）
-            run_context: RunContext（ログ保存用）
-            context: 追加のコンテキスト情報
-            
-        Returns:
-            BrowserOperationResult: 操作結果（成功/失敗、例外タイプ、リトライ回数等）
-        """
-        last_exception: Optional[Exception] = None
-        
-        for attempt in range(max_retries):
-            try:
-                # タイムアウトが指定されている場合は asyncio.wait_for でラップ
-                if timeout_ms is not None:
-                    result = await asyncio.wait_for(operation(), timeout=timeout_ms / 1000.0)
-                else:
-                    result = await operation()
-                
-                # 成功
-                if run_context:
-                    self.logger.debug(
-                        f"[Retry] {operation_name} succeeded (attempt {attempt + 1}/{max_retries}, RunID: {run_context.run_id})"
-                    )
-                
-                return BrowserOperationResult(
-                    success=True,
-                    retry_count=attempt,  # 成功時は試行回数（0-indexed）
-                    operation_name=operation_name,
-                    context=context,
-                )
-                
-            except Exception as e:
-                last_exception = e
-                retry_count = attempt + 1
-                error_type = self._classify_exception(e, operation_name)
-                
-                # ログ出力
-                if run_context:
-                    self.logger.warning(
-                        f"[Retry] {operation_name} failed (attempt {retry_count}/{max_retries}, "
-                        f"type={error_type.value}, RunID: {run_context.run_id}): {e}"
-                    )
-                    
-                    # RunContext にエラー情報を保存
-                    error_info = {
-                        "operation": operation_name,
-                        "attempt": retry_count,
-                        "error_type": error_type.value,
-                        "error_message": str(e),
-                        "context": context or {},
-                    }
-                    run_context.save_json(f"retry_error_{operation_name}_{retry_count}.json", error_info)
-                else:
-                    self.logger.warning(
-                        f"[Retry] {operation_name} failed (attempt {retry_count}/{max_retries}, "
-                        f"type={error_type.value}): {e}"
-                    )
-                
-                # 最後の試行でない場合は待機してリトライ
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(retry_delay_ms / 1000.0)
-                    continue
-                else:
-                    # 最大リトライ回数に達した
-                    break
-        
-        # すべてのリトライが失敗
-        error_type = self._classify_exception(last_exception, operation_name) if last_exception else BrowserErrorType.UNKNOWN
-        
-        return BrowserOperationResult(
-            success=False,
-            error_type=error_type,
-            error_message=str(last_exception) if last_exception else "Unknown error",
-            retry_count=retry_count,
-            operation_name=operation_name,
-            context=context,
-        )
     # ★ V88.6.0: インスタンスメソッドに変更 (旧 v88.5.9J のグローバル関数)
-    # Stage 4: _looks_like_trap_or_legal() を削除し、NavigationDriver._looks_like_trap_or_legal() を使用
-    # このメソッドは NavigationDriver 経由で呼び出す
-    def _looks_like_trap_or_legal(self, url: str, site_config: Optional[Dict[str, Any]] = None) -> bool:
+    def _looks_like_trap_or_legal(self, url: str) -> bool:
         """
-        Stage 4: Trap判定のヘルパー（NavigationDriver経由）
-        NavigationDriver._looks_like_trap_or_legal() を呼び出すためのラッパー
-        
-        Args:
-            url: チェックするURL
-            site_config: サイト設定（Noneの場合は警告を出してFalseを返す）
-        """
-        if site_config is None:
-            # site_configがない場合は警告を出してFalseを返す
-            # ただし、既存コードとの互換性のため、このメソッドは残す
-            logger.warning("[_looks_like_trap_or_legal] site_config is None, returning False (Stage 4 migration)")
-            return False
-        
-        from app.agents.browser.navigation_driver import NavigationDriver
-        # NavigationDriverインスタンスを作成（pageは不要なのでNone）
-        driver = NavigationDriver(page=None)  # type: ignore
-        return driver._looks_like_trap_or_legal(url, site_config)
+        明らかに商品一覧ではなく、法務/クッキー/ヘルプ系に飛ばされてると判断したら True。
+        こういうページに張り付いてもPDPは取れないので、早期abortさせる。
 
-    def __init__(
-        self,
-        runtime_kwargs: Optional[Dict[str, Any]] = None,
-        config_provider: Optional[Any] = None,
-        llm_client: Optional[Any] = None,
-    ):
+        ★ V88.5.9: 先に軽量正規化を行ってから判定する。
+        - /en-jp/en-int/ を /en-int/ に置換
+        - #product-information-panel 等のハッシュを除去
+        """
+        try:
+            # V88.5.9: ローカルインポート (urllib.parse はグローバルで import 済)
+            sp = urlsplit(url)
+            path = sp.path or ""
+            # 二重ロケールの早期修正
+            path = path.replace("/en-jp/en-int/", "/en-int/").replace("/en-jp/", "/en-int/")
+            # “PDPアンカー”などのハッシュは評価前に捨てる
+            sp = sp._replace(path=path, fragment="")
+            url = urlunsplit(sp)
+        except Exception:
+            pass # 正規化に失敗しても、元のURLで判定を続行
+
+        try:
+            u = urlparse(url)
+            full_lower = url.lower()
+            path_lower = (u.path or "").lower()
+            host = (u.netloc or "").lower()
+
+            # V88.5.7: /en-jp (日本向け)
+            jp_locale = "moncler.com" in full_lower and "/en-jp" in path_lower
+
+            # V88.5.8: コーポレートサイト
+            corporate = "monclergroup.com" in host or "/brands/moncler" in path_lower
+
+            # V88.6.3: Moncler のロケーションゲート/トップページを trap とみなす
+            moncler_locale_gate = (
+                "moncler.com" in host
+                and path_lower in ("/en-int", "/en-int/", "/en-gb", "/en-gb/", "/en-us", "/en-us/")
+            )
+
+            # V88.5.6 以前のリーガルキーワード
+            legal_kw = any(k in path_lower for k in (
+                "/cookie-policy", "/cookies", "/privacy", "/legal", "/help",
+                "/customer-service", "/customer_service", "/support",
+                "/account", "/login", "/accessibility-statement", "/client-service/"
+            ))
+
+            # V88.5.9: 簡潔な return 形式に統合
+            if jp_locale:
+                logger.warning(f"[_looks_like_trap] Detected /en-jp locale trap: {url}")
+            if corporate:
+                logger.warning(f"[_looks_like_trap] Detected corporate site redirect/path: {url}")
+            if legal_kw:
+                logger.warning(f"[_looks_like_trap] Detected legal/help keyword trap: {url}")
+            if moncler_locale_gate:
+                logger.warning(f"[_looks_like_trap] Detected Moncler locale gate/home: {url}")
+
+            return jp_locale or corporate or legal_kw or moncler_locale_gate
+
+        except Exception:
+            return False
+
+    def __init__(self, runtime_kwargs: Optional[Dict[str, Any]] = None):
         self.runtime_kwargs = runtime_kwargs or {}
         self.discovery_agent = SelectorDiscoveryAgent(runtime_kwargs=self.runtime_kwargs)
         self.logger = logger
         self.run_context: Optional[RunContext] = None # Temporarily attach RunContext during run()
-        # 設定の抽象化: 未指定時は run_e2e 等で DefaultSiteConfigProvider を都度利用
-        self._config_provider = config_provider
-        # LLM の抽象化: 未指定時は run_with_repair 内で AILlmController を都度生成
-        self._llm_client = llm_client
-
-        # Stage 3B: TelemetryClient インスタンス（run_context が設定された後に初期化）
-        self._telemetry: Optional[TelemetryClient] = None
 
         # --- V88.6.x: Session handles are managed by SessionManager ---
         self._context: Optional[BrowserContext] = None
         self._page: Optional[Page] = None
         self._session_manager: Optional[SessionManager] = None
         self.extraction_service = BrowserExtractionService(self.logger, self.runtime_kwargs)
-        
-        # CR-ATELIER-003 Phase C-3: BrowserOrchestrator のインスタンス生成
-        # 現時点ではまだ使用しない（skeleton のみ）
-        try:
-            from app.agents.browser_orchestrator import BrowserOrchestrator
-            self.orchestrator = BrowserOrchestrator(
-                runtime_kwargs=self.runtime_kwargs,
-                analysis_agent=None,  # FailureAnalysisAgent は現時点では None
-                discovery_agent=self.discovery_agent,
-                log=self.logger,
-            )
-        except ImportError:
-            # BrowserOrchestrator がインポートできない場合は None にする
-            self.orchestrator = None  # type: ignore
-    
-    def _ensure_telemetry(self) -> TelemetryClient:
-        """
-        TelemetryClient インスタンスを取得（遅延初期化）
-        
-        Returns:
-            TelemetryClient インスタンス（正規実装）
-        """
-        if self._telemetry is None:
-            if self.run_context is None:
-                raise ValueError("run_context must be set before using TelemetryClient")
-            # 正規実装の TelemetryClient を使用（ローカル import で確実に正規実装を参照）
-            from app.agents.browser.telemetry import TelemetryClient as RealTelemetryClient
-            self._telemetry = RealTelemetryClient(run_context=self.run_context)
-        return self._telemetry
 
     def _attach_session(self, session: SessionManager) -> None:
         self._session_manager = session
@@ -531,38 +264,12 @@ class BrowserUseAgent:
         if not target_url:
             raise ValueError("BrowserUseAgent: target_url が指定されていません。起点URLが必要です。")
 
-        # --- 初期ナビゲーション（retry ロジック付き） ---
-        goto_result = await self.safe_goto(
-            page,
-            target_url,
-            wait_until="domcontentloaded",
-            timeout_ms=int(settings.get("timeout_sec", 60)) * 1000,
-            max_retries=3,
-        )
-        if not goto_result.success:
-            self.logger.warning(
-                f"[Bootstrap] Initial navigation failed (type={goto_result.error_type.value}, "
-                f"RunID: {run_context.run_id}): {goto_result.error_message}"
-            )
-            # 失敗しても続行（後続の処理で回復を試みる）
-        
-        # CR-ATELIER-003 Phase C: ui_helpers.py を使用
-        if accept_cookies_if_present:
-            await accept_cookies_if_present(page, site_config)
-        else:
-            await self._accept_cookies_if_present(page, site_config)
-        if dismiss_geo_modal:
-            await dismiss_geo_modal(page, self.logger)
-        else:
-            await self._dismiss_geo_modal(page, site_config)
-        if kill_overlays:
-            await kill_overlays(page)
-        else:
-            await self._kill_overlays(page)
-        if click_continue_shopping_if_present:
-            await click_continue_shopping_if_present(page, site_config)
-        else:
-            await self._click_continue_shopping_if_present(page, site_config)
+        # --- 初期ナビゲーション ---
+        await page.goto(url=target_url, wait_until="domcontentloaded")
+        await self._accept_cookies_if_present(page, site_config)
+        await self._dismiss_geo_modal(page)
+        await self._kill_overlays(page)
+        await self._click_continue_shopping_if_present(page, site_config)
 
         if settings.get("enable_human_like"):
             try:
@@ -571,89 +278,53 @@ class BrowserUseAgent:
             except Exception as e:
                 self.logger.debug(f"[HumanLike] skipped: {e}")
 
-        wait_result = await self.safe_wait_for_load_state(
-            page,
-            state="domcontentloaded",
-            timeout_ms=800,
-            max_retries=1,
-        )
-        if not wait_result.success:
-            self.logger.debug(f"[Bootstrap] wait_for_load_state failed: {wait_result.error_message}")
+        try:
+            await page.wait_for_load_state("domcontentloaded", timeout=800)
+        except Exception:
+            pass
         await page.wait_for_timeout(120)
 
-        # Stage 4: ロケールゲート検出と回復（汎用化）
-        nav_cfg = (site_config.get("navigation", {}) or {})
-        locale_gate_cfg = nav_cfg.get("locale_gate_detection", {}) or {}
-        trap_domains = nav_cfg.get("trap_domains", [])
-        allowed_domain = site_config.get("allowed_domain", "")
-        
-        # ロケールゲート検出が有効な場合
-        if locale_gate_cfg.get("enabled", False) and not likely_plp:
+        # --- Moncler 固有の回復 ---
+        if site.upper() == "MONCLER_OFFICIAL" and not likely_plp:
             try:
                 gate_links_count = await page.evaluate(
-                    "() => document.querySelectorAll(\"a[href*='/en-'], a[href*='/it-'], a[href*='/fr-'], a[href*='/de-']\").length"
+                    "() => document.querySelectorAll(\"a[href*='/en-']\").length"
                 )
                 if gate_links_count and gate_links_count >= 10:
                     self.logger.warning(
-                        f"[LocaleGate] Locale gate detected ({gate_links_count} links). Forcing navigation to PLP (PDP run only)."
+                        f"[Moncler] Locale gate detected ({gate_links_count} links). Forcing navigation to PLP (PDP run only)."
                     )
-                    # site_configからfallback URLを取得
                     fixed_url = (
-                        site_config.get("seed_plp_url")
-                        or site_config.get("fallback_url")
-                        or (site_config.get("discovery_settings", {}) or {}).get("fallback_url")
-                        or site_config.get("home_url")
+                        "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/"
+                        "?forceLocale=en-int&shipToCountry=GB"
                     )
-                    if fixed_url:
-                        # URL正規化を適用
-                        fixed_url = self._normalize_url(fixed_url, site_config)
-                        await page.goto(url=fixed_url, wait_until="domcontentloaded")
-                        # CR-ATELIER-003 Phase C: ui_helpers.py を使用
-                        if click_continue_shopping_if_present:
-                            await click_continue_shopping_if_present(page, site_config)
-                        else:
-                            await self._click_continue_shopping_if_present(page, site_config)
-                        try:
-                            await page.wait_for_load_state("networkidle", timeout=2000)
-                        except Exception:
-                            pass
-                        if accept_cookies_if_present:
-                            await accept_cookies_if_present(page, site_config)
-                        else:
-                            await self._accept_cookies_if_present(page, site_config)
+                    await page.goto(url=fixed_url, wait_until="domcontentloaded")
+                    await self._click_continue_shopping_if_present(page, site_config)
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=2000)
+                    except Exception:
+                        pass
+                    await self._accept_cookies_if_present(page, site_config)
             except Exception as gate_e:
-                self.logger.warning(f"[LocaleGate] Gate detection failed: {gate_e}")
+                self.logger.warning(f"[Moncler] Gate detection failed: {gate_e}")
 
             if settings.get("enable_locale_escape"):
-                await self._force_en_int(page, site_config)
-                # CR-ATELIER-003 Phase C: ui_helpers.py を使用
-                if click_continue_shopping_if_present:
-                    await click_continue_shopping_if_present(page, site_config)
-                else:
-                    await self._click_continue_shopping_if_present(page, site_config)
+                await self._force_en_int(page)
+                await self._click_continue_shopping_if_present(page, site_config)
                 await run_context.take_screenshot(page, "12_after_locale_escape")
 
-            # trap_domains へのリダイレクトを検出
             try:
-                current_url_lower = (page.url or "").lower()
-                if trap_domains:
-                    for trap_domain in trap_domains:
-                        if trap_domain.lower() in current_url_lower:
-                            # site_configからfallback URLを取得
-                            fixed_url = (
-                                site_config.get("seed_plp_url")
-                                or site_config.get("fallback_url")
-                                or (site_config.get("discovery_settings", {}) or {}).get("fallback_url")
-                                or site_config.get("home_url")
-                            )
-                            if fixed_url:
-                                fixed_url = self._normalize_url(fixed_url, site_config)
-                                logger.warning(f"[TrapDomain] Bounced to trap domain ({trap_domain}). Forcing back to PLP: {fixed_url}")
-                                await page.goto(url=fixed_url, wait_until="domcontentloaded")
-                                await self._accept_cookies_if_present(page, site_config)
-                                break
-            except Exception as trap_e:
-                logger.warning(f"[TrapDomain] Trap domain detection failed: {trap_e}")
+                if "monclergroup.com" in (page.url or "").lower():
+                    fixed_url = (
+                        "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/"
+                        "?forceLocale=en-int&shipToCountry=GB"
+                    )
+                    self.logger.warning(f"[Moncler] Bounced to corporate. Forcing back to PLP: {fixed_url}")
+                    await page.goto(url=fixed_url, wait_until="domcontentloaded")
+                    await self._accept_cookies_if_present(page, site_config)
+                    await self._click_continue_shopping_if_present(page, site_config)
+            except Exception:
+                pass
 
         return page
 
@@ -664,28 +335,10 @@ class BrowserUseAgent:
         settings: Dict[str, Any],
         run_context: RunContext,
     ):
-        """
-        Deprecated: BrowserOrchestrator.run_pdp に移行済み
-        
-        CR-ATELIER-003 Phase D-3: このメソッドは BrowserOrchestrator.run_pdp 内で
-        直接実装されるようになったため、使用されていません。
-        
-        後続フェーズで削除予定。
-        """
         async def _prepare(page: Page):
-            # CR-ATELIER-003 Phase C: ui_helpers.py を使用
-            if kill_overlays:
-                await kill_overlays(page)
-            else:
-                await self._kill_overlays(page)
-            if click_continue_shopping_if_present:
-                await click_continue_shopping_if_present(page, site_config)
-            else:
-                await self._click_continue_shopping_if_present(page, site_config)
-            if dismiss_geo_modal:
-                await dismiss_geo_modal(page, self.logger)
-            else:
-                await self._dismiss_geo_modal(page, site_config)
+            await self._kill_overlays(page)
+            await self._click_continue_shopping_if_present(page, site_config)
+            await self._dismiss_geo_modal(page)
             if settings.get("enable_visual_regression_check") and "pdp" in (settings.get("vrt_scope") or ""):
                 await self._perform_vrt(page, "pdp", settings)
 
@@ -720,8 +373,7 @@ class BrowserUseAgent:
             likely_plp=likely_plp,
             runtime_kwargs=self.runtime_kwargs,
             logger=self.logger,
-            # Stage 4: url_normalizerを汎用化（site_configを渡すラムダ関数）
-            url_normalizer=lambda url: self._normalize_url(url, site_config) if hasattr(self, '_normalize_url') else url,
+            url_normalizer=self._normalize_to_en_int_url,
         )
         await session.open()
         self._attach_session(session)
@@ -758,7 +410,6 @@ class BrowserUseAgent:
             self.logger.warning(f"[SessionManager] Failed to close browser session: {e}")
         finally:
             self._detach_session()
-
 
     # --- V88.5.0: `run_with_repair` (Full Implementation) ---
     # --- V88.5.1: (User Patch) Applied robustness patches ---
@@ -825,8 +476,12 @@ class BrowserUseAgent:
             if settings.get("enable_visual_regression_check") and "plp" in (settings.get("vrt_scope") or ""):
                 await self._perform_vrt(page, "plp", settings)
 
-            # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
-            # Moncler の処理は NavigationDriver.run_plp_flow 内で MonclerPlpHandler 経由で実行される
+            # Moncler legacy patch is PDP-only; PLP flows rely on plugin/target URL normalization.
+            if site.upper() == "MONCLER_OFFICIAL" and moncler_plp_recovery and not likely_plp:
+                try:
+                    await moncler_plp_recovery(page, site_config, {"query": query, "shipTo": "GB"})
+                except Exception as _e:
+                    self.logger.warning(f"[MonclerPatch] skipped: {_e}")
 
             context = self._context
             if context is None:
@@ -883,20 +538,18 @@ class BrowserUseAgent:
                     del self.run_context
             return base_result
 
-        # LLM クライアントを用意（注入済みならそれを使用、未指定時は AILlmController を生成）
-        llm_ctrl = self._llm_client
-        if llm_ctrl is None:
+        # LLMコントローラを用意
+        try:
+            from app.utils.ai_llm_controller import AiLlmController
+            llm_ctrl = AiLlmController(mode="Chat/Default")
+        except Exception as e:
+            self.logger.error(f"[run_with_repair] Failed to instantiate AiLlmController: {e}. Aborting repair.")
             try:
-                from app.utils.ai_llm_controller import AILlmController
-                llm_ctrl = AILlmController()
-            except Exception as e:
-                self.logger.error(f"[run_with_repair] Failed to instantiate LLM client: {e}. Aborting repair.")
-                try:
-                    await self._close_session(run_context, settings)
-                finally:
-                    if hasattr(self, "run_context"):
-                        del self.run_context
-                return base_result
+                await self._close_session(run_context, settings)
+            finally:
+                if hasattr(self, "run_context"):
+                    del self.run_context
+            return base_result
 
         # failure_contextをまとめて InteractiveRepairSession に渡すために整形
         failure_ev = base_result.evidence or {}
@@ -1096,11 +749,11 @@ class BrowserUseAgent:
         elif env_enable_video is not None:
             enable_video = env_enable_video
         else:
-            # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
-            enable_video = False
+            enable_video = True if site_key_guess == "MONCLER_OFFICIAL" else False
 
         default_accept_language = "en-GB,en;q=0.8"
-        # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
+        if site_key_guess == "MONCLER_OFFICIAL":
+            default_accept_language = "en-US,en;q=0.8"
 
         settings = {
             "timeout_sec": self.runtime_kwargs.get("timeout_sec") or ds.get("timeout_sec", 60),
@@ -1160,148 +813,13 @@ class BrowserUseAgent:
     def _slice_timeout_ms(left_ms: int, cap_ms: int) -> int:
         return max(500, min(left_ms, cap_ms))
 
-    # --- Safe Wait (with retry) ---
+    # --- Safe Wait ---
     async def safe_wait_selector(self, page: Page, selector: str, *, timeout_ms: int, state: str = "visible") -> bool:
-        """
-        セレクタの待機を retry ロジックでラップ（後方互換性のため既存のシグネチャを維持）。
-        
-        Args:
-            page: Playwright Page オブジェクト
-            selector: 待機するセレクタ
-            timeout_ms: タイムアウト（ミリ秒）
-            state: 待機する状態（"visible", "attached", "hidden" 等）
-            
-        Returns:
-            bool: セレクタが見つかった場合 True、それ以外 False
-        """
-        if not page or page.is_closed():
-            return False
-        
-        result = await self._run_with_retry(
-            operation=lambda: page.wait_for_selector(selector, state=state, timeout=timeout_ms),
-            operation_name=f"wait_for_selector({selector})",
-            max_retries=1,  # safe_wait_selector は既に安全なラッパーなので、retry は1回のみ
-            timeout_ms=timeout_ms,
-            run_context=self.run_context,
-            context={"selector": selector, "state": state},
-        )
-        
-        return result.success
-    
-    async def safe_goto(
-        self,
-        page: Page,
-        url: str,
-        *,
-        wait_until: str = "domcontentloaded",
-        timeout_ms: Optional[int] = None,
-        max_retries: int = 3,
-    ) -> BrowserOperationResult:
-        """
-        ページ遷移を retry ロジックでラップ。
-        
-        Args:
-            page: Playwright Page オブジェクト
-            url: 遷移先URL
-            wait_until: 待機条件（"domcontentloaded", "load", "networkidle" 等）
-            timeout_ms: タイムアウト（ミリ秒、None の場合は Playwright のデフォルト）
-            max_retries: 最大リトライ回数
-            
-        Returns:
-            BrowserOperationResult: 操作結果
-        """
-        if not page or page.is_closed():
-            return BrowserOperationResult(
-                success=False,
-                error_type=BrowserErrorType.UNKNOWN,
-                error_message="Page is closed or not available",
-                operation_name="goto",
-                context={"url": url},
-            )
-        
-        async def goto_operation():
-            await page.goto(url=url, wait_until=wait_until, timeout=timeout_ms)
-        
-        return await self._run_with_retry(
-            operation=goto_operation,
-            operation_name=f"goto({url})",
-            max_retries=max_retries,
-            timeout_ms=timeout_ms,
-            run_context=self.run_context,
-            context={"url": url, "wait_until": wait_until},
-        )
-    
-    async def safe_click(
-        self,
-        locator: Locator,
-        *,
-        timeout_ms: int = 5000,
-        max_retries: int = 2,
-    ) -> BrowserOperationResult:
-        """
-        クリック操作を retry ロジックでラップ。
-        
-        Args:
-            locator: Playwright Locator オブジェクト
-            timeout_ms: タイムアウト（ミリ秒）
-            max_retries: 最大リトライ回数
-            
-        Returns:
-            BrowserOperationResult: 操作結果
-        """
-        async def click_operation():
-            await locator.click(timeout=timeout_ms)
-        
-        selector_str = str(locator) if hasattr(locator, '__str__') else "unknown"
-        return await self._run_with_retry(
-            operation=click_operation,
-            operation_name=f"click({selector_str})",
-            max_retries=max_retries,
-            timeout_ms=timeout_ms,
-            run_context=self.run_context,
-            context={"selector": selector_str},
-        )
-    
-    async def safe_wait_for_load_state(
-        self,
-        page: Page,
-        *,
-        state: str = "domcontentloaded",
-        timeout_ms: int = 5000,
-        max_retries: int = 2,
-    ) -> BrowserOperationResult:
-        """
-        ページのロード状態待機を retry ロジックでラップ。
-        
-        Args:
-            page: Playwright Page オブジェクト
-            state: 待機する状態（"domcontentloaded", "load", "networkidle" 等）
-            timeout_ms: タイムアウト（ミリ秒）
-            max_retries: 最大リトライ回数
-            
-        Returns:
-            BrowserOperationResult: 操作結果
-        """
-        if not page or page.is_closed():
-            return BrowserOperationResult(
-                success=False,
-                error_type=BrowserErrorType.UNKNOWN,
-                error_message="Page is closed or not available",
-                operation_name="wait_for_load_state",
-                context={"state": state},
-            )
-        
-        async def wait_operation():
-            await page.wait_for_load_state(state, timeout=timeout_ms)
-        
-        return await self._run_with_retry(
-            operation=wait_operation,
-            operation_name=f"wait_for_load_state({state})",
-            max_retries=max_retries,
-            timeout_ms=timeout_ms,
-            run_context=self.run_context,
-            context={"state": state},
-        )
+        if not page or page.is_closed(): return False
+        try:
+            await page.wait_for_selector(selector, state=state, timeout=timeout_ms)
+            return True
+        except Exception: return False
 
     # --- UI Helpers ---
     async def _kill_overlays(self, page: Page) -> None:
@@ -1364,30 +882,22 @@ class BrowserUseAgent:
             except Exception: continue
         return False
 
-    async def _dismiss_geo_modal(self, page: Page, site_config: Optional[Dict[str, Any]] = None) -> None:
+    async def _dismiss_geo_modal(self, page: Page) -> None:
         """
-        Stage 4: ジオ / ロケール関係のモーダルを潰す（汎用化）
-        
-        site_config["navigation"]["overlays"]["geo_modal_selectors"] を使用
+        ジオ / ロケール関係のモーダルを潰す。
+
+        1. 汎用の「STAY HERE」系バナー
+        2. Moncler の「Select your location」ロケーションゲート
+           - 「UNITED KINGDOM | ENGLISH」を優先的に踏みに行く
         """
-        # Stage 4: site_configからgeo_modal_selectorsを取得
-        nav_cfg = (site_config.get("navigation", {}) or {}) if site_config else {}
-        overlays_cfg = nav_cfg.get("overlays", {}) or {}
-        geo_selectors = overlays_cfg.get("geo_modal_selectors", [])
-        
-        # デフォルトのセレクタ（site_configに定義がない場合）
-        default_selectors = [
+
+        for sel in [
             "text=STAY HERE",
             "text=REMAIN HERE",
             "text=REMAIN IN ENGLISH",
             "text=CONTINUE SHOPPING",
             "text=ショッピングを続ける",
-        ]
-        
-        # site_configのセレクタとデフォルトをマージ
-        all_selectors = _dedupe_keep_order(geo_selectors + default_selectors)
-        
-        for sel in all_selectors:
+        ]:
             try:
                 el = page.locator(sel).first
                 if await el.count() > 0 and await el.is_visible():
@@ -1411,71 +921,36 @@ class BrowserUseAgent:
                 self.logger.debug(f"[GeoModal] Click failed ({desc}): {e}")
                 return False
 
-        # Stage 4: ターゲットロケールへの遷移を待つ（汎用化）
-        async def _wait_for_target_locale(timeout_ms: int = 4000) -> bool:
-            if not site_config:
-                return True
-            locale_cfg = (site_config.get("locale", {}) or {})
-            prefer_locale = locale_cfg.get("prefer", "")
-            
-            if not prefer_locale:
-                return True
-            
+        async def _wait_for_en_int(timeout_ms: int = 4000) -> bool:
             try:
-                locale_path = f"/{prefer_locale}/"
                 await page.wait_for_function(
-                    f"() => location.href.includes('{locale_path}')",
+                    "() => location.href.includes('/en-int/') && !location.href.includes('/en-gb/')",
                     timeout=timeout_ms,
                 )
                 return True
             except Exception:
-                return locale_path in (page.url or "").lower()
+                return "/en-int/" in (page.url or "").lower()
 
         try:
-            # Stage 4: 汎用的なロケールゲートヘッダーの検出
             header = page.locator("text=Select your location").first
             header_visible = await header.count() > 0
             if header_visible:
-                self.logger.info("[GeoModal] Locale gate header detected.")
+                self.logger.info("[GeoModal] Moncler locale gate header detected.")
 
-            # Stage 4: site_configから優先ロケールを取得（汎用化）
-            if not site_config:
-                # site_configがない場合はデフォルトの処理のみ
-                return
-            
-            nav_cfg = (site_config.get("navigation", {}) or {})
-            overlays_cfg = nav_cfg.get("overlays", {}) or {}
-            geo_modal_preferred_locale = overlays_cfg.get("geo_modal_preferred_locale", "")
-            locale_cfg = (site_config.get("locale", {}) or {})
-            prefer_locale = locale_cfg.get("prefer", geo_modal_preferred_locale)
-            
-            # 優先ロケールに基づく候補セレクタ（デフォルトはen-gb）
-            if prefer_locale and "gb" in prefer_locale.lower():
-                # United Kingdom / English の候補
-                preferred_candidates = [
-                    page.get_by_text(re.compile(r"UNITED\\s+KINGDOM\\s*\\|\\s*ENGLISH", re.I)),
-                    page.get_by_role("link", name=re.compile(r"UNITED\\s+KINGDOM\\s*\\|\\s*ENGLISH", re.I)),
-                    page.get_by_role("button", name=re.compile(r"UNITED\\s+KINGDOM\\s*\\|\\s*ENGLISH", re.I)),
-                    page.get_by_role("button", name=re.compile(r"United\\s+Kingdom.*English", re.I)),
-                    page.get_by_role("link", name=re.compile(r"United\\s+Kingdom.*English", re.I)),
-                    page.locator("[data-testid*='locale' i] button:has-text('United Kingdom')"),
-                    page.locator("[data-component*='locale' i] button:has-text('United Kingdom')"),
-                    page.locator("button:has-text('United Kingdom EN')"),
-                    page.locator("text=/United\\s+Kingdom\\s*\\|\\s*English/i"),
-                ]
-            else:
-                # その他のロケールの場合は、geo_modal_selectorsを使用
-                geo_selectors = overlays_cfg.get("geo_modal_selectors", [])
-                preferred_candidates = []
-                for sel in geo_selectors:
-                    try:
-                        preferred_candidates.append(page.locator(sel).first)
-                    except Exception:
-                        continue
-            
-            for loc in preferred_candidates:
-                if await _click_first(loc, f"Preferred locale selector ({prefer_locale})"):
-                    if await _wait_for_target_locale():
+            uk_candidates = [
+                page.get_by_text(re.compile(r"UNITED\\s+KINGDOM\\s*\\|\\s*ENGLISH", re.I)),
+                page.get_by_role("link", name=re.compile(r"UNITED\\s+KINGDOM\\s*\\|\\s*ENGLISH", re.I)),
+                page.get_by_role("button", name=re.compile(r"UNITED\\s+KINGDOM\\s*\\|\\s*ENGLISH", re.I)),
+                page.get_by_role("button", name=re.compile(r"United\\s+Kingdom.*English", re.I)),
+                page.get_by_role("link", name=re.compile(r"United\\s+Kingdom.*English", re.I)),
+                page.locator("[data-testid*='locale' i] button:has-text('United Kingdom')"),
+                page.locator("[data-component*='locale' i] button:has-text('United Kingdom')"),
+                page.locator("button:has-text('United Kingdom EN')"),
+                page.locator("text=/United\\s+Kingdom\\s*\\|\\s*English/i"),
+            ]
+            for loc in uk_candidates:
+                if await _click_first(loc, "United Kingdom / English selector"):
+                    if await _wait_for_en_int():
                         return
                     break
 
@@ -1488,7 +963,7 @@ class BrowserUseAgent:
             ]
             for loc in close_candidates:
                 if await _click_first(loc, "locale gate close button"):
-                    if await _wait_for_target_locale():
+                    if await _wait_for_en_int():
                         return
 
             try:
@@ -1515,50 +990,135 @@ class BrowserUseAgent:
             return
 
     # --- Locale Helpers (Moncler specific but could be generalized) ---
-    # Stage 4: _normalize_to_en_int_url() を削除し、NavigationDriver._normalize_url() を使用
-    def _normalize_url(self, url: str, site_config: Dict[str, Any]) -> str:
-        """
-        Stage 4: URL正規化のヘルパー
-        
-        CR-ATELIER-003 Phase C: navigation_helpers.py を使用
-        
-        Args:
-            url: 正規化するURL
-            site_config: サイト設定
-            
-        Returns:
-            str: 正規化されたURL
-        """
-        # CR-ATELIER-003 Phase C: navigation_helpers.py を使用
-        if nav_normalize_url:
-            return nav_normalize_url(url, site_config)
-        
-        # Fallback: NavigationDriver経由
-        from app.agents.browser.navigation_driver import NavigationDriver
-        try:
-            driver = NavigationDriver(page=None)  # type: ignore
-            return driver._normalize_url(url, site_config)
-        except Exception as e:
-            # フォールバック: NavigationDriverが使えない場合は元のURLを返す
-            logger.warning(f"[_normalize_url] NavigationDriver failed, returning original URL: {e}")
-            return url
+    def _normalize_to_en_int_url(self, url: str) -> str:
+        u = urlparse(url)
+        path = (u.path or "/").replace("//","/")
+        path = path.replace("/en-gb/", "/en-int/")
+        seg = [s for s in path.split("/") if s]
+        i = 0
+        while i < len(seg) and _LOCALE_SEG_RE.match(seg[i] or ""): i += 1
+        seg = [s for s in seg[i:] if s.lower() != "en-int"]
+        norm = "/en-int/" + "/".join(seg)
+        if not norm.endswith("/"): norm += "/"
+        q = dict(parse_qsl(u.query))
+        q["forceLocale"] = "en-int"; q.setdefault("shipToCountry","GB")
+        return urlunparse((u.scheme, u.netloc, norm, u.params, urlencode(q), u.fragment))
 
-    # CR-ATELIER-003 Phase B: _force_en_int() は Moncler 専用パッチに移行済み
-    # このメソッドは削除され、MonclerPlpHandler 内で処理される
-    async def _force_en_int(self, page: Page, site_config: Optional[Dict[str, Any]] = None) -> None:
-        """
-        CR-ATELIER-003 Phase B: このメソッドは MonclerPlpHandler に移行済み
-        """
-        logger.debug("[_force_en_int] This method has been migrated to MonclerPlpHandler")
-        return
+    async def _force_en_int(self, page: Page) -> None:
+        try:
+            if page.context:
+                await page.context.add_cookies([{"name":"moncler-shipping-country","value":"GB","domain":".moncler.com","path":"/"}, {"name":"moncler-shipping-language","value":"en","domain":".moncler.com","path":"/"}])
+        except Exception: pass
+        try:
+            fixed = self._normalize_to_en_int_url(page.url)
+            if fixed != page.url:
+                # V88.5.3: (BugFix) `url=` キーワード引数を明示的に指定
+                await page.goto(url=fixed, wait_until="domcontentloaded")
+                try: await page.wait_for_load_state("networkidle", timeout=1500)
+                except Exception: pass
+        except Exception: pass
 
     # --- PLP Materialize ---
-    # Stage 3A-2-2: 実体は NavigationDriver.ensure_plp_materialized に移行済み
-    # このメソッドは NavigationDriver が使われていない場合のフォールバックとして残している
-    # TODO: Stage 3A-2 完了後、NavigationDriver が常に使われるようになったら削除可能
-    # CR-ATELIER-003 Phase A-4: _ensure_plp_materialized を削除
-    # すべての呼び出し箇所は NavigationDriver.ensure_plp_materialized 経由に置き換え済み
-    # このメソッドは削除されました。NavigationDriver.ensure_plp_materialized を直接使用してください。
+    async def _ensure_plp_materialized(self, page: Page, site_config: Dict[str, Any], settings: Dict[str, Any], *, start_t: float, budget_ms: int, target_url: Optional[str] = None) -> bool:
+        pdp_cfg = (site_config.get("selectors") or {}).get("pdp", {}) or {}
+        tile_selectors = _dedupe_keep_order((pdp_cfg.get("pdp_link_selectors") or []) + (pdp_cfg.get("plp_container_selectors") or []) + ["a[data-product-url]", "[data-product-url]", "[data-qa='product-tile']", ".product-card", ".c-product-card", ".c-product-tile", "[data-testid*='product' i]"])
+        tile_selector_str = ", ".join(tile_selectors)
+        target_min_tiles = 8
+        max_scroll_attempts = int(max(settings.get("plp_scroll_rounds", 10), 10))
+        run_ctx = getattr(self, "run_context", None)
+
+        locale_recover_attempts = 0
+        locale_recover_max = int(settings.get("locale_recover_max", 5))
+
+        for attempt in range(max_scroll_attempts):
+            left_ms = self._time_left_ms(start_t, budget_ms)
+            if left_ms <= 0: self.logger.warning("[Materialize] Timed out."); return False
+
+            # v88.6.x: Attemptごとに遅延表示ゲート/バナーを掃除する
+            try:
+                await self._accept_cookies_if_present(page, site_config)
+            except Exception:
+                pass
+            try:
+                await self._dismiss_geo_modal(page)
+            except Exception:
+                pass
+            try:
+                await self._kill_overlays(page)
+            except Exception:
+                pass
+
+            current_url = (page.url or "").lower()
+            if "moncler.com/en-gb" in current_url:
+                self.logger.warning("[Materialize] Detected EN-GB redirect mid-attempt.")
+                if locale_recover_attempts >= locale_recover_max:
+                    self.logger.error("[Materialize] Locale recovery exceeded max attempts. Aborting.")
+                    return False
+                locale_recover_attempts += 1
+                if target_url:
+                    await self._force_plp_recover(page, site_config, target_url)
+                    await page.wait_for_timeout(800)
+                    continue
+
+            if run_ctx is not None and attempt < 3:
+                try:
+                    await run_ctx.take_screenshot(
+                        page,
+                        f"30_plp_materialize_attempt_{attempt + 1:02d}"
+                    )
+                except Exception as ss_e:
+                    self.logger.warning(f"[Materialize] Screenshot failed on attempt {attempt + 1}: {ss_e}")
+
+            try:
+                for _ in range(6): await page.evaluate("window.scrollBy(0, Math.floor(window.innerHeight*0.6))"); await page.wait_for_timeout(160)
+                try: await page.wait_for_load_state("networkidle", timeout=800)
+                except Exception: pass
+            except Exception as e: self.logger.warning(f"[Materialize] Scroll failed on attempt {attempt + 1}: {e}"); break
+
+            # Moncler locale gate が途中で出た場合に備えて閉じておく
+            try:
+                modal_title = page.locator("text=Select your location").first
+                if await modal_title.count() > 0:
+                    self.logger.info("[GeoModal] Locale gate header detected during PLP materialization.")
+                    close_btn = page.locator(
+                        "button[aria-label*='close' i], "
+                        "button:has-text('Close'), "
+                        "button:has-text('×'), "
+                        ".modal__close, .c-modal__close"
+                    ).first
+                    if await close_btn.count() > 0:
+                        await close_btn.click(timeout=3000)
+                        await page.wait_for_timeout(500)
+                        self.logger.info("[GeoModal] Locale gate closed.")
+            except Exception as e:
+                self.logger.warning(f"[GeoModal] Locale gate handling failed: {e}")
+
+            try:
+                count = await page.locator(tile_selector_str).count()
+                self.logger.info(f"[Materialize] Attempt {attempt + 1}/{max_scroll_attempts}, found {count} tiles.")
+                if count >= target_min_tiles:
+                    self.logger.info(f"[Materialize] Success: Found {count} tiles (>= {target_min_tiles})."); return True
+                if count < 4 and attempt >= 1:
+                    self.logger.warning(f"[Materialize] Low tiles ({count}) after {attempt+1} attempts, forcing recovery hop.")
+                    if target_url:
+                        try:
+                            await self._force_plp_recover(page, site_config, target_url)
+                            await page.wait_for_timeout(500)
+                            rec_count = await page.locator(tile_selector_str).count()
+                            self.logger.info(f"[Materialize] After recovery hop, tiles={rec_count}")
+                            if rec_count >= target_min_tiles:
+                                return True
+                        except Exception as rec_e:
+                            self.logger.warning(f"[Materialize] Recovery hop failed: {rec_e}")
+                    return False
+            except asyncio.CancelledError:
+                self.logger.warning("[Materialize] Cancelled during tile count.")
+                return False
+            except Exception as e: self.logger.warning(f"[Materialize] Could not count tiles on attempt {attempt + 1}: {e}")
+
+        final_count = await page.locator(tile_selector_str).count()
+        if final_count > 0: self.logger.warning(f"[Materialize] Finished attempts, found {final_count} tiles (< {target_min_tiles}), but proceeding as non-empty."); return True
+        self.logger.error("[Materialize] Failed: No product tiles found after all scroll attempts."); return False
 
     # --- Price / Size Selection ---
     async def _read_price_or_none(self, page: Page) -> Optional[str]:
@@ -1583,12 +1143,6 @@ class BrowserUseAgent:
     # --- PDP Extraction ---
     # --- PLP -> PDP Link Collection (Robust v85.5) ---
     def _normalize_abs_url(self, base_url: str, href: str) -> str:
-        """
-        CR-ATELIER-003 Phase C: navigation_helpers.py を使用
-        """
-        if nav_normalize_abs_url:
-            return nav_normalize_abs_url(base_url, href)
-        # Fallback: 既存の実装
         try:
             absu = urljoin(base_url, href)
             parts = list(urlsplit(absu))
@@ -1597,13 +1151,69 @@ class BrowserUseAgent:
             return urlunsplit(parts)
         except Exception: return href
 
-    # Stage 3A-2-1: 実体は NavigationDriver.collect_pdp_links に移行済み
-    # このメソッドは薄いラッパーとして残している（互換性維持）
-    # 注意: _run_plp_flow 内では NavigationDriver.run_plp_flow の結果（nav_outcome.pdp_links）を優先的に使用
-    # TODO: Stage 3A-2 完了後、すべての呼び出しが NavigationDriver 経由になったら削除可能
-    # CR-ATELIER-003 Phase A-4: _collect_pdp_links を削除
-    # すべての呼び出し箇所は NavigationDriver.collect_pdp_links 経由に置き換え済み
-    # このメソッドは削除されました。NavigationDriver.collect_pdp_links を直接使用してください。
+    async def _collect_pdp_links(self, page: Page, site_config: Dict, settings: Dict, run_context: RunContext) -> List[str]:
+        target_url = page.url
+        found_links: Set[str] = set()
+
+        # Phase 1a: Global <a href> sweep + Regex Filter
+        try:
+            raw_hrefs: List[str] = await page.evaluate("() => Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(Boolean)")
+        except Exception as e: logger.warning(f"[PLP→PDP][1a] Sweep failed: {e}"); raw_hrefs = []
+        pdp_rx = re.compile(r"/(products?|p)/", re.I)
+        for href in raw_hrefs:
+            if pdp_rx.search(href):
+                norm_url = self._normalize_abs_url(target_url, href)
+                if is_same_origin(norm_url, target_url) and looks_like_product_url(norm_url): found_links.add(norm_url)
+        if found_links: logger.info(f"[PLP→PDP][1a] Sweep found {len(found_links)} links.")
+
+        # Phase 1b: Selector-based補完
+        selectors_cfg = (site_config.get("selectors", {}) or {}).get("pdp", {}) or {}
+        PLP_PDP_LINK_SELECTORS = _dedupe_keep_order((selectors_cfg.get("pdp_link_selectors", []) or []) + ["a[href*='/products/']", "a[href*='/product/']", "a[href*='/p/']", "[data-component*='ProductCard'] a[href]", "[class*='product-card'] a[href]", "article [data-testid*='product']:is(a, * a)", "[data-testid*='card'] a[href]", "[data-testid*='product-card'] a[href]", "a[data-product-url]", "[data-qa='product-tile'] a[href]"])
+        for sel in PLP_PDP_LINK_SELECTORS:
+            try:
+                nodes = await page.query_selector_all(sel)
+                if not nodes: continue
+                matched_count = 0
+                for n in nodes:
+                    href = await n.get_attribute("href") or await n.get_attribute("data-href") or await n.get_attribute("data-product-url") or await n.get_attribute("data-url")
+                    if not href: continue
+                    norm_url = self._normalize_abs_url(target_url, href)
+                    if is_same_origin(norm_url, target_url) and looks_like_product_url(norm_url):
+                        found_links.add(norm_url); matched_count += 1
+                if matched_count > 0: logger.info(f"[PLP→PDP][1b] selector='{sel}' added {matched_count} links.")
+            except Exception as e: logger.warning(f"[PLP→PDP][1b] selector='{sel}' failed: {e}")
+
+        # Phase 2: Deep Extraction Fallback (only if Phase 1 failed)
+        if not found_links:
+            logger.warning("[PLP→PDP] Phase 1a/1b found no links. Falling back to Phase 2 (Deep Extraction)...")
+            try:
+                deep_hrefs = await self._run_deep_extraction_phase2(page, site_config)
+                for href in deep_hrefs:
+                    norm_url = self._normalize_abs_url(target_url, href)
+                    if is_same_origin(norm_url, target_url) and looks_like_product_url(norm_url): found_links.add(norm_url)
+                if found_links: logger.info(f"[PLP→PDP][2] Deep Extraction found {len(found_links)} links.")
+            except Exception as e: logger.error(f"[PLP→PDP][2] Deep Extraction failed: {e}")
+
+        links = sorted(list(found_links))
+        if not links: logger.warning("[PLP→PDP] No PDP hrefs found after all phases."); return []
+
+        # Phase 3: Noise Filtering & Saving
+        cleaned: List[str] = []
+        noise_rx = re.compile(r"/(collections?|seasons?|client-service|login|legal|cart|wishlist|search)/", re.I)
+        for u in links:
+            if not noise_rx.search(u): cleaned.append(u)
+        logger.info(f"[PLP→PDP] collected {len(cleaned)} PDP-like links (raw={len(links)})")
+        try:
+            sample = cleaned[:20]; logger.debug(f"[PLP→PDP] sample={sample}")
+            if self.run_context: self.run_context.save_json("raw_pdp_links_v85.5.json", {"links": cleaned, "sample": sample})
+            # V87.0: Robust save_raw_hrefs call
+            try:
+                if callable(save_raw_hrefs) and run_context:
+                    res = save_raw_hrefs(run_context, cleaned, name="raw_hrefs_final_cleaned")
+                    if asyncio.iscoroutine(res): await res
+            except Exception: pass
+        except Exception: pass
+        return cleaned
 
     # --- V88.3.0J: _run_deep_extraction_phase2 Safer Fallback Evaluate ---
     # --- V88.6.2J: (BugFix) SyntaxError on container_sels ---
@@ -1613,12 +1223,7 @@ class BrowserUseAgent:
         container_sels: List[str] = (
             ((site_config.get("selectors") or {}).get("pdp") or {}).get("plp_container_selectors", []) or []
         )
-        # CR-ATELIER-003 Phase C: ui_helpers.py を使用
-        for cont in (container_sels or []):
-            if ui_safe_wait_selector:
-                await ui_safe_wait_selector(page, cont, timeout_ms=1000, state="visible")
-            else:
-                await self.safe_wait_selector(page, cont, timeout_ms=1000, state="visible")
+        for cont in (container_sels or []): await self.safe_wait_selector(page, cont, timeout_ms=1000, state="visible")
         try:
             for _ in range(2): await page.evaluate("window.scrollBy(0, document.body.scrollHeight)"); await page.wait_for_timeout(200)
         except Exception: pass
@@ -1757,6 +1362,145 @@ class BrowserUseAgent:
                 logger.warning(msg + (" HARD" if hard else ""))
         except Exception as vrt_e: logger.warning(f"[VRT][{scope.upper()}] skipped: {vrt_e}")
 
+    # --- Browser Context Setup ---
+    def _build_context_options(
+        self,
+        settings: Dict[str, Any],
+        run_context: RunContext,
+    ) -> Dict[str, Any]:
+        """
+        Playwright BrowserContext 用のオプションを一括構築する。
+        ビデオ/HAR/トレースの保存先もここで定義しておく。
+        """
+        ctx_opts: Dict[str, Any] = {}
+
+        import random
+        viewport = settings.get("viewport")
+        if settings.get("enable_viewport_rotation"):
+            viewport = random.choice(VIEWPORT_POOL)
+        if viewport:
+            ctx_opts["viewport"] = viewport
+
+        ctx_opts["locale"] = "en-GB"
+        ctx_opts["timezone_id"] = "UTC"
+
+        headers = (settings.get("extra_http_headers") or {}).copy()
+        headers["Accept-Language"] = settings.get("accept_language") or "en-GB,en;q=0.8"
+        ctx_opts["extra_http_headers"] = headers
+
+        user_agent = settings.get("user_agent")
+        if settings.get("enable_ua_rotation") and USER_AGENT_POOL:
+            user_agent = random.choice(USER_AGENT_POOL)
+        if user_agent:
+            ctx_opts["user_agent"] = user_agent
+
+        if settings.get("enable_har"):
+            ctx_opts["record_har_path"] = str(run_context.get_path("network.har"))
+        if settings.get("enable_trace"):
+            trace_dir = run_context.get_path("trace")
+            Path(trace_dir).mkdir(parents=True, exist_ok=True)
+            ctx_opts["record_trace_dir"] = str(trace_dir)
+            self.logger.debug(f"[Playwright] record_trace_dir={trace_dir}")
+        if settings.get("enable_video"):
+            videos_dir = run_context.get_path("videos")
+            Path(videos_dir).mkdir(parents=True, exist_ok=True)
+            ctx_opts["record_video_dir"] = str(videos_dir)
+            ctx_opts["record_video_size"] = {"width": 1280, "height": 720}
+
+        return ctx_opts
+
+    async def _setup_routes(self, context: BrowserContext, settings: Dict[str, Any]):
+        base_routes = ["**/*onetrust.com/**","**/*cookielaw.org/**","**/*cookiepro.com/**"]
+        extra = settings.get("extra_block_routes") or []
+        extra_hosts, extra_globs = [], []
+        for x in extra:
+            x = (x or "").strip()
+            if not x: continue
+            if "*" in x or "/" in x: extra_globs.append(x)
+            else: extra_hosts.append(x.lstrip("."))
+        block_hosts = tuple(h.lower().lstrip(".") for h in EXTERNAL_BLOCKLIST_HOSTS) + tuple(h.lower() for h in extra_hosts)
+        async def _abort(route: Route): await route.abort()
+        async def _locale_rewrite(route: Route):
+            try:
+                req = route.request; url = req.url
+                if req.resource_type == "document" and "moncler.com" in url:
+                    pu = urlparse(url); path_lower = (pu.path or "/").lower()
+                    skip_paths = ("/search", "/account", "/customer", "/help", "/privacy", "/legal")
+                    is_skippable = path_lower == "/" or any(path_lower.startswith(s) or path_lower.startswith(f"{s}/") for s in skip_paths)
+                    if not is_skippable:
+                        fixed = self._normalize_to_en_int_url(url)
+                        if fixed != url: self.logger.info(f"[Route] URL normalized: {url} -> {fixed}"); await route.continue_(url=fixed); return
+                    else: self.logger.debug(f"[Route] Skipping locale normalization for path: {path_lower}")
+                host = urlparse(url).netloc.lower().strip(".")
+                if any(host == b or host.endswith("." + b) for b in block_hosts): await route.abort(); return
+                try: await route.fallback()
+                except Exception: await route.continue_()
+            except Exception as e:
+                self.logger.warning(f"[Route] handler error: {e}")
+                try: await route.continue_()
+                except Exception: pass
+        await context.route("**/*", _locale_rewrite)
+        for pat in base_routes + extra_globs: await context.route(pat, _abort)
+
+    def _get_session_file(self, site: str, site_config: Dict[str, Any]) -> Path:
+        # site_config.discovery_settings.session_file があれば優先、なければデフォルトパス
+        ds = site_config.get("discovery_settings") or {}
+        sess_path = ds.get("session_file")
+        if sess_path:
+            return Path(sess_path)
+        safe_site = "".join(c for c in site.lower() if c.isalnum() or c in ("_", "-")) or "default"
+        return SESSION_DIR / f"{safe_site}.json"
+
+    async def _apply_saved_session(self, context: BrowserContext, page: Page, site: str, site_config: Dict[str, Any]) -> None:
+        """
+        手動突破で保存した Cookie/LocalStorage を復元する。
+        ファイル形式例:
+        {
+          "cookies": [ {name, value, domain, path, expires, httpOnly, secure, sameSite}, ... ],
+          "localStorage": { "key": "value", ... }
+        }
+        """
+        sess_file = self._get_session_file(site, site_config)
+        if not sess_file.exists():
+            return
+        try:
+            data = json.loads(sess_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            self.logger.warning(f"[Session] Failed to read session file {sess_file}: {e}")
+            return
+
+        # Cookie
+        cookies = data.get("cookies") or []
+        if cookies:
+            try:
+                await context.add_cookies(cookies)
+                self.logger.info(f"[Session] Restored {len(cookies)} cookies from {sess_file}")
+            except Exception as e:
+                self.logger.warning(f"[Session] add_cookies failed: {e}")
+
+        # LocalStorage
+        ls = data.get("localStorage") or {}
+        if ls:
+            try:
+                # set localStorage before any navigation
+                # Playwright python add_init_script does not take args; embed as JSON
+                import json as _json
+                payload = _json.dumps(ls)
+                script = f"""
+                  (() => {{
+                    try {{
+                      const items = {payload};
+                      for (const [k,v] of Object.entries(items || {{}})) {{
+                        localStorage.setItem(k, v);
+                      }}
+                    }} catch (e) {{}}
+                  }})();
+                """
+                await context.add_init_script(script)
+                self.logger.info(f"[Session] Restored localStorage keys={list(ls.keys())[:5]} from {sess_file}")
+            except Exception as e:
+                self.logger.warning(f"[Session] localStorage restore failed: {e}")
+
     # --- Human-like interaction helpers ---
     async def _human_like_pause(self, page: Page, *, min_ms: int = 400, max_ms: int = 900):
         import random
@@ -1794,37 +1538,139 @@ class BrowserUseAgent:
             await page.mouse.wheel(0, delta)
             await self._human_like_pause(page, min_ms=200, max_ms=500)
 
+    async def _setup_init_scripts(self, context: BrowserContext):
+        # --- Baseline init script ---
+        await context.add_init_script("""try { localStorage.setItem('a11y-contrast','off'); localStorage.setItem('high-contrast','off'); } catch(e){} Object.defineProperty(navigator, 'language', {get: () => 'en-GB'}); Object.defineProperty(navigator, 'languages', {get: () => ['en-GB','en']}); (function(){ const _rz=Intl.DateTimeFormat.prototype.resolvedOptions; Intl.DateTimeFormat.prototype.resolvedOptions=function(){const o=_rz.call(this); o.timeZone='UTC'; return o;}; })();""")
+
+        # --- Stealthish patches to reduce headless fingerprinting ---
+        await context.add_init_script(r"""
+          (() => {
+            try {
+              const rand = (min, max) => Math.random() * (max - min) + min;
+              const jitter = (base, span) => base + rand(-span, span);
+
+              // navigator.* tweaks
+              const nav = navigator;
+              if (nav) {
+                const lang = (nav.language || 'en-GB');
+                const langs = Array.isArray(nav.languages) && nav.languages.length ? nav.languages : ['en-GB','en'];
+                Object.defineProperty(nav, 'webdriver', { get: () => undefined });
+                Object.defineProperty(nav, 'hardwareConcurrency', { get: () => 8 });
+                Object.defineProperty(nav, 'deviceMemory', { get: () => 8 });
+                Object.defineProperty(nav, 'language', { get: () => lang });
+                Object.defineProperty(nav, 'languages', { get: () => langs });
+                Object.defineProperty(nav, 'maxTouchPoints', { get: () => 0 });
+                Object.defineProperty(nav, 'platform', { get: () => 'Win32' });
+              }
+
+              // Canvas noise
+              const patchCanvas = (proto) => {
+                if (!proto) return;
+                const toDataURL = proto.toDataURL;
+                proto.toDataURL = function(...args) {
+                  const ctx = this.getContext && this.getContext('2d');
+                  if (ctx) {
+                    const shift = () => (Math.random() - 0.5) * 2;
+                    ctx.fillStyle = `rgba(${128+shift()},${128+shift()},${128+shift()},0.01)`;
+                    ctx.fillRect(0, 0, 2, 2);
+                  }
+                  return toDataURL.apply(this, args);
+                };
+              };
+              if (typeof HTMLCanvasElement !== 'undefined' && HTMLCanvasElement.prototype) {
+                patchCanvas(HTMLCanvasElement.prototype);
+              }
+              if (typeof OffscreenCanvas !== 'undefined' && OffscreenCanvas.prototype) {
+                patchCanvas(OffscreenCanvas.prototype);
+              }
+
+              // WebGL noise
+              const patchWebGL = (proto) => {
+                if (!proto) return;
+                const getParameter = proto.getParameter;
+                proto.getParameter = function(param) {
+                  // Vendor/renderer slightly jittered
+                  const VENDOR = 0x1F00, RENDERER = 0x1F01;
+                  if (param === VENDOR) {
+                    const v = getParameter.call(this, param);
+                    return typeof v === 'string' ? v.replace(/Google Inc\./, 'Google LLC') : v;
+                  }
+                  if (param === RENDERER) {
+                    const r = getParameter.call(this, param);
+                    return typeof r === 'string' ? r.replace(/ANGLE \(|\)/g, '') : r;
+                  }
+                  return getParameter.call(this, param);
+                };
+              };
+              if (typeof WebGLRenderingContext !== 'undefined' && WebGLRenderingContext.prototype) {
+                patchWebGL(WebGLRenderingContext.prototype);
+              }
+              if (typeof WebGL2RenderingContext !== 'undefined' && WebGL2RenderingContext.prototype) {
+                patchWebGL(WebGL2RenderingContext.prototype);
+              }
+
+              // AudioContext fingerprint jitter
+              const patchAudio = (Cls) => {
+                if (!Cls || !Cls.prototype) return;
+                const getFloatFrequencyData = Cls.prototype.getFloatFrequencyData;
+                if (getFloatFrequencyData) {
+                  Cls.prototype.getFloatFrequencyData = function(arr) {
+                    const res = getFloatFrequencyData.call(this, arr);
+                    for (let i = 0; i < arr.length; i += Math.floor(arr.length / 8) || 1) {
+                      arr[i] = arr[i] * (0.99 + Math.random() * 0.02);
+                    }
+                    return res;
+                  };
+                }
+              };
+              if (typeof AnalyserNode !== 'undefined') {
+                patchAudio(AnalyserNode);
+              }
+
+              // Fonts enumeration shield
+              if (typeof Navigator !== 'undefined' && Navigator.prototype) {
+                const origFonts = Navigator.prototype.fonts;
+                if (origFonts) {
+                  Navigator.prototype.fonts = function() {
+                    const it = origFonts.apply(this, arguments);
+                    if (it && typeof it.status === 'string') return it;
+                    return {
+                      status: 'loaded',
+                      check: () => true,
+                      load: () => Promise.resolve(),
+                      values: () => [].values()
+                    };
+                  };
+                }
+              }
+
+            } catch (e) { /* swallow */ }
+          })();
+        """)
+
     # --- Main Run Logic (V88.5.0: Refactored for session management) ---
     async def run(self, *, site: str, query: str, site_config: Dict[str, Any], run_context: RunContext, target_url: str, likely_plp: bool) -> DiscoveryResult:
 
-        # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
-        # Moncler の処理は NavigationDriver.run_plp_flow 内で MonclerPlpHandler 経由で実行される
-
-        # --- ここから下は既存の Playwright ロジック（変更しない） ---
         settings = self._resolve_run_settings(site_config)
         timeout_ms = int(settings.get("timeout_sec", 60)) * 1000
         self.run_context = run_context  # Attach for downstream helpers
         self.runtime_kwargs["site_config"] = site_config
         self.runtime_kwargs["site"] = site
         mode = (self.runtime_kwargs or {}).get("mode", "run").lower()
-        
-        # Stage 3B: TelemetryClient を初期化
-        telemetry = self._ensure_telemetry()
-        tctx = TelemetryContext(site=site, query=query, run_id=run_context.run_id)
 
-        # Stage 3C: Plugin API (Facade化) - 直接 PLUGIN_REGISTRY を import しない
-        from app.agents.browser.plugin_api import PluginAPI
+        from app.agents.browser.plugins import get_plugin_registry
 
-        plugin_api = PluginAPI(self.logger)
-        plugin = plugin_api.get_plugin(site)
+        registry = get_plugin_registry()
+        plugin = registry.get(site.upper())
         plugin_ctx = {"query": query, "site_config": site_config}
-
-        nav_url = plugin_api.before_navigate(
-            plugin,
-            site=site,
-            target_url=target_url,
-            ctx=plugin_ctx,
-        )
+        nav_url = target_url
+        if plugin:
+            try:
+                nav_url = plugin.before_navigate(target_url, plugin_ctx) or target_url
+                self.logger.info(f"[Plugin:{site}] before_navigate => {nav_url}")
+            except Exception as plugin_e:
+                nav_url = target_url
+                self.logger.warning(f"[Plugin:{site}] before_navigate failed: {plugin_e}")
 
         try:
             instance_dir = Path(run_context.run_path).parent.parent
@@ -1853,8 +1699,7 @@ class BrowserUseAgent:
                 likely_plp=likely_plp,
                 runtime_kwargs=self.runtime_kwargs,
                 logger=self.logger,
-                # Stage 4: url_normalizerを汎用化（site_configを渡すラムダ関数）
-            url_normalizer=lambda url: self._normalize_url(url, site_config) if hasattr(self, '_normalize_url') else url,
+                url_normalizer=self._normalize_to_en_int_url,
             ) as session:
                 self._attach_session(session)
                 page = session.page
@@ -1871,19 +1716,25 @@ class BrowserUseAgent:
                     likely_plp=likely_plp,
                 )
 
-                await plugin_api.after_navigate(
-                    plugin,
-                    site=site,
-                    page=page,
-                    ctx=plugin_ctx,
-                )
+                if plugin:
+                    try:
+                        await plugin.after_navigate(page, plugin_ctx)
+                    except Exception as plugin_e:
+                        self.logger.warning(f"[Plugin:{site}] after_navigate failed: {plugin_e}")
 
                 await run_context.take_screenshot(page, "20_pre_vrt_and_extraction")
                 if settings.get("enable_visual_regression_check") and "plp" in (settings.get("vrt_scope") or ""):
                     await self._perform_vrt(page, "plp", settings)
 
-                # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行済み
-                # Moncler の処理は NavigationDriver.run_plp_flow 内で MonclerPlpHandler 経由で実行される
+                if (
+                    site.upper() == "MONCLER_OFFICIAL"
+                    and moncler_plp_recovery is not None
+                    and plugin is None
+                ):
+                    try:
+                        await moncler_plp_recovery(page, site_config, query)
+                    except Exception as _e:
+                        self.logger.warning(f"[MonclerPatch] skipped: {_e}")
 
                 start_t, budget_ms = self._start_watchdog(
                     settings.get("overall_plp_budget_ms", OVERALL_PLP_BUDGET_MS_DEFAULT)
@@ -1899,27 +1750,40 @@ class BrowserUseAgent:
                     )
 
                 if likely_plp:
-                    # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPlpHandler に移行
-                    # Moncler の処理は NavigationDriver.run_plp_flow 内で MonclerPlpHandler 経由で実行される
+                    if (
+                        site.upper() == "MONCLER_OFFICIAL"
+                        and moncler_plp_recovery is not None
+                        and plugin is None
+                    ):
+                        try:
+                            await moncler_plp_recovery(page, site_config, query)
+                        except Exception as _e:
+                            self.logger.warning(f"[MonclerPatch] skipped: {_e}")
                     if plugin:
                         plp_ctx = {"plp_min_cards": 24, "query": query}
-
-                        materialized = await plugin_api.materialize_plp(
-                            plugin,
-                            site=site,
-                            page=page,
-                            ctx=plp_ctx,
-                        )
-                        # materialized が False / None の場合も、現状と同じく
-                        # 「デフォルト PLP フロー継続」で特別な制御は追加しない
-
-                        asserted = await plugin_api.assert_plp(
-                            plugin,
-                            site=site,
-                            page=page,
-                            ctx=plp_ctx,
-                        )
-                        # asserted が False / None でも挙動は変えない（ログだけ）
+                        try:
+                            materialized = await plugin.materialize(page, plp_ctx)
+                            if materialized:
+                                self.logger.info(f"[Plugin:{site}] PLP materialized successfully.")
+                            else:
+                                self.logger.warning(
+                                    f"[Plugin:{site}] materialize failed (fallback to default PLP flow)."
+                                )
+                        except Exception as plugin_e:
+                            self.logger.warning(
+                                f"[Plugin:{site}] materialize raised {plugin_e!r} (ignored, continue default PLP flow)."
+                            )
+                        try:
+                            asserted = await plugin.assert_plp(page, plp_ctx)
+                        except Exception as plugin_e:
+                            self.logger.warning(
+                                f"[Plugin:{site}] assert_plp raised {plugin_e!r} (ignored, continue default PLP flow)."
+                            )
+                        else:
+                            if not asserted:
+                                self.logger.warning(
+                                    f"[Plugin:{site}] assert_plp=False (continue with default PLP flow)."
+                                )
 
                     nav_ctx = NavigationContext(
                         site=site,
@@ -1930,32 +1794,28 @@ class BrowserUseAgent:
                         start_t=start_t,
                         budget_ms=budget_ms,
                         entry_url=nav_url,
-                        context=context,  # Stage 3A-2-4: BrowserContext を追加
                     )
-                    # Stage 3B: TelemetryClient を NavigationDriver に渡す
-                    telemetry = self._ensure_telemetry()
-                    # Stage 3A-3: trap_checker を NavigationDriver に渡す（観測用）
                     navigation_driver = NavigationDriver(
                         page=page,
-                        # Stage 4: site_configを渡す
-                        trap_checker=lambda url: self._looks_like_trap_or_legal(url, site_config),
-                        telemetry=telemetry,  # Stage 3B: TelemetryClient を渡す
+                        ensure_plp_materialized=lambda pg, scfg, stg, s_t, b_ms: self._ensure_plp_materialized(
+                            pg,
+                            scfg,
+                            stg,
+                            start_t=s_t,
+                            budget_ms=b_ms,
+                            target_url=nav_url,
+                        ),
+                        trap_checker=None,
+                        telemetry=None,
                         strategy=plugin,
                     )
                     try:
                         nav_outcome = await navigation_driver.run_plp_flow(nav_ctx)
                     except Exception as nav_e:
                         self.logger.debug(
-                            f"[NavigationDriver] Stage3A-3 failed (fallback to legacy): {nav_e}"
+                            f"[NavigationDriver] Stage3A-2 failed (fallback to legacy): {nav_e}"
                         )
                         nav_outcome = None
-
-                    # Stage 3A-3: trap 観測結果をログに出す（挙動は変更しない）
-                    if nav_outcome and getattr(nav_outcome, "trap_detected", False):
-                        self.logger.warning(
-                            "[NavigationDriver] trap-like url observed (legacy PLP flow will still run): %s",
-                            nav_outcome.trap_reason,
-                        )
 
                     skip_materialize = bool(getattr(nav_outcome, "plp_materialized", False))
 
@@ -1971,8 +1831,6 @@ class BrowserUseAgent:
                         start_t=start_t,
                         budget_ms=budget_ms,
                         skip_materialize=skip_materialize,
-                        nav_outcome=nav_outcome,  # Stage 3A-2: NavigationDriver の結果を渡す
-                        plugin=plugin,  # Stage 3A-2-2: plugin を渡す
                     )
 
                 return await self._run_pdp_flow(page, site, query, settings, run_context, site_config)
@@ -1989,144 +1847,173 @@ class BrowserUseAgent:
     async def _run_plp_flow(self, page: Page, context: BrowserContext, site: str, query: str,
                             site_config: Dict, settings: Dict, run_context: RunContext,
                             target_url: str,
-                            *, start_t: float, budget_ms: int, skip_materialize: bool = False,
-                            nav_outcome: Optional[Any] = None, plugin: Optional[Any] = None) -> DiscoveryResult:
-        """
-        CR-ATELIER-003 Phase C-4 Final: BrowserOrchestrator への完全委譲
-        
-        PLP→PDP の全ロジックは BrowserOrchestrator.run_plp_to_pdp に集約されています。
-        このメソッドは Orchestrator への薄いラッパーとして機能します。
-        """
-        # CR-ATELIER-003 Phase C-4 Final: Orchestrator が None の場合はエラー
-        if self.orchestrator is None:
-            raise ValueError("Orchestrator is not initialized. BrowserOrchestrator must be set in __init__.")
-        
-        # plugin が渡されていない場合は取得
-        if plugin is None:
-            from app.agents.browser.plugin_api import PluginAPI
-            plugin_api = PluginAPI(logger=self.logger)
-            plugin = plugin_api.get_plugin(site)
-        
-        # CR-ATELIER-003 Phase D-9: Self-Healing Loop v2 の統合
-        enable_self_healing_loop = settings.get("enable_self_healing_loop", False)
-        self_healing_max_attempts = settings.get("self_healing_max_attempts", None)
-        
-        if enable_self_healing_loop:
-            # Self-Healing Loop v2 を使用
-            self.logger.info(
-                f"[BrowserUseAgent] Self-Healing Loop enabled "
-                f"(max_attempts={self_healing_max_attempts})"
+                            *, start_t: float, budget_ms: int, skip_materialize: bool = False) -> DiscoveryResult:
+
+        # ★ V88.6.0: 呼び出しを self._looks_like_trap_or_legal に修正
+        # ★ V88.5.9: 1. 入口で trap でも、まず 1 回だけ回復ナビを試みる
+        attempted_recover = False
+        if self._looks_like_trap_or_legal(page.url):
+            self.logger.warning("[_looks_like_trap] initial trap-like url: %s", page.url)
+            attempted_recover = True
+            await self._force_plp_recover(page, site_config, target_url)
+            # 正規化後URLでもう一度だけ判定
+            if self._looks_like_trap_or_legal(page.url):
+                raise ValueError(f"Landing page looks like legal/trap (even after recovery attempt): {page.url}")
+            self.logger.info("[_looks_like_trap] Recovery navigation seems successful.")
+
+        await self._pause_for_operator(page, run_context, "before_plp_materialize")
+
+        # --- Stage 3A-2: NavigationDriver が materialize 済みならスキップ ---
+        if skip_materialize:
+            ok_materialized = True
+        else:
+            ok_materialized = await self._ensure_plp_materialized(
+                page, site_config, settings,
+                start_t=start_t, budget_ms=budget_ms, target_url=target_url
             )
-            result = await self.orchestrator.run_with_self_healing_loop(
+
+        # ★ V88.5.7: (Fail Fast) まともなPLP(タイル0枚)が出なかったらすぐ諦める
+        if not ok_materialized:
+            raise ValueError(
+                f"PLP did not materialize (no product tiles). URL={page.url}"
+            )
+
+        # ★ V88.6.0: 呼び出しを self._looks_like_trap_or_legal に修正
+        # ★ V88.5.9: スクロール後のURL再チェック (v88.5.6ロジック)
+        if self._looks_like_trap_or_legal(page.url):
+            # V88.5.9: まだ回復トライしてなければ、ここで試す
+            if not attempted_recover:
+                self.logger.warning("[_looks_like_trap] trap-like url after materialize: %s", page.url)
+                await self._force_plp_recover(page, site_config, target_url)
+                if self._looks_like_trap_or_legal(page.url):
+                     raise ValueError(f"After materialize still on legal/trap page (even after recovery attempt): {page.url}")
+                self.logger.info("[_looks_like_trap] Recovery navigation (post-materialize) seems successful.")
+            else:
+                # 既に回復試行済みで、スクロールしたらまたトラップに戻った場合
+                raise ValueError(f"After materialize, bounced back to legal/trap page: {page.url}")
+
+        try:
+            await save_dom(run_context, page, "plp_dom_initial_materialized")
+            pdp_cfg_a = (site_config.get('selectors') or {}).get('pdp', {}) or {}
+            await count_selectors(
+                run_context,
+                page,
+                (pdp_cfg_a.get('pdp_link_selectors') or []) +
+                (pdp_cfg_a.get('plp_container_selectors') or []),
+                name="selector_counts_plp_initial"
+            )
+        except Exception as e:
+            logger.warning(f"[Hook A1] Failed: {e}")
+
+        pdp_links = await self._collect_pdp_links(page, site_config, settings, run_context)
+
+        # Fallback logic (header search, click first card)
+        # V88.5.7: このブロックは ok_materialized=True (タイル1枚以上) だが
+        # pdp_links=[] だった場合にのみ実行される
+        if not pdp_links:
+
+            # ★ V88.6.0: 呼び出しを self._looks_like_trap_or_legal に修正
+            # ★ 3. ここでも trap判定をはさむ (v88.5.6ロジック)
+            # (V88.5.9: 回復ロジックは既に試したので、ここでは検知のみ)
+            if not pdp_links and self._looks_like_trap_or_legal(page.url):
+                raise ValueError(
+                    f"No PDP links and URL looks like trap/legal page: {page.url}"
+                )
+
+            try:
+                self.logger.debug("[Fallback] Trying header search UI...")
+                did_search = await self._plp_header_search_fallback(page, query, site_config, settings, run_context, context, start_t=start_t, budget_ms=budget_ms)
+                if did_search:
+                    await self._click_continue_shopping_if_present(page, site_config)
+                    try: anchors = await page.locator("a[href*='/p/'], a[href*='/product/']").count()
+                    except Exception: anchors = 0
+                    if anchors < 6:
+                        self.logger.debug(f"[Fallback] Materializing after search (anchors={anchors}<6)")
+                        await self._ensure_plp_materialized(page, site_config, settings, start_t=start_t, budget_ms=budget_ms, target_url=target_url)
+                    try:
+                        await save_dom(run_context, page, "plp_dom_search_fallback")
+                        pdp_cfg_a2 = (site_config.get("selectors") or {}).get("pdp", {}) or {}
+                        await count_selectors(run_context, page, (pdp_cfg_a2.get("pdp_link_selectors") or []) + (pdp_cfg_a2.get("plp_container_selectors") or []), name="selector_counts_after_search_fallback")
+                    except Exception as e: logger.warning(f"[Hook A3] Failed: {e}")
+                    pdp_links = await self._collect_pdp_links(page, site_config, settings, run_context)
+
+                    # --- V88.5.5: 早期失敗ロジック ---
+                    if not pdp_links:
+                        self.logger.warning("[Fallback] No hrefs after search. Clicking first card...")
+                        new_page = await self._click_first_card_or_link(page, site_config, settings, context)
+                        if new_page:
+                            return await self._run_pdp_flow(new_page or page, site, query, settings, run_context, site_config)
+                        # new_page も取れなかった → ここで即ギブアップ (V88.5.5)
+                        raise ValueError("No PDP links and click fallback failed (gave up early for speed).")
+                    # --- V88.5.5: 修正ここまで ---
+
+            except Exception as _e:
+                # _plp_header_search_fallback や _click_first_card_or_link 自体が例外を投げた場合
+                # (V88.5.5: 早期ギブアップの ValueError もここに含まれる)
+                self.logger.warning(f"[Fallback:header-search] failed or gave up early: {_e}", exc_info=True)
+                # 最終手段として、この例外をそのまま投げるか、
+                # あるいは、pdp_links が空のまま次の if pdp_links: に進める
+                # ここでは後者を選択し、最終的に if pdp_links: の外側でエラーになるようにする
+                pass
+
+        if pdp_links:
+            prepare_hook = self._build_pdp_prepare_hook(site_config=site_config, settings=settings, run_context=run_context)
+            return await self.extraction_service.extract_from_pdp_list(
                 page=page,
                 context=context,
                 site=site,
                 query=query,
+                pdp_links=pdp_links,
                 site_config=site_config,
                 settings=settings,
                 run_context=run_context,
-                target_url=target_url,
                 start_t=start_t,
                 budget_ms=budget_ms,
-                max_attempts=self_healing_max_attempts,
-                nav_outcome=nav_outcome,
-                trap_checker=lambda url: self._looks_like_trap_or_legal(url),
-                telemetry=self._ensure_telemetry(),
-                plugin=plugin,
+                prepare_page=prepare_hook,
             )
-            # run_with_self_healing_loop は DiscoveryResult を返すので、
-            # そのまま返す（PlpNavigationResult の処理は不要）
-            return result
-        
-        # Orchestrator に全処理を委譲（通常フロー）
-        result = await self.orchestrator.run_plp_to_pdp(
-            page=page,
-            context=context,
-            site=site,
-            query=query,
-            site_config=site_config,
-            settings=settings,
-            run_context=run_context,
-            target_url=target_url,
-            start_t=start_t,
-            budget_ms=budget_ms,
-            nav_outcome=nav_outcome,
-            trap_checker=lambda url: self._looks_like_trap_or_legal(url),
-            telemetry=self._ensure_telemetry(),
-            plugin=plugin,
-        )
-        
-        # Orchestrator が PlpNavigationResult を返した場合、_run_pdp_flow を呼び出す
-        if isinstance(result, PlpNavigationResult):
-            # PlpNavigationResult の場合は RunContext に保存してから _run_pdp_flow を呼び出す
-            run_context.save_json("plp_navigation_result.json", {
-                "pdp_url": result.pdp_url,
-                "plp_url": result.plp_url,
-                "tiles_seen": result.tiles_seen,
-                "trap_detected": result.trap_detected,
-                "trap_reason": result.trap_reason,
-                "recovery_attempted": result.recovery_attempted,
-                "recovery_successful": result.recovery_successful,
-                "overlays_handled": result.overlays_handled,
-                "navigation_method": result.navigation_method,
-                "errors": result.errors,
-                "pdp_opened_in_new_tab": result.pdp_opened_in_new_tab,
-            })
-            
-            # trap検知時は早期終了（PDP modeへの移行を抑止）
-            if result.trap_detected:
-                self.logger.warning(
-                    f"[BrowserUseAgent] Trap detected in PlpNavigationResult. Early exit: {result.trap_reason} "
-                    f"(recovery_successful={result.recovery_successful}, overlays={result.overlays_handled})"
-                )
-                # navigation_failed(trap/locale) として DiscoveryResult を返す
-                # DiscoveryResultはok, site, query, message, evidenceパラメータを使用
-                from app.models.result_models import DiscoveryResult
-                return DiscoveryResult(
-                    ok=False,
-                    site=site,
-                    query=query,
-                    message=f"Trap/locale detected: {result.trap_reason}",
-                    evidence={
-                        "error_type": "trap_detected",
-                        "error_class": "PlpDriverTrapDetection",
-                        "trap_reason": result.trap_reason,
-                        "recovery_successful": result.recovery_successful,
-                        "overlays_handled": result.overlays_handled,
-                        "errors": result.errors,
-                    }
-                )
-            
-            # ログ出力（trap_detected=False の場合のみ実行）
-            if result.recovery_successful:
-                self.logger.info(
-                    f"[Orchestrator] Successfully navigated to PDP: {result.pdp_url} "
-                    f"(tiles_seen: {result.tiles_seen}, "
-                    f"overlays: {result.overlays_handled}, "
-                    f"method: {result.navigation_method})"
-                )
-            else:
-                self.logger.info(
-                    f"[Orchestrator] Successfully navigated to PDP: {result.pdp_url} "
-                    f"(tiles_seen: {result.tiles_seen}, "
-                    f"overlays: {result.overlays_handled}, "
-                    f"method: {result.navigation_method})"
-                )
-            
-            # エラーがある場合は警告
-            if result.errors:
-                for error in result.errors:
-                    self.logger.warning(f"[Orchestrator] Error: {error}")
-            
-            # PDP 抽出を実行
-            return await self._run_pdp_flow(page, site, query, settings, run_context, site_config)
-        
-        # DiscoveryResult を返した場合、そのまま返す
-        return result
+        raise ValueError("All PDP attempts failed after all recovery attempts.")
 
-    # CR-ATELIER-003 Phase A-2: _plp_header_search_fallback を削除
-    # すべての呼び出し箇所は NavigationDriver.header_search_fallback 経由に置き換え済み
-    # このメソッドは削除されました。NavigationDriver.header_search_fallback を直接使用してください。
+    async def _plp_header_search_fallback(self, page, query: str, site_config, settings, run_context, context: BrowserContext, *, start_t: float, budget_ms: int) -> bool:
+        ui = (site_config.get("selectors") or {}).get("ui") or {}
+        sel_open = _dedupe_keep_order(ui.get("search_open", []) + ["button[aria-label='Search']", "[aria-label*='Search' i]"])
+        sel_input = _dedupe_keep_order(ui.get("search_input", []) + ["form[role='search'] input", "input[type='search']", "input[name='q']", "[data-testid*='search' i] input", "[role='search'] input", "dialog input[type='search']"])
+        sel_submit = _dedupe_keep_order(ui.get("search_submit", []) + ["form[role='search'] button[type='submit']"])
+        try:
+            opened = False
+            for s in sel_open:
+                if self._time_left_ms(start_t, budget_ms) <= 0: break
+                el = page.locator(s).first
+                if await el.count() > 0: await el.click(timeout=3000); opened = True; await asyncio.sleep(0.2); await self.safe_wait_selector(page, "[role='search'], [data-overlay], dialog[open]", timeout_ms=5000, state="visible"); self.logger.debug(f"[Fallback] opened search with '{s}'"); break
+            if not opened: await page.keyboard.press("/"); await self.safe_wait_selector(page, "input[type='search']", timeout_ms=5000, state="visible")
+            found_input = False
+            for s in sel_input:
+                if self._time_left_ms(start_t, budget_ms) <= 0: break
+                el = page.locator(s).first
+                if await el.count() > 0 and await el.is_visible(): await el.fill(query, timeout=8000); found_input = True; self.logger.debug(f"[Fallback] filled '{query}' into '{s}'"); break
+            if not found_input: raise ValueError("Input field not found")
+            submitted = False
+            for s in sel_submit:
+                if self._time_left_ms(start_t, budget_ms) <= 0: break
+                el = page.locator(s).first
+                if await el.count() > 0 and await el.is_enabled(): await el.click(timeout=5000); submitted = True; self.logger.debug(f"[Fallback] submitted with '{s}'"); break
+            if not submitted: await page.keyboard.press("Enter"); self.logger.debug("[Fallback] submitted with Enter key.")
+            left_ms = self._time_left_ms(start_t, budget_ms)
+            if left_ms > 1000:
+                await page.wait_for_load_state("domcontentloaded", timeout=min(left_ms, 15000))
+                try: await page.wait_for_selector("main, #main, [role='main']", state="visible", timeout=800)
+                except Exception: self.logger.debug("[Fallback] Optional main wait timed out.")
+            return True
+        except Exception:
+            self.logger.warning("[Fallback] UI search failed. Trying direct search URL.")
+            try:
+                search_url = f"https://www.moncler.com/en-int/search?q={quote_plus(query)}&forceLocale=en-int"
+                # V88.5.3: (BugFix) `url=` キーワード引数を明示的に指定
+                await page.goto(url=search_url, wait_until="domcontentloaded", timeout=30000)
+                await self._click_continue_shopping_if_present(page, site_config)
+                try: await page.wait_for_selector("main, #main, [role='main']", state="visible", timeout=800)
+                except Exception: self.logger.debug("[Fallback] Optional main wait (URL) timed out.")
+                return True
+            except Exception as final_e: self.logger.error(f"[Fallback] Direct search URL failed: {final_e}"); return False
 
     # ★ V88.5.5: タイムアウトを 15000ms -> 5000ms に短縮
     async def _click_and_capture_navigation(self, click_coro, page: Page, context: BrowserContext, *, url_regex: Optional[re.Pattern] = re.compile(r"/product[s]?/|/p/|/pp/", re.I), wait_state: str = "domcontentloaded", timeout_ms: int = 5000) -> Optional[Page]:
@@ -2159,9 +2046,39 @@ class BrowserUseAgent:
         except Exception as e_wait: self.logger.warning(f"[_click_and_capture] Nav race failed: {e_wait}"); return None
         finally: [t.cancel() for t in (popup_task, same_tab_nav_task, spa_url_task, spa_price_task) if t and not t.done()]
 
-    # CR-ATELIER-003 Phase A-2: _click_first_card_or_link を削除
-    # すべての呼び出し箇所は NavigationDriver.click_first_card_or_link 経由に置き換え済み
-    # このメソッドは削除されました。NavigationDriver.click_first_card_or_link を直接使用してください。
+    async def _click_first_card_or_link(self, page: Page, site_config: Dict, settings: Dict, context: BrowserContext) -> Optional[Page]:
+        pdp = (site_config.get("selectors", {}).get("pdp") or {})
+        link_sel = pdp.get("pdp_link_selectors", [])
+        plp_boxes = pdp.get("plp_container_selectors", ["main", "section[role='main']", "#main", "[id*='product' i]", "[class*='product' i]"])
+        block_ng = set(pdp.get("blocklist_href_substrings", ["/cart", "/wishlist", "javascript:void"]))
+        url_pat = re.compile(r"/product[s]?/|/p/|/pp/", re.I)
+        if link_sel:
+            for s in link_sel:
+                try:
+                    loc = page.locator(s); count = await loc.count()
+                    for i in range(count):
+                        el = loc.nth(i); href = (await el.get_attribute("href")) or (await el.get_attribute("data-href")) or ""
+                        if href and not any(bad in href for bad in block_ng):
+                            await el.scroll_into_view_if_needed(); newp = await self._click_and_capture_navigation(lambda: el.click(timeout=5000), page, context, url_regex=url_pat)
+                            if newp: return newp
+                except Exception: continue
+        # ★ 88.6.2: (Refactor) 可読性のため整形
+        tile_selectors = [
+            "[data-qa='product-tile']",
+            ".c-product-tile",
+            ".product-card",
+            "[data-testid*='product-card']",
+            "article[data-product-id]"
+        ]
+        for box in plp_boxes:
+            for tile_sel in tile_selectors:
+                try:
+                    card = page.locator(f"{box} {tile_sel}").first; await card.scroll_into_view_if_needed()
+                    if await card.count() > 0:
+                        newp = await self._click_and_capture_navigation(lambda: card.click(timeout=5000), page, context, url_regex=url_pat)
+                        if newp: return newp
+                except Exception: continue
+        self.logger.warning("[Fallback:click-card] Could not find any clickable link or card."); return None
 
     # --- Flow Logic: PDP ---
     async def _run_pdp_flow(
@@ -2173,42 +2090,52 @@ class BrowserUseAgent:
         run_context: RunContext,
         site_config: Dict[str, Any],
     ) -> DiscoveryResult:
-        """
-        CR-ATELIER-003 Phase D-3: BrowserOrchestrator への完全委譲
-        
-        PDP 抽出の全ロジックは BrowserOrchestrator.run_pdp に集約されています。
-        このメソッドは Orchestrator への薄いラッパーとして機能します。
-        
-        例外ハンドリングは BrowserOrchestrator.run_pdp 内で行われるため、
-        このメソッドでは一切 try/except を持たない。
-        """
         logger.info("[Mode] PDP (detail)")
-        
-        # CR-ATELIER-003 Phase D-3: Orchestrator が None の場合はエラー
-        if self.orchestrator is None:
-            raise ValueError("Orchestrator is not initialized. BrowserOrchestrator must be set in __init__.")
-        
-        return await self.orchestrator.run_pdp(
+        prepare_hook = self._build_pdp_prepare_hook(site_config=site_config, settings=settings, run_context=run_context)
+        return await self.extraction_service.extract_single_pdp(
             page=page,
             context=self._context,
             site=site,
             query=query,
-            site_config=site_config,
             settings=settings,
             run_context=run_context,
+            site_config=site_config,
             target_url=page.url,
+            prepare_page=prepare_hook,
         )
 
-    # CR-ATELIER-003 Phase A-2: _force_plp_recover と _inline_force_plp_recover を削除
-    # すべての呼び出し箇所は NavigationDriver.recover_plp 経由に置き換え済み
-    # このメソッドは削除されました。NavigationDriver.recover_plp を直接使用してください。
+    # ★ V88.6.0: (Fix) ご提示いただいた差分パッチ L.59-L.90 (v88.5.9J で欠落していた) をここに追加
+    # ★NEW: 既定の“強制PLP復帰”保険（本命）
+    # ★ V88.6.1: (Refactor) 呼び出しを _normalize_to_en_int_url に修正
+    # ★ V88.6.1: (BugFix) goto に url= を明記
+    async def _force_plp_recover(self, page, site_config: dict, target_url: str | None) -> None:
+        try:
+            plp = (
+                target_url
+                or site_config.get("plp_hard_nav")
+                or site_config.get("seed_plp_url")
+                or site_config.get("fallback_url")
+                or site_config.get("home_url")
+            )
+            if not plp:
+                logger.debug("[recover] no PLP candidate found; skip")
+                return
+            # ロケール強制
+            plp = self._normalize_to_en_int_url(plp) # V88.6.1: 修正
+            logger.info("[recover] Forcing PLP navigation: %s", plp)
+            await page.goto(url=plp, wait_until="domcontentloaded") # V88.6.1: 修正
+        except Exception as e:
+            logger.debug("[recover] force PLP failed: %r", e)
+
+    # ★NEW: ガード用の簡易版（_force_plp_recover が見つからない場合の代替）
+    async def _inline_force_plp_recover(self, page, site_config: dict, target_url: str | None) -> None:
+        await self._force_plp_recover(page, site_config, target_url)
 
     # ★ V88.6.1: (Refactor) 不要になった重複メソッドを削除
     # def _normalize_en_int_url(self, url: str, site_config: dict) -> str: ...
 
     # --- V88.1.0: Refined Failure Handling ---
     # --- V88.4.0: Add intent context ---
-    # --- V88.7.0: Exception classification & retry logic unification ---
     async def _handle_run_failure(self, e: Exception, site: str, query: str, site_config: Dict,
                                   run_context: RunContext, page: Optional[Page]) -> DiscoveryResult:
         logger.error(f"Browser task failed (RunID: {run_context.run_id}): {e}", exc_info=True)
@@ -2217,61 +2144,25 @@ class BrowserUseAgent:
         # V88.5.0: page は self._page (インスタンス変数) または引数で渡されたもの
         active_page = page or self._page
 
-        # V88.7.0: 例外を分類
-        error_type = self._classify_exception(e, "run_failure")
-        
         try:
-            # CR-ATELIER-003 Phase C: ui_helpers.py を使用
-            if pause_for_operator:
-                await pause_for_operator(active_page, run_context, "failure_inspection", self.runtime_kwargs, self.logger)
-            else:
-                await self._pause_for_operator(active_page, run_context, "failure_inspection")
+            await self._pause_for_operator(active_page, run_context, "failure_inspection")
             if active_page and not active_page.is_closed():
                 final_url_on_fail = active_page.url
         except Exception:
              pass
 
-        # Stage 3B: TelemetryClient を使用して失敗スナップショットを保存
+        # Call write_fail_snapshot to save DOM and screenshot
         dom_path_str = None
         try:
             # write_fail_snapshot は active_page (開いている可能性のあるページ) を使う
-            telemetry = self._ensure_telemetry()
-            tctx = TelemetryContext(site=site, query=query, run_id=run_context.run_id, stage="fail_plp")
-            await telemetry.write_fail_snapshot(
-                active_page,
-                reason=str(e),
-                tctx=tctx,
-                extra={
-                    "site_config": site_config,
-                    "final_url": final_url_on_fail,
-                    "error_type": error_type.value,  # V88.7.0: 例外タイプを追加
-                }
-            )
+            await write_fail_snapshot(run_context, active_page, final_url_on_fail, e, site_config)
             # Infer standard path used by write_fail_snapshot
             # ★ V88.6.1: (BugFix) ファイル名を failure_dom.html に修正
             dom_guess = run_context.get_path("failure_dom.html")
             if dom_guess and Path(dom_guess).exists():
                 dom_path_str = str(dom_guess)
         except Exception as hook_e:
-            logger.warning(f"[Hook C2] TelemetryClient.write_fail_snapshot failed, falling back: {hook_e}")
-            # フォールバック: 既存のobservability.py関数を使用
-            try:
-                # Stage 3B: TelemetryClient 経由で保存
-                await telemetry.write_fail_snapshot(
-                    active_page,
-                    reason=str(e),
-                    tctx=tctx,
-                    extra={
-                        "site_config": site_config,
-                        "final_url": final_url_on_fail,
-                        "error_type": error_type.value,  # V88.7.0: 例外タイプを追加
-                    }
-                )
-                dom_guess = run_context.get_path("failure_dom.html")
-                if dom_guess and Path(dom_guess).exists():
-                    dom_path_str = str(dom_guess)
-            except Exception as hook_e2:
-                logger.warning(f"[Hook C2] Fallback also failed: {hook_e2}")
+            logger.warning(f"[Hook C2] write_fail_snapshot failed: {hook_e}")
 
         # Build failure_context for Orchestrator V16+
         # Dynamically get screenshots if RunContext supports it
@@ -2287,13 +2178,11 @@ class BrowserUseAgent:
             except Exception:
                 pass # Ignore if path finding fails
 
-        # V88.7.0: 例外分類情報を failure_context に追加
+
         failure_context = {
             "final_url": final_url_on_fail,
             "dom_snapshot_path": dom_path_str, # Use path obtained from write_fail_snapshot result
             "errors": [str(e)],
-            "error_type": error_type.value,  # V88.7.0: 例外タイプを追加
-            "error_class": type(e).__name__,  # V88.7.0: 例外クラス名を追加
             "screenshots": screenshots_list, # Use dynamically obtained list
             # high-level intent / expectation so LLM can reason:
             "intent_description": (
@@ -2305,14 +2194,6 @@ class BrowserUseAgent:
             # future: we could add what selectors we attempted, etc.
             "selectors_tried_hint": "See site_config['selectors']['pdp'] and wait_for_selectors in settings.",
         }
-
-        # Task B: Build upload bundle for diagnostics
-        try:
-            bundle_path = run_context.build_upload_bundle()
-            if bundle_path:
-                logger.info(f"[Failure Handler] Upload bundle created: {bundle_path}")
-        except Exception as bundle_e:
-            logger.warning(f"[Failure Handler] Failed to build upload bundle: {bundle_e}")
 
         return DiscoveryResult(
             ok=False,
@@ -2329,42 +2210,8 @@ class BrowserUseAgent:
     # --- Flow Logic: Learning ---
     async def _run_learning_flow(self, page: Page, context: BrowserContext, site: str, site_config: Dict, settings: Dict, run_context: RunContext, *, start_t: float, budget_ms: int) -> DiscoveryResult:
         self.logger.info(f"[LEARN] Starting learning flow for site: {site}")
-        # CR-ATELIER-003 Phase A-1: _ensure_plp_materialized の代わりに NavigationDriver.ensure_plp_materialized を使用
-        from app.agents.browser.navigation_driver import NavigationContext, NavigationDriver
-        from app.agents.browser.telemetry import TelemetryClient
-        nav_ctx = NavigationContext(
-            site=site,
-            query="(learning)",
-            site_config=site_config,
-            settings=settings,
-            run_context=run_context,
-            start_t=start_t,
-            budget_ms=budget_ms,
-            entry_url=page.url,
-            context=context,
-        )
-        telemetry = self._ensure_telemetry()
-        navigation_driver = NavigationDriver(
-            page=page,
-            telemetry=telemetry,
-            trap_checker=None,
-            strategy=None,
-        )
-        try:
-            ok_materialized = await navigation_driver.ensure_plp_materialized(nav_ctx)
-            if not ok_materialized:
-                raise ValueError(f"PLP did not materialize for learning flow: {page.url}")
-        except Exception as e:
-            self.logger.warning(f"[LEARN] NavigationDriver.ensure_plp_materialized failed: {e}", exc_info=True)
-            raise ValueError(f"PLP did not materialize for learning flow: {page.url}")
-        # Stage 3B: TelemetryClient を使用
-        try:
-            telemetry = self._ensure_telemetry()
-            await telemetry.save_dom(page, "learn_plp_dom_for_discovery")
-        except Exception as e:
-            logger.warning(f"[LEARN] TelemetryClient.save_dom failed, falling back: {e}")
-            # フォールバック: 既存のobservability.py関数を使用
-            await save_dom(run_context, page, "learn_plp_dom_for_discovery")
+        await self._ensure_plp_materialized(page, site_config, settings, start_t=start_t, budget_ms=budget_ms)
+        await save_dom(run_context, page, "learn_plp_dom_for_discovery")
         try:
             discovered_selectors = await self.discovery_agent.discover(page=page, context=context, run_context=run_context)
             if not discovered_selectors: raise ValueError("SelectorDiscoveryAgent returned no selectors.")
@@ -2399,175 +2246,5 @@ class BrowserUseAgent:
         for key in all_keys:
             merged_list = _dedupe_keep_order(new_selectors.get(key, []) + existing_selectors.get(key, []))
             if merged_list: merged_selectors[key] = merged_list
-        
-        # Task B: Use RunContext to save learned selectors
-        # Save to run_context for this run, and also save to instance/sites/ for persistence
-        try:
-            # Save to run_context for this run
-            run_context.save_json("learned_selectors.json", merged_selectors)
-            self.logger.info(f"[LEARN] Saved learned selectors to run_context: {run_context.get_path('learned_selectors.json')}")
-        except Exception as e:
-            self.logger.warning(f"[LEARN] Failed to save to run_context: {e}")
-        
-        # Also save to instance/sites/ for persistence across runs
-        try:
-            learned_path.write_text(json.dumps(merged_selectors, indent=2, ensure_ascii=False), encoding="utf-8")
-            self.logger.info(f"[LEARN] Saved merged selectors to: {learned_path}")
-        except Exception as e:
-            self.logger.warning(f"[LEARN] Failed to save to instance/sites/: {e}")
-
-    # --- CR-ATELIER-003 Phase D-12: E2E Entrypoint ---
-    async def run_e2e(
-        self,
-        *,
-        plp_url: str,
-        scenario_name: str,
-        use_self_healing: bool,
-        max_attempts: Optional[int] = None,
-    ) -> DiscoveryResult:
-        """
-        E2E 実行のエントリーポイント
-        
-        CR-ATELIER-003 Phase D-12: 実ブラウザ E2E 検証フェーズ
-        
-        Args:
-            plp_url: PLP URL
-            scenario_name: シナリオ名（normal / auto_heal / hard_fail）
-            use_self_healing: Self-Healing を有効化するか
-            max_attempts: 最大再試行回数（None の場合は policy から取得）
-        
-        Returns:
-            DiscoveryResult: 実行結果
-        """
-        from app.agents.browser_orchestrator import BrowserOrchestrator
-        from app.config.sites_loader import SitesConfigLoader
-        from app.agents.self_healing_policy import SelfHealingPolicy
-        from app.core.run_context import RunContext
-        from app.models.result_models import DiscoveryResult
-        import json
-        import os
-        
-        # RunContext を作成（既に作成済みの場合は再利用）
-        if not hasattr(self, 'run_context') or self.run_context is None:
-            self.run_context = RunContext()
-        
-        # run_type と scenario_name を run_context に設定
-        self.run_context.run_type = "e2e"
-        self.run_context.scenario_name = scenario_name
-        
-        # サイト設定を読み込み（SiteConfigProvider 経由、未注入時は DefaultSiteConfigProvider）
-        try:
-            from app.config.protocols import DefaultSiteConfigProvider
-            provider = self._config_provider or DefaultSiteConfigProvider()
-            site_config = provider.get_site_config("MONCLER_OFFICIAL")
-        except ImportError:
-            from app.config.loader import get_site_config
-            site_config = get_site_config("MONCLER_OFFICIAL")
-        
-        if not site_config:
-            return DiscoveryResult(
-                ok=False,
-                site="MONCLER_OFFICIAL",
-                query="",
-                message="MONCLER_OFFICIAL site config not found",
-            )
-        
-        # Self-Healing の有効/無効を環境変数で設定
-        if use_self_healing:
-            os.environ["SELF_HEALING_ENABLED"] = "true"
-        else:
-            os.environ["SELF_HEALING_ENABLED"] = "false"
-        
-        # Policy を読み込み
-        policy_path = Path("app/config/self_healing_policy.json")
-        policy_dict = {}
-        if policy_path.exists():
-            try:
-                policy_dict = json.loads(policy_path.read_text(encoding="utf-8"))
-            except Exception as e:
-                self.logger.warning(f"Failed to load policy: {e}")
-        
-        policy = SelfHealingPolicy(policy_dict)
-        
-        # E2E 用の max_attempts を取得（policy から fallback）
-        e2e_config = policy_dict.get("e2e", {})
-        if max_attempts is None:
-            max_attempts = e2e_config.get("max_attempts", policy.max_attempts())
-        
-        # BrowserOrchestrator を初期化
-        orchestrator = BrowserOrchestrator(
-            runtime_kwargs=self.runtime_kwargs,
-            policy=policy,
-        )
-        
-        # セッションを開く
-        try:
-            page, context = await self._open_session(
-                site="MONCLER_OFFICIAL",
-                site_config=site_config,
-                run_context=self.run_context,
-                settings=self._resolve_run_settings(site_config),
-                target_url=plp_url,
-                timeout_ms=60000,
-                likely_plp=True,
-            )
-        except Exception as e:
-            self.logger.error(f"Failed to open session: {e}", exc_info=True)
-            return DiscoveryResult(
-                ok=False,
-                site="MONCLER_OFFICIAL",
-                query="",
-                message=f"Failed to open session: {e}",
-            )
-        
-        try:
-            import time
-            start_t = time.time()
-            budget_ms = 300000  # 5分
-            
-            # Self-Healing が有効な場合は run_with_self_healing_loop を使用
-            if use_self_healing and policy.enabled() and policy.is_allowed_site("MONCLER_OFFICIAL"):
-                result = await orchestrator.run_with_self_healing_loop(
-                    page=page,
-                    context=context,
-                    site="MONCLER_OFFICIAL",
-                    query="",
-                    site_config=site_config,
-                    settings=self._resolve_run_settings(site_config),
-                    run_context=self.run_context,
-                    target_url=plp_url,
-                    start_t=start_t,
-                    budget_ms=budget_ms,
-                    max_attempts=max_attempts,
-                )
-            else:
-                # Self-Healing が無効な場合は通常実行
-                result = await orchestrator._run_full(
-                    page=page,
-                    context=context,
-                    site="MONCLER_OFFICIAL",
-                    query="",
-                    site_config=site_config,
-                    settings=self._resolve_run_settings(site_config),
-                    run_context=self.run_context,
-                    target_url=plp_url,
-                    start_t=start_t,
-                    budget_ms=budget_ms,
-                )
-            
-            return result
-            
-        except Exception as e:
-            self.logger.error(f"E2E execution failed: {e}", exc_info=True)
-            return DiscoveryResult(
-                ok=False,
-                site="MONCLER_OFFICIAL",
-                query="",
-                message=f"E2E execution failed: {e}",
-            )
-        finally:
-            # セッションを閉じる
-            try:
-                await context.close()
-            except Exception:
-                pass
+        learned_path.write_text(json.dumps(merged_selectors, indent=2, ensure_ascii=False), encoding="utf-8")
+        self.logger.info(f"[LEARN] Saved merged selectors to: {learned_path}")
