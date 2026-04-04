@@ -8,126 +8,234 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/custom.css') }}">
 </head>
 
-<body class="dark:bg-gray-900 dark:text-gray-100">
-<h1 class="text-xl font-bold text-gray-800 dark:text-white mb-4">{{ brand }} 価格ダッシュボード <span class="small text-gray-500 dark:text-gray-400">(直近 {{ days }} 日)</span></h1>
+<body>
 
-<!-- コントロール bar -->
-<div class="row mb-4">
-  <div class="controls flex flex-wrap gap-3 items-center p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
-    <form method="get" action="/brand/{{ brand }}" class="flex flex-wrap gap-2 items-center">
-      <label class="text-sm text-gray-700 dark:text-gray-300">日数</label>
-      <input type="number" name="days" value="{{ days }}" min="7" max="365" class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 w-16 text-sm dark:bg-gray-700 dark:text-white">
-      <label class="text-sm text-gray-700 dark:text-gray-300 ml-2">仕入れ価格</label>
-      <input type="number" name="purchase_price" placeholder="例: 50000" class="border border-gray-300 dark:border-gray-600 rounded px-2 py-1 w-24 text-sm dark:bg-gray-700 dark:text-white">
-      <button type="submit" class="btn btn-primary">更新</button>
-    </form>
-    <button class="btn btn-secondary" onclick="exportData('csv')">CSV出力</button>
-    <button class="btn btn-secondary" onclick="exportData('json')">JSON出力</button>
+<!-- Nav Bar -->
+<nav class="dash-nav">
+  <div class="dash-nav-title"><a href="/brand/{{ brand }}">{{ brand }} ダッシュボード</a></div>
+  <div class="dash-nav-links">
+    <a href="/">管理画面</a>
+    <button id="theme-toggle" aria-label="テーマ切替" style="background:none;border:none;cursor:pointer;padding:4px;">
+      <svg id="icon-sun" class="hidden" width="18" height="18" fill="none" stroke="#f59e0b" stroke-width="2" viewBox="0 0 24 24"><path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+      <svg id="icon-moon" class="hidden" width="18" height="18" fill="none" stroke="#64748b" stroke-width="2" viewBox="0 0 24 24"><path d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+    </button>
   </div>
-</div>
+</nav>
 
-<div id="summary" class="profit-summary" style="display:none">
-  <h2>📊 収益性サマリー</h2>
-  <div id="summary_grid" class="summary-grid"></div>
-</div>
+<div class="dash-container">
+  <h1>{{ brand }} 価格ダッシュボード <span class="small">(直近 {{ days }} 日)</span></h1>
 
-<div id="loading" class="loading">
-  <div class="spinner"></div> データを読み込み中...
+  <!-- Controls -->
+  <div class="row">
+    <div class="controls">
+      <form method="get" action="/brand/{{ brand }}" class="flex flex-wrap gap-2 items-center">
+        <label class="text-sm">日数</label>
+        <input type="number" name="days" value="{{ days }}" min="7" max="365" class="border rounded px-2 py-1 w-16 text-sm">
+        <label class="text-sm ml-2">仕入れ価格</label>
+        <input type="number" name="purchase_price" placeholder="例: 50000" class="border rounded px-2 py-1 w-24 text-sm">
+        <button type="submit" class="btn btn-primary">更新</button>
+      </form>
+      <button class="btn btn-secondary" onclick="exportData('csv')">CSV</button>
+      <button class="btn btn-secondary" onclick="exportData('json')">JSON</button>
+    </div>
+  </div>
+
+  <!-- KPI Summary -->
+  <div id="summary" class="profit-summary" style="display:none">
+    <h2>収益性サマリー</h2>
+    <div id="summary_grid" class="summary-grid"></div>
+  </div>
+
+  <div id="loading" class="loading">
+    <span class="spinner"></span> データを読み込み中...
+  </div>
+  <div id="error" class="error-state" style="display:none"></div>
+  <div id="cards" class="grid"></div>
 </div>
-<div id="error" class="error-state" style="display:none"></div>
-<div id="cards" class="grid"></div>
 
 <script>
-let loadingDiv = document.getElementById('loading');
-let errorDiv = document.getElementById('error');
-let cardsDiv = document.getElementById('cards');
-let summaryDiv = document.getElementById('summary');
+/* ---- Theme Toggle ---- */
+(function() {
+  var saved = localStorage.getItem('theme');
+  if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme:dark)').matches)) {
+    document.documentElement.classList.add('dark');
+  }
+  var sun = document.getElementById('icon-sun');
+  var moon = document.getElementById('icon-moon');
+  function updateIcons() {
+    var dark = document.documentElement.classList.contains('dark');
+    sun.classList.toggle('hidden', !dark);
+    moon.classList.toggle('hidden', dark);
+  }
+  updateIcons();
+  document.getElementById('theme-toggle').addEventListener('click', function() {
+    document.documentElement.classList.toggle('dark');
+    localStorage.setItem('theme', document.documentElement.classList.contains('dark') ? 'dark' : 'light');
+    updateIcons();
+  });
+})();
+
+/* ---- Dashboard Logic ---- */
+var loadingDiv = document.getElementById('loading');
+var errorDiv = document.getElementById('error');
+var cardsDiv = document.getElementById('cards');
+var summaryDiv = document.getElementById('summary');
+
+function esc(str) {
+  var d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
 
 async function load() {
-  // ローディング表示
   loadingDiv.style.display = 'block';
   errorDiv.style.display = 'none';
-  cardsDiv.innerHTML = '';
+  cardsDiv.textContent = '';
   summaryDiv.style.display = 'none';
 
-  const params = new URLSearchParams({
-    brand: '{{ brand }}',
-    days: '{{ days }}'
-  });
-  const urlParams = new URLSearchParams(window.location.search);
+  var params = new URLSearchParams({ brand: '{{ brand }}', days: '{{ days }}' });
+  var urlParams = new URLSearchParams(window.location.search);
   if (urlParams.get('purchase_price')) {
     params.set('purchase_price', urlParams.get('purchase_price'));
   }
 
   try {
-    const resp = await fetch(`/api/history?${params.toString()}`);
-    if (!resp.ok) {
-      throw new Error(`APIエラー: ${resp.status} ${resp.statusText}`);
-    }
-
-    const data = await resp.json();
+    var resp = await fetch('/api/history?' + params.toString());
+    if (!resp.ok) throw new Error('API\u30a8\u30e9\u30fc: ' + resp.status + ' ' + resp.statusText);
+    var data = await resp.json();
     loadingDiv.style.display = 'none';
 
     if (!data.series || data.series.length === 0) {
-      cardsDiv.innerHTML = `<div class="card">データがありません。まず price-history を実行してください。</div>`;
+      cardsDiv.textContent = '\u30c7\u30fc\u30bf\u304c\u3042\u308a\u307e\u305b\u3093\u3002price-history \u3092\u5b9f\u884c\u3057\u3066\u304f\u3060\u3055\u3044\u3002';
       return;
     }
 
     updateSummary(data.series);
     renderCards(data.series);
-
   } catch (err) {
     loadingDiv.style.display = 'none';
     errorDiv.style.display = 'block';
-    errorDiv.innerHTML = `<strong>エラー:</strong> ${err.message}<br><small>ページを更新してください</small>`;
+    errorDiv.textContent = '\u30a8\u30e9\u30fc: ' + err.message;
     console.error('Dashboard load error:', err);
   }
 }
 
-function renderCards(series) {
-  for (let i = 0; i < series.length; i++) {
-    const s = series[i];
-    const card = document.createElement('div');
-    card.className = 'card dark:bg-gray-800 dark:border-gray-700';
-
-    const profit = s.profitability || {};
-    const profitClass = getProfitClass(profit.current_profit_rate);
-    const trendIcon = getTrendIcon(profit.trend_direction);
-    const recBadge = getRecommendationBadge(profit.recommendation);
-
-    const alertsHtml = s.alerts && s.alerts.length
-      ? `<ul class="alerts dark:text-red-400">${s.alerts.map(a => `<li>${a}</li>`).join('')}</ul>`
-      : '';
-
-    card.innerHTML = `
-      <div class="title dark:text-gray-100">
-        <a href="${s.url}" target="_blank" rel="noopener" class="text-blue-600 dark:text-blue-400 hover:underline">${s.name || s.url}</a>
-        ${recBadge}
-        ${profit.current_profit_rate !== null && profit.current_profit_rate !== undefined
-          ? `<span class="profit-badge ${profitClass}">${profit.current_profit_rate >= 0 ? '+' : ''}${profit.current_profit_rate}%</span>`
-          : ''}
-      </div>
-      <canvas id="chart-${s.url ? s.url.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30) : 'product_' + i}" height="160"></canvas>
-      ${alertsHtml}
-      ${renderProfitabilityMeta(profit)}
-    `;
-    cardsDiv.appendChild(card);
-
-    const canvasId = card.querySelector('canvas').id;
-    renderChart(canvasId, s);
+function updateSummary(series) {
+  var grid = document.getElementById('summary_grid');
+  var profitable = series.filter(function(s) { return (s.profitability && s.profitability.current_profit_rate || 0) >= 10; }).length;
+  var total = series.length;
+  var sumRate = 0;
+  var sumProfit = 0;
+  for (var i = 0; i < series.length; i++) {
+    sumRate += (series[i].profitability && series[i].profitability.current_profit_rate || 0);
+    sumProfit += (series[i].profitability && series[i].profitability.current_profit || 0);
   }
+  var avgProfitRate = sumRate / (total || 1);
+
+  grid.innerHTML =
+    '<div class="summary-item">' +
+      '<div class="summary-label"><svg viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" width="14" height="14"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg> SKU数</div>' +
+      '<div class="summary-value">' + total + '</div>' +
+    '</div>' +
+    '<div class="summary-item">' +
+      '<div class="summary-label"><svg viewBox="0 0 24 24" fill="none" stroke="#16a34a" stroke-width="2" width="14" height="14"><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> 推奨SKU (10%+)</div>' +
+      '<div class="summary-value positive">' + profitable + '<span style="font-size:14px;color:#64748b;font-weight:400"> / ' + total + '</span></div>' +
+    '</div>' +
+    '<div class="summary-item">' +
+      '<div class="summary-label"><svg viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" width="14" height="14"><path d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg> 平均利益率</div>' +
+      '<div class="summary-value ' + (avgProfitRate >= 5 ? 'positive' : 'negative') + '">' + (avgProfitRate >= 0 ? '+' : '') + avgProfitRate.toFixed(1) + '%</div>' +
+    '</div>' +
+    '<div class="summary-item">' +
+      '<div class="summary-label"><svg viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" width="14" height="14"><path d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> 推定総利益</div>' +
+      '<div class="summary-value ' + (sumProfit >= 0 ? 'positive' : 'negative') + '">&yen;' + sumProfit.toLocaleString() + '</div>' +
+    '</div>';
+
   summaryDiv.style.display = 'block';
 }
 
+function renderCards(series) {
+  for (var i = 0; i < series.length; i++) {
+    var s = series[i];
+    var card = document.createElement('div');
+    card.className = 'card';
+
+    var profit = s.profitability || {};
+    var profitClass = getProfitClass(profit.current_profit_rate);
+    var recBadge = getRecommendationBadge(profit.recommendation);
+
+    var alertsHtml = '';
+    if (s.alerts && s.alerts.length) {
+      var alertLis = '';
+      for (var a = 0; a < s.alerts.length; a++) {
+        alertLis += '<li>' + esc(s.alerts[a]) + '</li>';
+      }
+      alertsHtml = '<ul class="alerts">' + alertLis + '</ul>';
+    }
+
+    var titleLink = document.createElement('a');
+    titleLink.href = s.url;
+    titleLink.target = '_blank';
+    titleLink.rel = 'noopener';
+    titleLink.style.color = '#3b82f6';
+    titleLink.textContent = s.name || s.url;
+
+    var titleDiv = document.createElement('div');
+    titleDiv.className = 'title';
+    titleDiv.appendChild(titleLink);
+
+    if (recBadge) {
+      var badgeSpan = document.createElement('span');
+      badgeSpan.className = 'profit-badge';
+      badgeSpan.style.fontSize = '10px';
+      badgeSpan.textContent = recBadge.text;
+      if (recBadge.cls) badgeSpan.classList.add(recBadge.cls);
+      titleDiv.appendChild(document.createTextNode(' '));
+      titleDiv.appendChild(badgeSpan);
+    }
+
+    if (profit.current_profit_rate !== null && profit.current_profit_rate !== undefined) {
+      var rateSpan = document.createElement('span');
+      rateSpan.className = 'profit-badge ' + profitClass;
+      rateSpan.textContent = (profit.current_profit_rate >= 0 ? '+' : '') + profit.current_profit_rate + '%';
+      titleDiv.appendChild(document.createTextNode(' '));
+      titleDiv.appendChild(rateSpan);
+    }
+
+    var canvasId = 'chart-' + (s.url ? s.url.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30) : 'product_' + i);
+    var canvas = document.createElement('canvas');
+    canvas.id = canvasId;
+    canvas.height = 160;
+
+    card.appendChild(titleDiv);
+    card.appendChild(canvas);
+
+    if (alertsHtml) {
+      var alertsDiv = document.createElement('div');
+      alertsDiv.innerHTML = alertsHtml;
+      card.appendChild(alertsDiv);
+    }
+
+    var metaHtml = renderProfitabilityMeta(profit);
+    if (metaHtml) {
+      var metaDiv = document.createElement('div');
+      metaDiv.innerHTML = metaHtml;
+      card.appendChild(metaDiv);
+    }
+
+    cardsDiv.appendChild(card);
+    renderChart(canvasId, s);
+  }
+}
+
 function getRecommendationBadge(rec) {
-  if (!rec) return '';
-  if (rec.includes('上昇') || rec.includes('仕入れ的最佳')) {
-    return '<span class="inline-block px-2 py-0.5 text-xs rounded bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300 ml-2">买入シグナル</span>';
+  if (!rec) return null;
+  if (rec.indexOf('\u4e0a\u6607') >= 0 || rec.indexOf('\u4ed5\u5165\u308c\u7684\u6700\u4f73') >= 0) {
+    return { text: '\u8cb7\u3044\u30b7\u30b0\u30ca\u30eb', cls: 'profit-high' };
   }
-  if (rec.includes('下跌') || rec.includes('销售的最佳')) {
-    return '<span class="inline-block px-2 py-0.5 text-xs rounded bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-300 ml-2">卖出シグナル</span>';
+  if (rec.indexOf('\u4e0b\u8dcc') >= 0 || rec.indexOf('\u58f2\u5356\u306e\u6700\u4f73') >= 0) {
+    return { text: '\u58f2\u308a\u30b7\u30b0\u30ca\u30eb', cls: 'profit-low' };
   }
-  return '<span class="inline-block px-2 py-0.5 text-xs rounded bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400 ml-2">監視継続</span>';
+  return { text: '\u76e3\u8996\u4e2d', cls: '' };
 }
 
 function getProfitClass(rate) {
@@ -139,88 +247,57 @@ function getProfitClass(rate) {
 }
 
 function getTrendIcon(direction) {
-  if (direction === 'rising') return '📈';
-  if (direction === 'falling') return '📉';
-  return '➡️';
+  if (direction === 'rising') return '\u2191';
+  if (direction === 'falling') return '\u2193';
+  return '\u2192';
 }
 
 function renderProfitabilityMeta(profit) {
   if (!profit || Object.keys(profit).length === 0) return '';
-
-  const items = [];
+  var items = [];
 
   if (profit.current_profit !== null && profit.current_profit !== undefined) {
-    items.push(`<div class="meta-item"><span class="text-gray-500 dark:text-gray-400">推定利益</span><span class="font-medium ${profit.current_profit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}">¥${profit.current_profit.toLocaleString()}</span></div>`);
+    var cls = profit.current_profit >= 0 ? 'color:#16a34a' : 'color:#dc2626';
+    items.push('<div class="meta-item"><span>\u63a8\u5b9a\u5229\u76ca</span><span style="font-weight:600;' + cls + '">&yen;' + profit.current_profit.toLocaleString() + '</span></div>');
   }
   if (profit.best_price_date) {
-    items.push(`<div class="meta-item"><span class="text-gray-500 dark:text-gray-400">最安値</span><span class="text-gray-800 dark:text-gray-200">¥${profit.best_price?.toLocaleString()} (${formatDate(profit.best_price_date)})</span></div>`);
+    items.push('<div class="meta-item"><span>\u6700\u5b89\u5024</span><span>&yen;' + (profit.best_price ? profit.best_price.toLocaleString() : '') + ' (' + formatDate(profit.best_price_date) + ')</span></div>');
   }
   if (profit.price_volatility !== null && profit.price_volatility !== undefined) {
-    const volClass = profit.price_volatility > 20 ? 'text-red-600' : profit.price_volatility > 10 ? 'text-amber-600' : 'text-green-600';
-    items.push(`<div class="meta-item"><span class="text-gray-500 dark:text-gray-400">変動係数</span><span class="${volClass} dark:text-${volClass.replace('text-', 'gray-')}">${profit.price_volatility}%</span></div>`);
+    var vCls = profit.price_volatility > 20 ? 'color:#dc2626' : profit.price_volatility > 10 ? 'color:#f59e0b' : 'color:#16a34a';
+    items.push('<div class="meta-item"><span>\u5909\u52d5\u4fc2\u6570</span><span style="' + vCls + '">' + profit.price_volatility + '%</span></div>');
   }
   if (profit.trend_direction) {
-    const icon = getTrendIcon(profit.trend_direction);
-    items.push(`<div class="meta-item"><span class="text-gray-500 dark:text-gray-400">トレンド</span><span class="trend-${profit.trend_direction} dark:text-${profit.trend_direction === 'rising' ? 'red-400' : profit.trend_direction === 'falling' ? 'blue-400' : 'gray-400'}">${icon} ${profit.trend_direction}</span></div>`);
+    items.push('<div class="meta-item"><span>\u30c8\u30ec\u30f3\u30c9</span><span class="trend-' + profit.trend_direction + '">' + getTrendIcon(profit.trend_direction) + ' ' + profit.trend_direction + '</span></div>');
   }
   if (profit.recommendation) {
-    items.push(`<div class="meta-item" style="grid-column:1/-1"><span class="text-gray-500 dark:text-gray-400">💡 推奨</span><span class="text-sm text-gray-700 dark:text-gray-200">${profit.recommendation}</span></div>`);
+    items.push('<div class="meta-item" style="grid-column:1/-1"><span>\u63a8\u5968</span><span style="font-size:11px">' + esc(profit.recommendation) + '</span></div>');
   }
 
-  return items.length ? `<div class="meta-grid dark:bg-gray-700/50 dark:rounded">${items.join('')}</div>` : '';
-}
-
-function updateSummary(series) {
-  const grid = document.getElementById('summary_grid');
-
-  const profitable = series.filter(s => s.profitability?.current_profit_rate >= 10).length;
-  const total = series.length;
-  const avgProfitRate = series.reduce((sum, s) => sum + (s.profitability?.current_profit_rate || 0), 0) / (total || 1);
-  const totalEstimatedProfit = series.reduce((sum, s) => sum + (s.profitability?.current_profit || 0), 0);
-
-  grid.innerHTML = `
-    <div class="summary-item dark:bg-gray-800 dark:border-gray-700">
-      <div class="summary-label dark:text-gray-400">SKU数</div>
-      <div class="summary-value dark:text-white">${total}</div>
-    </div>
-    <div class="summary-item dark:bg-gray-800 dark:border-gray-700">
-      <div class="summary-label dark:text-gray-400">推奨SKU (利益率10%+)</div>
-      <div class="summary-value positive dark:text-green-400">${profitable}/${total}</div>
-    </div>
-    <div class="summary-item dark:bg-gray-800 dark:border-gray-700">
-      <div class="summary-label dark:text-gray-400">平均利益率</div>
-      <div class="summary-value ${avgProfitRate >= 5 ? 'positive' : 'negative'} dark:text-${avgProfitRate >= 5 ? 'green-400' : 'red-400'}">${avgProfitRate >= 0 ? '+' : ''}${avgProfitRate.toFixed(1)}%</div>
-    </div>
-    <div class="summary-item dark:bg-gray-800 dark:border-gray-700">
-      <div class="summary-label dark:text-gray-400">推定総利益</div>
-      <div class="summary-value ${totalEstimatedProfit >= 0 ? 'positive' : 'negative'} dark:text-${totalEstimatedProfit >= 0 ? 'green-400' : 'red-400'}">¥${totalEstimatedProfit.toLocaleString()}</div>
-    </div>
-  `;
+  return items.length ? '<div class="meta-grid">' + items.join('') + '</div>' : '';
 }
 
 function renderChart(canvasId, s) {
-  const ctx = document.getElementById(canvasId);
+  var ctx = document.getElementById(canvasId);
   if (!ctx) return;
-  const isDark = document.documentElement.classList.contains('dark');
-  const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
-  const tickColor = isDark ? '#9ca3af' : '#6b7280';
+  var isDark = document.documentElement.classList.contains('dark');
+  var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)';
+  var tickColor = isDark ? '#94a3b8' : '#64748b';
 
-  // 仕入れ価格から損益分岐点ラインを計算
-  const datasets = [
-    { label: '価格', data: s.prices, borderColor: '#1976d2', backgroundColor: 'rgba(25,118,210,0.08)', spanGaps: true, tension: 0.2 },
-    { label: 'EMA7', data: s.ema7, borderColor: '#2e7d32', borderDash: [3,3], spanGaps: true, tension: 0.2, pointRadius: 0 },
-    { label: 'EMA28', data: s.ema28, borderColor: '#ef6c00', borderDash: [6,3], spanGaps: true, tension: 0.2, pointRadius: 0 },
+  var datasets = [
+    { label: '\u4fa1\u683c', data: s.prices, borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.08)', spanGaps: true, tension: 0.2, borderWidth: 2 },
+    { label: 'EMA7', data: s.ema7, borderColor: '#16a34a', borderDash: [3,3], spanGaps: true, tension: 0.2, pointRadius: 0, borderWidth: 1.5 },
+    { label: 'EMA28', data: s.ema28, borderColor: '#f59e0b', borderDash: [6,3], spanGaps: true, tension: 0.2, pointRadius: 0, borderWidth: 1.5 },
   ];
 
-  // 仕入れ価格があれば損益分岐点ラインを追加
-  const urlParams = new URLSearchParams(window.location.search);
-  const purchasePrice = parseFloat(urlParams.get('purchase_price'));
+  var urlParams = new URLSearchParams(window.location.search);
+  var purchasePrice = parseFloat(urlParams.get('purchase_price'));
   if (purchasePrice > 0 && s.prices.length > 0) {
-    const breakeven = purchasePrice * 1.178; // 関税10%+送料+手数料8%概算
+    var breakeven = purchasePrice * 1.178;
     datasets.push({
-      label: '損益分岐点',
+      label: '\u640d\u76ca\u5206\u5c90\u70b9',
       data: Array(s.prices.length).fill(breakeven),
-      borderColor: '#dc2626',
+      borderColor: '#ef4444',
       borderDash: [8, 4],
       spanGaps: true,
       pointRadius: 0,
@@ -235,10 +312,10 @@ function renderChart(canvasId, s) {
     options: {
       responsive: true,
       interaction: { mode: 'index', intersect: false },
-      plugins: { title: { display: false }, legend: { position: 'bottom', labels: { color: tickColor } } },
+      plugins: { title: { display: false }, legend: { position: 'bottom', labels: { color: tickColor, boxWidth: 12, padding: 12 } } },
       scales: {
-        x: { ticks: { maxTicksLimit: 7, color: tickColor }, grid: { color: gridColor }, title: { display: false } },
-        y: { beginAtZero: false, ticks: { callback: v => '¥' + v.toLocaleString(), color: tickColor }, grid: { color: gridColor } }
+        x: { ticks: { maxTicksLimit: 7, color: tickColor, font: { size: 11 } }, grid: { color: gridColor } },
+        y: { beginAtZero: false, ticks: { callback: function(v) { return '\u00a5' + v.toLocaleString(); }, color: tickColor, font: { size: 11 } }, grid: { color: gridColor } }
       }
     }
   });
@@ -246,17 +323,13 @@ function renderChart(canvasId, s) {
 
 function formatDate(isoString) {
   if (!isoString) return '';
-  const d = new Date(isoString);
-  return `${d.getMonth()+1}/${d.getDate()}`;
+  var d = new Date(isoString);
+  return (d.getMonth()+1) + '/' + d.getDate();
 }
 
 function exportData(format) {
-  const params = new URLSearchParams({
-    brand: '{{ brand }}',
-    days: '{{ days }}',
-    format: format
-  });
-  window.open(`/api/history/export?${params.toString()}`, '_blank');
+  var params = new URLSearchParams({ brand: '{{ brand }}', days: '{{ days }}', format: format });
+  window.open('/api/history/export?' + params.toString(), '_blank');
 }
 
 load();
