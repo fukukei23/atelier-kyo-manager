@@ -1,79 +1,83 @@
 {% extends 'base.html' %}
 
 {% block content %}
-<h1 class="text-3xl font-bold text-gray-800 mb-6">Atelier Kyo 管理ツール</h1>
+<h1 class="text-3xl font-bold text-gray-800 dark:text-white mb-2">Atelier Kyo 管理ツール</h1>
+<p class="text-gray-500 dark:text-gray-400 mb-6">BUYMA無在庫転売 統合管理プラットフォーム</p>
 
+{% if current_user.is_authenticated %}
 <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 
-    <a href="{{ url_for('main.manage_products') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-blue-500">
-        <h2 class="text-lg font-semibold text-gray-800">商品管理</h2>
+    <a href="{{ url_for('main.manage_products') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-blue-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">商品管理</h2>
         <p class="text-gray-500 text-sm mt-1">商品登録・編集・CSV入出力</p>
     </a>
 
-    <a href="{{ url_for('main.product_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-indigo-500">
-        <h2 class="text-lg font-semibold text-gray-800">商品一覧</h2>
-        <p class="text-gray-500 text-sm mt-1">登録済み商品の全件表示</p>
-    </a>
-
-    <a href="{{ url_for('main.auto_research') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-purple-500">
-        <h2 class="text-lg font-semibold text-gray-800">AI自動リサーチ</h2>
-        <p class="text-gray-500 text-sm mt-1">AIによる自動商品リサーチ</p>
-    </a>
-
-    <a href="{{ url_for('main.image_crawler') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-cyan-500">
-        <h2 class="text-lg font-semibold text-gray-800">リサーチツール</h2>
-        <p class="text-gray-500 text-sm mt-1">個別URL解析・画像取得</p>
-    </a>
-
-    <a href="{{ url_for('main.listing_templates') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-pink-500">
-        <h2 class="text-lg font-semibold text-gray-800">出品テンプレート</h2>
-        <p class="text-gray-500 text-sm mt-1">テンプレート管理・BUYMA CSV生成</p>
-    </a>
-
-    <a href="{{ url_for('main.order_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-violet-500">
-        <h2 class="text-lg font-semibold text-gray-800">注文管理</h2>
+    <a href="{{ url_for('main.order_list') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-violet-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">注文管理</h2>
         <p class="text-gray-500 text-sm mt-1">18日ルール・ステータス管理</p>
     </a>
 
-    <a href="{{ url_for('main.partner_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-teal-500">
-        <h2 class="text-lg font-semibold text-gray-800">パートナー管理</h2>
+    <a href="{{ url_for('main.partner_list') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-teal-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">パートナー管理</h2>
         <p class="text-gray-500 text-sm mt-1">仕入先パートナーCRUD・評価</p>
     </a>
 
-    <a href="{{ url_for('main.listing_progress_view') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-orange-500">
-        <h2 class="text-lg font-semibold text-gray-800">品出し進捗</h2>
+    <a href="{{ url_for('main.listing_templates') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-pink-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">出品テンプレート</h2>
+        <p class="text-gray-500 text-sm mt-1">テンプレート管理・BUYMA CSV生成</p>
+    </a>
+
+    <a href="{{ url_for('main.listing_progress_view') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-orange-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">品出し進捗</h2>
         <p class="text-gray-500 text-sm mt-1">日次出品数・月間目標達成率</p>
     </a>
 
-    <a href="{{ url_for('main.cashflow_dashboard') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-green-500">
-        <h2 class="text-lg font-semibold text-gray-800">キャッシュフロー予測</h2>
+    <a href="{{ url_for('main.cashflow_dashboard') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-green-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">キャッシュフロー予測</h2>
         <p class="text-gray-500 text-sm mt-1">入金予定・30日予測</p>
     </a>
 
-    <a href="{{ url_for('main.brand_analytics') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-rose-500">
-        <h2 class="text-lg font-semibold text-gray-800">ブランド利益率</h2>
+    <a href="{{ url_for('main.brand_analytics') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-rose-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">ブランド利益率</h2>
         <p class="text-gray-500 text-sm mt-1">階層別利益率・目標達成率</p>
     </a>
 
-    <a href="{{ url_for('main.stock_check_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-cyan-500">
-        <h2 class="text-lg font-semibold text-gray-800">在庫＆価格チェック</h2>
+    <a href="{{ url_for('main.stock_check_list') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-cyan-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">在庫＆価格チェック</h2>
         <p class="text-gray-500 text-sm mt-1">仕入先価格・在庫状況監視</p>
     </a>
 
-    <a href="{{ url_for('main.popularity_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-amber-500">
-        <h2 class="text-lg font-semibold text-gray-800">人気度トラッキング</h2>
+    <a href="{{ url_for('main.popularity_list') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-amber-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">人気度トラッキング</h2>
         <p class="text-gray-500 text-sm mt-1">閲覧・お気に入り・スコア管理</p>
     </a>
 
-    <a href="{{ url_for('main.region_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-lime-500">
-        <h2 class="text-lg font-semibold text-gray-800">買付先地域レコメンド</h2>
+    <a href="{{ url_for('main.region_list') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-lime-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">買付先地域レコメンド</h2>
         <p class="text-gray-500 text-sm mt-1">地域別リスク・利益率・推奨スコア</p>
     </a>
 
-    <a href="{{ url_for('main.customer_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-fuchsia-500">
-        <h2 class="text-lg font-semibold text-gray-800">リピーター管理</h2>
+    <a href="{{ url_for('main.customer_list') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-fuchsia-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">リピーター管理</h2>
         <p class="text-gray-500 text-sm mt-1">顧客セグメント・購入履歴</p>
     </a>
 
+    <a href="{{ url_for('main.auto_research') }}" class="block bg-white dark:bg-gray-900 p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-purple-500">
+        <h2 class="text-lg font-semibold text-gray-800 dark:text-white">AI自動リサーチ</h2>
+        <p class="text-gray-500 text-sm mt-1">AIによる自動商品リサーチ</p>
+    </a>
+
 </div>
+{% else %}
+<!-- 未ログイン時: ウェルカム画面 -->
+<div class="max-w-md mx-auto mt-16 text-center">
+    <div class="bg-white dark:bg-gray-900 p-8 rounded-xl shadow-lg">
+        <h2 class="text-2xl font-bold text-gray-800 dark:text-white mb-4">ようこそ</h2>
+        <p class="text-gray-500 dark:text-gray-400 mb-8">Atelier Kyo Manager へログインしてください</p>
+        <a href="{{ url_for('auth.login') }}" class="inline-block px-8 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-lg font-medium transition">
+            ログイン
+        </a>
+    </div>
+</div>
+{% endif %}
 {% endblock %}

@@ -3,8 +3,13 @@
 {% block content %}
 <div class="flex justify-between items-center mb-6">
     <h1 class="text-2xl font-bold text-gray-800">在庫＆価格チェック</h1>
-    <a href="{{ url_for('main.create_stock_check') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ チェック追加</a>
+    <div class="flex gap-2">
+        <button id="btn-fetch-all" class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm">自動取得（全件）</button>
+        <a href="{{ url_for('main.create_stock_check') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ チェック追加</a>
+    </div>
 </div>
+
+<div id="fetch-status" class="hidden mb-4 p-3 rounded-lg text-sm"></div>
 
 <div class="overflow-x-auto">
     <table class="min-w-full bg-white rounded-lg shadow">
@@ -19,11 +24,12 @@
                 <th class="px-4 py-3 text-center text-sm font-medium text-gray-700">在庫</th>
                 <th class="px-4 py-3 text-center text-sm font-medium text-gray-700">状態</th>
                 <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">チェック日時</th>
+                <th class="px-4 py-3 text-center text-sm font-medium text-gray-700">操作</th>
             </tr>
         </thead>
         <tbody>
             {% for c in checks %}
-            <tr class="border-b hover:bg-gray-50">
+            <tr class="border-b hover:bg-gray-50" id="row-{{ c.id }}">
                 <td class="px-4 py-3 text-sm font-medium">{{ c.product.name if c.product else 'ID:' ~ c.product_id }}</td>
                 <td class="px-4 py-3 text-sm">
                     {% if c.source_url %}
@@ -35,7 +41,7 @@
                 <td class="px-4 py-3 text-sm text-right font-medium
                     {% if (c.price_diff() or 0) < 0 %}text-green-600{% elif (c.price_diff() or 0) > 0 %}text-red-600{% else %}text-gray-500{% endif %}">
                     {% set diff = c.price_diff() %}
-                    {% if diff %}{{ "+,".format(diff) if diff > 0 else "" }}¥{{ "%.0f"|format(diff) }}{% else %}-{% endif %}
+                    {% if diff %}¥{{ "%.0f"|format(diff) }}{% else %}-{% endif %}
                 </td>
                 <td class="px-4 py-3 text-sm text-right
                     {% if (c.price_diff_pct() or 0) < 0 %}text-green-600{% elif (c.price_diff_pct() or 0) > 0 %}text-red-600{% else %}text-gray-500{% endif %}">
@@ -60,12 +66,46 @@
                 <td class="px-4 py-3 text-sm text-gray-500">
                     {{ c.checked_at.strftime('%Y-%m-%d %H:%M') if c.checked_at else '-' }}
                 </td>
+                <td class="px-4 py-3 text-center">
+                    {% if c.source_url %}
+                    <button onclick="fetchSingle({{ c.id }})" class="text-xs text-green-600 hover:underline">取得</button>
+                    {% endif %}
+                </td>
             </tr>
             {% endfor %}
             {% if not checks %}
-            <tr><td colspan="9" class="px-4 py-8 text-center text-gray-400">データがありません</td></tr>
+            <tr><td colspan="10" class="px-4 py-8 text-center text-gray-400">データがありません</td></tr>
             {% endif %}
         </tbody>
     </table>
 </div>
+
+<script>
+function showStatus(msg, type) {
+    const el = document.getElementById('fetch-status');
+    el.className = 'mb-4 p-3 rounded-lg text-sm ' + (type === 'error' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700');
+    el.textContent = msg;
+    el.classList.remove('hidden');
+}
+
+async function fetchSingle(id) {
+    try {
+        const r = await fetch('/api/stock-check/' + id + '/fetch', {method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'}});
+        const d = await r.json();
+        if (d.success) { showStatus('取得成功: ¥' + (d.data.current_price || 0)); setTimeout(() => location.reload(), 1000); }
+        else showStatus('取得失敗: ' + (d.message || 'エラー'), 'error');
+    } catch(e) { showStatus('通信エラー: ' + e, 'error'); }
+}
+
+document.getElementById('btn-fetch-all').addEventListener('click', async function() {
+    this.disabled = true; this.textContent = '取得中...';
+    try {
+        const r = await fetch('/api/stock-check/fetch-all', {method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'}});
+        const d = await r.json();
+        showStatus('完了: 成功' + d.ok + '件, 失敗' + d.err + '件');
+        setTimeout(() => location.reload(), 1500);
+    } catch(e) { showStatus('通信エラー: ' + e, 'error'); }
+    finally { this.disabled = false; this.textContent = '自動取得（全件）'; }
+});
+</script>
 {% endblock %}
