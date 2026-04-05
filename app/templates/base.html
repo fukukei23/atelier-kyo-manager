@@ -28,9 +28,18 @@
             <a href="{{ url_for('main.index') }}" class="text-2xl font-bold text-gray-800 dark:text-white">Atelier Kyo Manager</a>
             <div class="flex items-center gap-4">
                 <div class="space-x-4">
-                    <a href="{{ url_for('main.auto_research') }}" class="text-gray-600 dark:text-gray-300 hover:text-purple-500">AI自動リサーチ</a>
+                    <a href="{{ url_for('main.auto_research') }}" class="text-gray-600 dark:text-gray-300 hover:text-purple-500">AIリサーチ</a>
                     <a href="{{ url_for('main.manage_products') }}" class="text-gray-600 dark:text-gray-300 hover:text-blue-500">商品管理</a>
-                    <a href="{{ url_for('main.image_crawler') }}" class="text-gray-600 dark:text-gray-300 hover:text-blue-500">（個別）リサーチツール</a>
+                    <a href="{{ url_for('main.image_crawler') }}" class="text-gray-600 dark:text-gray-300 hover:text-blue-500">リサーチ</a>
+                    <a href="{{ url_for('main.order_list') }}" class="text-gray-600 dark:text-gray-300 hover:text-indigo-500">注文</a>
+                    <a href="{{ url_for('main.partner_list') }}" class="text-gray-600 dark:text-gray-300 hover:text-teal-500">パートナー</a>
+                    <a href="{{ url_for('main.listing_progress_view') }}" class="text-gray-600 dark:text-gray-300 hover:text-orange-500">品出し</a>
+                    <a href="{{ url_for('main.cashflow_dashboard') }}" class="text-gray-600 dark:text-gray-300 hover:text-green-500">CF予測</a>
+                    <a href="{{ url_for('main.brand_analytics') }}" class="text-gray-600 dark:text-gray-300 hover:text-pink-500">利益率</a>
+                    <a href="{{ url_for('main.stock_check_list') }}" class="text-gray-600 dark:text-gray-300 hover:text-cyan-500">在庫</a>
+                    <a href="{{ url_for('main.popularity_list') }}" class="text-gray-600 dark:text-gray-300 hover:text-amber-500">人気度</a>
+                    <a href="{{ url_for('main.region_list') }}" class="text-gray-600 dark:text-gray-300 hover:text-lime-500">地域</a>
+                    <a href="{{ url_for('main.customer_list') }}" class="text-gray-600 dark:text-gray-300 hover:text-violet-500">顧客</a>
                 </div>
                 <!-- テーマトグル -->
                 <button id="theme-toggle" aria-label="テーマ切替" class="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition">

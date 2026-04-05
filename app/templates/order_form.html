@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <h1 class="text-2xl font-bold text-gray-800 mb-6">
+        {% if order %}注文編集{% else %}新規注文{% endif %}
+    </h1>
+
+    <form method="POST" class="bg-white rounded-lg shadow p-6 space-y-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">注文番号 <span class="text-red-500">*</span></label>
+                <input type="text" name="order_number" value="{{ order.order_number if order else '' }}"
+                       required class="w-full border rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">商品名 <span class="text-red-500">*</span></label>
+                <input type="text" name="product_name" value="{{ order.product_name if order else '' }}"
+                       required class="w-full border rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">顧客名</label>
+                <input type="text" name="customer_name" value="{{ order.customer_name if order else '' }}"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">注文日</label>
+                <input type="date" name="order_date"
+                       value="{{ order.order_date.strftime('%Y-%m-%d') if order and order.order_date else '' }}"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+        </div>
+
+        <hr class="my-4">
+        <h3 class="font-medium text-gray-700 mb-3">金額</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">販売価格</label>
+                <input type="number" name="selling_price" step="1"
+                       value="{{ order.selling_price if order else 0 }}"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">仕入原価</label>
+                <input type="number" name="purchase_cost" step="1"
+                       value="{{ order.purchase_cost if order else 0 }}"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">関税</label>
+                <input type="number" name="customs_duty" step="1"
+                       value="{{ order.customs_duty if order else 0 }}"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+        </div>
+
+        <hr class="my-4">
+        <h3 class="font-medium text-gray-700 mb-3">区分</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">決済方法</label>
+                <select name="payment_method" class="w-full border rounded px-3 py-2">
+                    <option value="">---</option>
+                    {% for pm in payment_methods %}
+                    <option value="{{ pm }}" {% if order and order.payment_method == pm %}selected{% endif %}>{{ pm }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">仕入区分</label>
+                <select name="source_type" class="w-full border rounded px-3 py-2">
+                    <option value="domestic" {% if order and order.source_type == 'domestic' %}selected{% endif %}>国内</option>
+                    <option value="overseas" {% if order and order.source_type == 'overseas' %}selected{% endif %}>海外</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">ステータス</label>
+                <select name="status" class="w-full border rounded px-3 py-2">
+                    <option value="pending" {% if order and order.status == 'pending' %}selected{% endif %}>保留中</option>
+                    <option value="shipped" {% if order and order.status == 'shipped' %}selected{% endif %}>発送済</option>
+                    <option value="completed" {% if order and order.status == 'completed' %}selected{% endif %}>完了</option>
+                    <option value="cancelled" {% if order and order.status == 'cancelled' %}selected{% endif %}>キャンセル</option>
+                </select>
+            </div>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">メモ</label>
+            <textarea name="notes" rows="3" class="w-full border rounded px-3 py-2">{{ order.notes if order else '' }}</textarea>
+        </div>
+
+        <div class="flex gap-2 mt-4">
+            <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
+                {% if order %}更新{% else %}登録{% endif %}
+            </button>
+            <a href="{{ url_for('main.order_list') }}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">キャンセル</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block script %}
+// 自動計算プレビュー
+document.querySelector('form').addEventListener('input', function() {
+    const selling = parseFloat(document.querySelector('[name=selling_price]').value) || 0;
+    const cost = parseFloat(document.querySelector('[name=purchase_cost]').value) || 0;
+    const duty = parseFloat(document.querySelector('[name=customs_duty]').value) || 0;
+    const source = document.querySelector('[name=source_type]').value;
+    const rate = source === 'overseas' ? 0.055 : 0.077;
+    const commission = selling * rate;
+    const fees = commission + 220;
+    const profit = selling - cost - fees - duty;
+    const profitRate = selling > 0 ? (profit / selling * 100).toFixed(1) : 0;
+    // 利益は自動計算されるのでユーザーにヒント表示可能
+});
+</script>

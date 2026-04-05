@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">キャッシュフロー予測</h1>
+
+<!-- サマリー -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">未完了注文</div>
+        <div class="text-2xl font-bold text-yellow-600">{{ pending_count }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">過去30日利益</div>
+        <div class="text-2xl font-bold text-green-600">¥{{ "%.0f"|format(past_profit) }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">予測期間</div>
+        <div class="text-2xl font-bold">{{ forecast_days }}日</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">予測累計流入</div>
+        <div class="text-2xl font-bold text-blue-600">¥{{ "%.0f"|format(daily_forecast[-1].balance if daily_forecast else 0) }}</div>
+    </div>
+</div>
+
+<!-- 日別予測表 -->
+<div class="bg-white rounded-lg shadow overflow-x-auto">
+    <table class="min-w-full">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">日付</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">入金予定</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">累計</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">グラフ</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for d in daily_forecast %}
+            <tr class="border-b hover:bg-gray-50 {% if d.inflow > 0 %}bg-green-50{% endif %}">
+                <td class="px-4 py-2 text-sm">{{ d.date }}</td>
+                <td class="px-4 py-2 text-sm text-right {% if d.inflow > 0 %}text-green-600 font-bold{% endif %}">
+                    {% if d.inflow > 0 %}+¥{{ "%.0f"|format(d.inflow) }}{% else %}¥0{% endif %}
+                </td>
+                <td class="px-4 py-2 text-sm text-right">¥{{ "%.0f"|format(d.balance) }}</td>
+                <td class="px-4 py-2">
+                    <div class="w-full bg-gray-200 rounded h-4">
+                        {% set max_balance = daily_forecast[-1].balance if daily_forecast else 1 %}
+                        {% set width_pct = (d.balance / max_balance * 100) if max_balance > 0 else 0 %}
+                        <div class="bg-blue-500 rounded h-4" style="width: {{ width_pct }}%"></div>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

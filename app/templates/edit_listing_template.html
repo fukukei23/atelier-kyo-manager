@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4 text-gray-800">{{ 'テンプレート編集' if tpl and tpl.id else '新規テンプレート' }}</h1>
+
+<div class="bg-white rounded-lg shadow-md p-6 max-w-3xl">
+  <form method="POST">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-gray-700 mb-1">テンプレート名</label>
+      <input type="text" name="name" value="{{ tpl.name if tpl else '' }}" required
+             class="w-full border border-gray-300 rounded-md shadow-sm p-2 focus:ring-2 focus:ring-blue-500">
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-gray-700 mb-1">カテゴリ</label>
+      <select name="category" class="w-full border border-gray-300 rounded-md shadow-sm p-2 bg-white">
+        <option value="general" {{ 'selected' if tpl and tpl.category == 'general' }}>一般</option>
+        <option value="fashion" {{ 'selected' if tpl and tpl.category == 'fashion' }}>ファッション</option>
+        <option value="bag" {{ 'selected' if tpl and tpl.category == 'bag' }}>バッグ</option>
+        <option value="shoes" {{ 'selected' if tpl and tpl.category == 'shoes' }}>シューズ</option>
+        <option value="accessory" {{ 'selected' if tpl and tpl.category == 'accessory' }}>アクセサリー</option>
+      </select>
+    </div>
+
+    <div class="mb-4">
+      <label class="block text-sm font-medium text-gray-700 mb-1">テンプレート本文</label>
+      <textarea name="template_text" rows="8" required
+                class="w-full border border-gray-300 rounded-md shadow-sm p-2 font-mono text-sm focus:ring-2 focus:ring-blue-500"
+                placeholder="【{{brand}}】{{productName}}
+カラー: {{color}}
+素材: {{material}}
+サイズ: {{size}}
+定価: {{retailPrice}}
+仕入国: {{sourceCountry}}
+状態: 新品未使用・タグ付き">{{ tpl.template_text if tpl else '' }}</textarea>
+      <p class="text-xs text-gray-500 mt-1">
+        変数: {{brand}}, {{productName}}, {{color}}, {{material}}, {{size}}, {{retailPrice}}, {{sourceCountry}}, {{description}}, {{sellingPrice}}
+      </p>
+    </div>
+
+    <div class="mb-6 flex items-center">
+      <input type="checkbox" name="is_default" id="is_default" value="1"
+             {{ 'checked' if tpl and tpl.is_default else '' }}
+             class="h-4 w-4 text-blue-600 border-gray-300 rounded">
+      <label for="is_default" class="ml-2 text-sm text-gray-700">デフォルトテンプレートにする</label>
+    </div>
+
+    <div class="flex justify-between">
+      <a href="{{ url_for('main.listing_templates') }}" class="text-gray-600 hover:underline">&larr; 戻る</a>
+      <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">保存</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

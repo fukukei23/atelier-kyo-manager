@@ -1,82 +1,79 @@
-<!--
-==============================================================================
-ファイル名 : index.html
-配置場所   : C:\Users\USER\tools\atelier-kyo-manager\app\templates\
-使い方     : 既存の index.html をこの内容で「全置換」→ 保存 → サーバー再起動
-目的       : トップページ。存在しない endpoint 参照を修正し、主要画面への導線を提供
-修正点     :
-  - url_for('main.form_view')     → url_for('main.manage_products') に変更
-  - url_for('main.list_view')     → url_for('main.product_list')    に変更
-  - Tailwindベースの簡易UIに刷新（base.html 継承）
-備考       : base.html に Tailwind 読み込みがある前提
-日付       : 2025-08-23 (JST)
-==============================================================================
--->
 {% extends 'base.html' %}
 
 {% block content %}
-  <h1 class="text-3xl font-bold text-gray-800 mb-6">Atelier Kyo 管理ツール</h1>
+<h1 class="text-3xl font-bold text-gray-800 mb-6">Atelier Kyo 管理ツール</h1>
 
-  <div class="grid gap-6 md:grid-cols-2">
-    <!-- 商品管理（登録/更新 + 一覧） -->
-    <a href="{{ url_for('main.manage_products') }}" class="block bg-white p-6 rounded-lg shadow hover:shadow-md transition">
-      <h2 class="text-xl font-semibold text-gray-800">商品管理（登録/更新）</h2>
-      <p class="text-gray-600 mt-2">
-        新規登録フォームと一覧をまとめた画面です。CSVインポート/エクスポートも可能。
-      </p>
+<div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+
+    <a href="{{ url_for('main.manage_products') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-blue-500">
+        <h2 class="text-lg font-semibold text-gray-800">商品管理</h2>
+        <p class="text-gray-500 text-sm mt-1">商品登録・編集・CSV入出力</p>
     </a>
 
-    <!-- シンプル一覧 -->
-    <a href="{{ url_for('main.product_list') }}" class="block bg-white p-6 rounded-lg shadow hover:shadow-md transition">
-      <h2 class="text-xl font-semibold text-gray-800">登録データ一覧（シンプル）</h2>
-      <p class="text-gray-600 mt-2">
-        登録済み商品の一覧のみを表示します。
-      </p>
+    <a href="{{ url_for('main.product_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-indigo-500">
+        <h2 class="text-lg font-semibold text-gray-800">商品一覧</h2>
+        <p class="text-gray-500 text-sm mt-1">登録済み商品の全件表示</p>
     </a>
 
-    <!-- AI 自動リサーチ -->
-    <a href="{{ url_for('main.auto_research') }}" class="block bg-white p-6 rounded-lg shadow hover:shadow-md transition">
-      <h2 class="text-xl font-semibold text-gray-800">AI 自動リサーチ</h2>
-      <p class="text-gray-600 mt-2">
-        指定条件での自動リサーチ機能（準備中/運用環境により異なります）。
-      </p>
+    <a href="{{ url_for('main.auto_research') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-purple-500">
+        <h2 class="text-lg font-semibold text-gray-800">AI自動リサーチ</h2>
+        <p class="text-gray-500 text-sm mt-1">AIによる自動商品リサーチ</p>
     </a>
 
-    <!-- 個別リサーチ（倉庫取得UI付き） -->
-    <a href="{{ url_for('main.image_crawler') }}" class="block bg-white p-6 rounded-lg shadow hover:shadow-md transition">
-      <h2 class="text-xl font-semibold text-gray-800">個別リサーチツール</h2>
-      <p class="text-gray-600 mt-2">
-        個別URLの解析や、Buyandship 倉庫取得UI（/api/warehouses）を利用できます。
-      </p>
+    <a href="{{ url_for('main.image_crawler') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-cyan-500">
+        <h2 class="text-lg font-semibold text-gray-800">リサーチツール</h2>
+        <p class="text-gray-500 text-sm mt-1">個別URL解析・画像取得</p>
     </a>
 
-    <!-- 価格ダッシュボード -->
-    <a href="{{ url_for('main.page_brand', brand='GUCCI', days=30) }}" class="block bg-white p-6 rounded-lg shadow hover:shadow-md transition">
-      <h2 class="text-xl font-semibold text-gray-800">価格ダッシュボード</h2>
-      <p class="text-gray-600 mt-2">
-        ブランドの価格推移・利益率・トレンドをChart.jsで可視化。SKU別の収益性分析が可能。
-      </p>
-      <p class="text-blue-600 text-sm mt-2">例: GUCCI 30日 ></p>
+    <a href="{{ url_for('main.listing_templates') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-pink-500">
+        <h2 class="text-lg font-semibold text-gray-800">出品テンプレート</h2>
+        <p class="text-gray-500 text-sm mt-1">テンプレート管理・BUYMA CSV生成</p>
     </a>
-  </div>
 
-  <!-- ダッシュボード ブランド検索 -->
-  <div class="mt-6 bg-white p-6 rounded-lg shadow">
-    <h2 class="text-lg font-semibold text-gray-800 mb-3">価格ダッシュボード（ブランド指定）</h2>
-    <form method="get" action="{{ url_for('main.page_brand', brand='') }}" class="flex gap-3 items-end">
-      <div>
-        <label for="brand-input" class="block text-sm text-gray-600 mb-1">ブランド名</label>
-        <input id="brand-input" type="text" name="brand" placeholder="例: GUCCI, MONCLER" class="border border-gray-300 rounded px-3 py-2 w-48 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-      </div>
-      <div>
-        <label for="days-input" class="block text-sm text-gray-600 mb-1">日数</label>
-        <input id="days-input" type="number" name="days" value="30" min="7" max="365" class="border border-gray-300 rounded px-3 py-2 w-24 focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
-      </div>
-      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition">表示</button>
-    </form>
-  </div>
+    <a href="{{ url_for('main.order_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-violet-500">
+        <h2 class="text-lg font-semibold text-gray-800">注文管理</h2>
+        <p class="text-gray-500 text-sm mt-1">18日ルール・ステータス管理</p>
+    </a>
 
-  <div class="mt-8 text-sm text-gray-500">
-    <p>※ 以前のリンク <code>main.form_view</code> / <code>main.list_view</code> は廃止されました。上記カードをご利用ください。</p>
-  </div>
+    <a href="{{ url_for('main.partner_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-teal-500">
+        <h2 class="text-lg font-semibold text-gray-800">パートナー管理</h2>
+        <p class="text-gray-500 text-sm mt-1">仕入先パートナーCRUD・評価</p>
+    </a>
+
+    <a href="{{ url_for('main.listing_progress_view') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-orange-500">
+        <h2 class="text-lg font-semibold text-gray-800">品出し進捗</h2>
+        <p class="text-gray-500 text-sm mt-1">日次出品数・月間目標達成率</p>
+    </a>
+
+    <a href="{{ url_for('main.cashflow_dashboard') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-green-500">
+        <h2 class="text-lg font-semibold text-gray-800">キャッシュフロー予測</h2>
+        <p class="text-gray-500 text-sm mt-1">入金予定・30日予測</p>
+    </a>
+
+    <a href="{{ url_for('main.brand_analytics') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-rose-500">
+        <h2 class="text-lg font-semibold text-gray-800">ブランド利益率</h2>
+        <p class="text-gray-500 text-sm mt-1">階層別利益率・目標達成率</p>
+    </a>
+
+    <a href="{{ url_for('main.stock_check_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-cyan-500">
+        <h2 class="text-lg font-semibold text-gray-800">在庫＆価格チェック</h2>
+        <p class="text-gray-500 text-sm mt-1">仕入先価格・在庫状況監視</p>
+    </a>
+
+    <a href="{{ url_for('main.popularity_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-amber-500">
+        <h2 class="text-lg font-semibold text-gray-800">人気度トラッキング</h2>
+        <p class="text-gray-500 text-sm mt-1">閲覧・お気に入り・スコア管理</p>
+    </a>
+
+    <a href="{{ url_for('main.region_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-lime-500">
+        <h2 class="text-lg font-semibold text-gray-800">買付先地域レコメンド</h2>
+        <p class="text-gray-500 text-sm mt-1">地域別リスク・利益率・推奨スコア</p>
+    </a>
+
+    <a href="{{ url_for('main.customer_list') }}" class="block bg-white p-5 rounded-lg shadow hover:shadow-md transition border-l-4 border-fuchsia-500">
+        <h2 class="text-lg font-semibold text-gray-800">リピーター管理</h2>
+        <p class="text-gray-500 text-sm mt-1">顧客セグメント・購入履歴</p>
+    </a>
+
+</div>
 {% endblock %}
