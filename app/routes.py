@@ -837,6 +837,83 @@ def delete_stock_check(sid: int):
     flash("チェック記録を削除しました。", "success")
     return redirect(url_for("main.stock_check_list"))
 
+
+# ---- F10 API: スクレイピング自動取得 ------------------------------------
+@bp.post("/api/stock-check/<int:sid>/fetch")
+@login_required
+def api_fetch_stock(sid: int):
+    """単一レコードの価格・在庫を自動取得"""
+    from datetime import datetime as _dt
+    from app.models.stock_check import StockCheck
+    from app.services.price_scraper import PriceScraper
+
+    sc = StockCheck.query.get_or_404(sid)
+    if not sc.source_url:
+        return jsonify({"success": False, "message": "source_url未設定"}), 400
+
+    scraper = PriceScraper()
+    try:
+        result = scraper.fetch(sc.source_url)
+        if result["success"]:
+            sc.previous_price = sc.current_price
+            sc.previous_in_stock = sc.in_stock
+            if result["price"] is not None:
+                sc.current_price = result["price"]
+                sc.price_changed = sc.previous_price is not None and sc.previous_price != result["price"]
+            sc.in_stock = result["in_stock"]
+            sc.stock_changed = sc.previous_in_stock is not None and sc.previous_in_stock != result["in_stock"]
+            sc.checked_at = _dt.utcnow()
+            if result["title"]:
+                sc.notes = f"タイトル: {result['title']}"
+            db.session.commit()
+            return jsonify({"success": True, "data": sc.to_dict(), "scraping": result})
+        return jsonify({"success": False, "message": result["error"]}), 502
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        scraper.close()
+
+
+@bp.post("/api/stock-check/fetch-all")
+@login_required
+def api_fetch_all_stocks():
+    """全レコードの価格・在庫を一括取得"""
+    from datetime import datetime as _dt
+    from app.models.stock_check import StockCheck
+    from app.services.price_scraper import PriceScraper
+
+    stocks = StockCheck.query.filter(StockCheck.source_url.isnot(None)).all()
+    if not stocks:
+        return jsonify({"success": True, "message": "対象なし", "total": 0})
+
+    scraper = PriceScraper()
+    ok_count = err_count = 0
+    results = []
+    try:
+        for sc in stocks:
+            r = scraper.fetch(sc.source_url)
+            if r["success"]:
+                sc.previous_price = sc.current_price
+                sc.previous_in_stock = sc.in_stock
+                if r["price"] is not None:
+                    sc.current_price = r["price"]
+                    sc.price_changed = sc.previous_price is not None and sc.previous_price != r["price"]
+                sc.in_stock = r["in_stock"]
+                sc.stock_changed = sc.previous_in_stock is not None and sc.previous_in_stock != r["in_stock"]
+                sc.checked_at = _dt.utcnow()
+                ok_count += 1
+            else:
+                err_count += 1
+            results.append({"id": sc.id, "success": r["success"], "error": r.get("error")})
+        db.session.commit()
+        return jsonify({"success": True, "total": len(stocks), "ok": ok_count, "err": err_count, "results": results})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "message": str(e)}), 500
+    finally:
+        scraper.close()
+
 # =====================================================================
 # F11: 人気度トラッキング
 # =====================================================================
@@ -1030,3 +1107,32 @@ def delete_customer(cid: int):
     db.session.commit()
     flash("顧客を削除しました。", "success")
     return redirect(url_for("main.customer_list"))
+
+
+# =====================================================================
+# 互換リダイレクト（ナビURL → 実際のルート）
+# =====================================================================
+@bp.get("/dashboard")
+def dashboard_redirect():
+    """旧: /dashboard → /cashflow"""
+    return redirect(url_for("main.cashflow_dashboard"))
+
+@bp.get("/listing-templates")
+def listing_templates_redirect():
+    """旧: /listing-templates → /templates"""
+    return redirect(url_for("main.listing_templates"))
+
+@bp.get("/region-recommendations")
+def region_recommendations_redirect():
+    """旧: /region-recommendations → /regions"""
+    return redirect(url_for("main.region_list"))
+
+@bp.get("/repeat-customers")
+def repeat_customers_redirect():
+    """旧: /repeat-customers → /customers"""
+    return redirect(url_for("main.customer_list"))
+
+@bp.get("/auto_research")
+def auto_research_redirect():
+    """旧: /auto_research → /auto-research"""
+    return redirect(url_for("main.auto_research"))
