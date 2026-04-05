@@ -38,8 +38,8 @@ openai
 Flask-SQLAlchemy
 Flask-WTF
 flask_migrate
+Flask-Login
 playwright
-Flask-WTF
 
 # --- Testing ---
 pytest

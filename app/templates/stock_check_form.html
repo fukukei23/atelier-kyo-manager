@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-2xl mx-auto">
+    <h1 class="text-2xl font-bold text-gray-800 mb-6">在庫チェック登録</h1>
+
+    <form method="POST" class="bg-white rounded-lg shadow p-6 space-y-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">商品ID <span class="text-red-500">*</span></label>
+                <input type="number" name="product_id" required
+                       value="{{ check.product_id if check else '' }}"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">仕入先URL</label>
+                <input type="url" name="source_url"
+                       value="{{ check.source_url if check else '' }}"
+                       placeholder="https://example.com/product"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">現在価格 <span class="text-red-500">*</span></label>
+                <input type="number" name="current_price" step="0.01" required
+                       value="{{ check.current_price if check else '' }}"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">前回価格</label>
+                <input type="number" name="previous_price" step="0.01"
+                       value="{{ check.previous_price if check else '' }}"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <input type="checkbox" name="in_stock" value="1"
+                   {% if not check or check.in_stock %}checked{% endif %}
+                   class="rounded border-gray-300">
+            <label class="text-sm font-medium text-gray-700">在庫あり</label>
+        </div>
+
+        <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">メモ</label>
+            <textarea name="notes" rows="3" class="w-full border rounded px-3 py-2">{{ check.notes if check else '' }}</textarea>
+        </div>
+
+        <div class="flex gap-2 mt-4">
+            <button type="submit" class="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">登録</button>
+            <a href="{{ url_for('main.stock_check_list') }}" class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">キャンセル</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

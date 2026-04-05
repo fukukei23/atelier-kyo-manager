@@ -1,0 +1,89 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">品出し進捗トラッカー</h1>
+    <a href="{{ url_for('main.create_listing_progress') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ 記録追加</a>
+</div>
+
+<!-- サマリー -->
+{% if summary %}
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">月間出品数</div>
+        <div class="text-2xl font-bold">{{ summary.total }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">記録日数</div>
+        <div class="text-2xl font-bold">{{ summary.days }}日</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">1日平均</div>
+        <div class="text-2xl font-bold text-blue-600">{{ summary.daily_avg }}件</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">月間目標達成率</div>
+        <div class="text-2xl font-bold {% if summary.cumulative >= 600 %}text-green-600{% else %}text-orange-600{% endif %}">
+            {{ "%.1f"|format(summary.cumulative / 600 * 100 if summary.cumulative else 0) }}%
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- 進捗グラフ（簡易バー） -->
+{% if records %}
+<div class="bg-white rounded-lg shadow p-4 mb-6">
+    <h3 class="font-medium text-gray-700 mb-3">日次出品数</h3>
+    <div class="flex items-end gap-1 h-32">
+        {% for r in records[:14] %}
+        <div class="flex flex-col items-center flex-1">
+            <div class="w-full rounded-t {% if r.listings_count >= r.target_daily %}bg-green-500{% elif r.listings_count >= r.target_daily * 0.7 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
+                 style="height: {{ (r.listings_count / r.target_daily * 100)|min(100, 100)|max(5, 5) }}px"
+                 title="{{ r.record_date }}: {{ r.listings_count }}件 / 目標{{ r.target_daily }}件"></div>
+            <div class="text-xs text-gray-500 mt-1">{{ r.record_date.strftime('%m/%d') }}</div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- 記録一覧 -->
+<div class="overflow-x-auto">
+    <table class="min-w-full bg-white rounded-lg shadow">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">日付</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">出品数</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">目標</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">達成率</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">月間累計</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in records %}
+            <tr class="border-b hover:bg-gray-50">
+                <td class="px-4 py-3">{{ r.record_date.strftime('%Y-%m-%d') }}</td>
+                <td class="px-4 py-3 font-bold">{{ r.listings_count }}</td>
+                <td class="px-4 py-3 text-sm text-gray-500">{{ r.target_daily }}</td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-0.5 rounded text-xs
+                          {% if r.daily_achievement_rate() >= 100 %}bg-green-100 text-green-800
+                          {% elif r.daily_achievement_rate() >= 70 %}bg-yellow-100 text-yellow-800
+                          {% else %}bg-red-100 text-red-800{% endif %}">
+                        {{ "%.0f"|format(r.daily_achievement_rate()) }}%
+                    </span>
+                </td>
+                <td class="px-4 py-3">{{ r.cumulative_monthly }}</td>
+                <td class="px-4 py-3">
+                    <form method="POST" action="{{ url_for('main.delete_listing_progress', rid=r.id) }}"
+                          class="inline" onsubmit="return confirm('削除しますか？')">
+                        <button class="text-red-600 hover:underline text-sm">削除</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

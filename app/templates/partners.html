@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">パートナー管理</h1>
+    <a href="{{ url_for('main.create_partner') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ 新規パートナー</a>
+</div>
+
+<!-- サマリー -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">稼働中</div>
+        <div class="text-2xl font-bold text-green-600">{{ partners | selectattr('status', 'active') | list | length }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">停止中</div>
+        <div class="text-2xl font-bold text-gray-400">{{ partners | selectattr('status', 'inactive') | list | length }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">高優先度</div>
+        <div class="text-2xl font-bold text-red-600">{{ partners | selectattr('priority_level', 'high') | list | length }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">平均信頼性</div>
+        <div class="text-2xl font-bold text-blue-600">{{ "%.0f"|format(partners | map(attribute='reliability_score', default=0) | sum / (partners|length if partners else 1)) }}%</div>
+    </div>
+</div>
+
+<!-- パートナー一覧 -->
+<div class="overflow-x-auto">
+    <table class="min-w-full bg-white rounded-lg shadow">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">名前</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">対応地域</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">優先度</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">応答スコア</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">信頼性</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">成功率</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">ステータス</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in partners %}
+            <tr class="border-b hover:bg-gray-50">
+                <td class="px-4 py-3">
+                    <div class="font-medium">{{ p.name }}</div>
+                    <div class="text-xs text-gray-500">{{ p.email or '' }}</div>
+                </td>
+                <td class="px-4 py-3">
+                    {% for r in p.regions_list() %}
+                    <span class="inline-block px-1.5 py-0.5 text-xs rounded bg-blue-100 text-blue-800 mr-1">{{ r }}</span>
+                    {% endfor %}
+                </td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-0.5 rounded text-xs
+                          {% if p.priority_level == 'high' %}bg-red-100 text-red-800
+                          {% elif p.priority_level == 'medium' %}bg-yellow-100 text-yellow-800
+                          {% else %}bg-green-100 text-green-800{% endif %}">
+                        {{ p.priority_label() }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-sm">{{ p.response_speed_score or '-' }}/5</td>
+                <td class="px-4 py-3 text-sm">{{ "%.0f"|format(p.reliability_score or 0) }}%</td>
+                <td class="px-4 py-3 text-sm">{{ "%.1f"|format(p.success_rate()) }}%</td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-0.5 rounded text-xs
+                          {% if p.status == 'active' %}bg-green-100 text-green-800
+                          {% elif p.status == 'suspended' %}bg-yellow-100 text-yellow-800
+                          {% else %}bg-gray-100 text-gray-800{% endif %}">
+                        {{ p.status_label() }}
+                    </span>
+                </td>
+                <td class="px-4 py-3">
+                    <a href="{{ url_for('main.edit_partner', pid=p.id) }}" class="text-blue-600 hover:underline text-sm">編集</a>
+                    <form method="POST" action="{{ url_for('main.delete_partner', pid=p.id) }}" class="inline"
+                          onsubmit="return confirm('本当に削除しますか？')">
+                        <button class="text-red-600 hover:underline text-sm ml-2">削除</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

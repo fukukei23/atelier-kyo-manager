@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4 text-gray-800">出品テンプレート管理</h1>
+
+<div class="flex justify-end mb-4">
+  <a href="{{ url_for('main.edit_listing_template') }}"
+     class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">新規作成</a>
+</div>
+
+{% if templates %}
+<div class="bg-white rounded-lg shadow-md overflow-hidden">
+  <table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700">テンプレート名</th>
+        <th class="px-4 py-3 text-center text-xs font-bold text-gray-700">カテゴリ</th>
+        <th class="px-4 py-3 text-center text-xs font-bold text-gray-700">デフォルト</th>
+        <th class="px-4 py-3 text-center text-xs font-bold text-gray-700">操作</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for t in templates %}
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 text-sm">{{ t.name }}</td>
+        <td class="px-4 py-3 text-sm text-center">{{ t.category }}</td>
+        <td class="px-4 py-3 text-center">
+          {% if t.is_default %}<span class="text-green-600 font-bold">&#10004;</span>{% else %}-{% endif %}
+        </td>
+        <td class="px-4 py-3 text-center space-x-2">
+          <a href="{{ url_for('main.edit_listing_template', tid=t.id) }}" class="text-blue-600 hover:underline text-sm">編集</a>
+          <form method="POST" action="{{ url_for('main.delete_listing_template', tid=t.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="text-red-600 hover:underline text-sm" onclick="return confirm('削除しますか？')">削除</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-white rounded-lg shadow-md p-8 text-center text-gray-500">
+  テンプレートがまだありません。「新規作成」から追加してください。
+</div>
+{% endif %}
+{% endblock %}
