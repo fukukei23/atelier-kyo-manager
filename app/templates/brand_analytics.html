@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h1 class="text-2xl font-bold text-gray-800 mb-6">ブランド階層別利益率ダッシュボード</h1>
+
+<!-- 階層別サマリー -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+    {% for tier in ['high', 'medium', 'low'] %}
+    {% set data = tier_data.get(tier, {}) %}
+    <div class="bg-white rounded-lg shadow p-6">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold
+                {% if tier == 'high' %}text-purple-700
+                {% elif tier == 'medium' %}text-blue-700
+                {% else %}text-gray-700{% endif %}">
+                {% if tier == 'high' %}ハイブランド
+                {% elif tier == 'medium' %}ミドルブランド
+                {% else %}ロングテール{% endif %}
+            </h3>
+            <span class="px-2 py-1 rounded text-xs font-bold
+                {% if tier == 'high' %}bg-purple-100 text-purple-800
+                {% elif tier == 'medium' %}bg-blue-100 text-blue-800
+                {% else %}bg-gray-100 text-gray-800{% endif %}">
+                {{ data.count or 0 }}件
+            </span>
+        </div>
+        <div class="space-y-2">
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">平均売価</span>
+                <span class="font-medium">¥{{ "%.0f"|format(data.avg_selling or 0) }}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">平均原価</span>
+                <span class="font-medium">¥{{ "%.0f"|format(data.avg_cost or 0) }}</span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">平均利益</span>
+                <span class="font-medium {% if (data.avg_profit or 0) >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                    ¥{{ "%.0f"|format(data.avg_profit or 0) }}
+                </span>
+            </div>
+            <hr>
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">平均利益率</span>
+                <span class="font-bold {% if (data.avg_profit_rate or 0) >= 10 %}text-green-600{% elif (data.avg_profit_rate or 0) >= 5 %}text-yellow-600{% else %}text-red-600{% endif %}">
+                    {{ data.avg_profit_rate or 0 }}%
+                </span>
+            </div>
+            <div class="flex justify-between text-sm">
+                <span class="text-gray-500">目標利益率</span>
+                <span class="text-gray-400">{{ data.avg_target_rate or 0 }}%</span>
+            </div>
+            <!-- 達成率バー -->
+            <div class="mt-2">
+                <div class="w-full bg-gray-200 rounded h-3">
+                    {% set ach = ((data.avg_profit_rate or 0) / (data.avg_target_rate or 1) * 100) if (data.avg_target_rate or 0) > 0 else 0 %}
+                    <div class="rounded h-3 {% if ach >= 100 %}bg-green-500{% elif ach >= 70 %}bg-yellow-500{% else %}bg-red-500{% endif %}"
+                         style="width: {{ [ach, 100]|min }}%"></div>
+                </div>
+                <div class="text-xs text-gray-400 mt-1">目標達成率: {{ "%.0f"|format(ach) }}%</div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<!-- 商品別利益率一覧 -->
+<div class="overflow-x-auto">
+    <table class="min-w-full bg-white rounded-lg shadow">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">商品名</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">ブランド</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">階層</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">売価</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">原価</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">利益率</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">ステータス</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for p in products %}
+            <tr class="border-b hover:bg-gray-50">
+                <td class="px-4 py-3 text-sm">{{ p.name }}</td>
+                <td class="px-4 py-3 text-sm">{{ p.brand or '-' }}</td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-0.5 rounded text-xs
+                        {% if p.brand_tier == 'high' %}bg-purple-100 text-purple-800
+                        {% elif p.brand_tier == 'medium' %}bg-blue-100 text-blue-800
+                        {% else %}bg-gray-100 text-gray-800{% endif %}">
+                        {{ p.brand_tier or 'low' }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-sm text-right">¥{{ "%.0f"|format(p.selling_price or 0) }}</td>
+                <td class="px-4 py-3 text-sm text-right">¥{{ "%.0f"|format(p.purchase_price or 0) }}</td>
+                <td class="px-4 py-3 text-sm text-right font-bold
+                    {% if p.profit_rate() >= 10 %}text-green-600
+                    {% elif p.profit_rate() >= 5 %}text-yellow-600
+                    {% else %}text-red-600{% endif %}">
+                    {{ "%.1f"|format(p.profit_rate()) }}%
+                </td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-0.5 rounded text-xs
+                        {% if p.listing_status == 'listed' %}bg-green-100 text-green-800
+                        {% elif p.listing_status == 'sold' %}bg-blue-100 text-blue-800
+                        {% elif p.listing_status == 'draft' %}bg-yellow-100 text-yellow-800
+                        {% else %}bg-gray-100 text-gray-800{% endif %}">
+                        {{ p.listing_status or 'draft' }}
+                    </span>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}

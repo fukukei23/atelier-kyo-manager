@@ -1,0 +1,47 @@
+from __future__ import annotations
+from datetime import datetime
+from app.extensions import db
+
+
+class StockCheck(db.Model):
+    """F10: 在庫＆価格チェック"""
+    __tablename__ = "stock_check"
+
+    id = db.Column(db.Integer, primary_key=True)
+    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False)
+    source_url = db.Column(db.String(512), comment="仕入れ元URL")
+    current_price = db.Column(db.Float, comment="現在価格")
+    previous_price = db.Column(db.Float, comment="前回価格")
+    in_stock = db.Column(db.Boolean, default=False, comment="在庫あり")
+    checked_at = db.Column(db.DateTime, comment="チェック日時")
+    price_changed = db.Column(db.Boolean, default=False, comment="価格変動あり")
+    stock_changed = db.Column(db.Boolean, default=False, comment="在庫変動あり")
+    notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    product = db.relationship("Product", backref=db.backref("stock_checks", lazy=True))
+
+    def price_diff(self) -> float | None:
+        if self.current_price is not None and self.previous_price is not None:
+            return self.current_price - self.previous_price
+        return None
+
+    def price_diff_pct(self) -> float | None:
+        if self.current_price is not None and self.previous_price is not None and self.previous_price != 0:
+            return ((self.current_price - self.previous_price) / self.previous_price) * 100
+        return None
+
+    def status_label(self) -> str:
+        if not self.in_stock:
+            return "在庫切れ"
+        if self.price_changed:
+            return "価格変動"
+        return "正常"
+
+    def status_color(self) -> str:
+        if not self.in_stock:
+            return "red"
+        if self.price_changed:
+            return "yellow"
+        return "green"

@@ -1,0 +1,108 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">注文管理（18日ルール）h1>
+    <a href="{{ url_for('main.create_order') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ 新規注文</a>
+</div>
+
+<!-- 統計カード -->
+<div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">未完了</div>
+        <div class="text-2xl font-bold" id="pending-count">-</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">本日期限切れ</div>
+        <div class="text-2xl font-bold text-red-600" id="urgent-count">-</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">合計利益</div>
+        <div class="text-2xl font-bold text-green-600">¥{{ orders | map('sum')|sum(o.profit or 0) }) }}</div>
+    </div>
+</div>
+
+<!-- 注文一覧テーブル -->
+<div class="overflow-x-auto">
+    <table class="min-w-full bg-white rounded-lg shadow">
+        <thead class="bg-gray-50 text-gray-700 text-sm">
+            <tr>
+                <th class="px-4 py-3">注文番号</th>
+                <th class="px-4 py-3">商品名</th>
+                <th class="px-4 py-3">注文日</th>
+                <th class="px-4 py-3">18日期限</th>
+                <th class="px-4 py-3">延長期限</th>
+                <th class="px-4 py-3">残日数</th>
+                <th class="px-4 py-3">決済</th>
+                <th class="px-4 py-3">利益</th>
+                <th class="px-4 py-3">ステータス</th>
+                <th class="px-4 py-3">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for order in orders %}
+            <tr class="border-b hover:bg-gray-50 {% if order.remaining_days() is not none and order.remaining_days() <= 0 %}bg-red-50{% endif %}">
+                <td class="px-4 py-3 font-mono text-sm">{{ order.order_number }}</td>
+                <td class="px-4 py-3">{{ order.product_name }}</td>
+                <td class="px-4 py-3 text-sm">{{ order.order_date.strftime('%m/%d') if order.order_date else '-' }}</td>
+                <td class="px-4 py-3 text-sm">{{ order.deadline_18.strftime('%m/%d') if order.deadline_18 else '-' }}</td>
+                <td class="px-4 py-3 text-sm">{{ order.extension_deadline.strftime('%m/%d') if order.extension_deadline else '-' }}</td>
+                <td class="px-4 py-3">
+                    {% set remaining = order.remaining_days() %}
+                    {% if remaining is none %}
+                        <span class="text-gray-400">-</span>
+                    {% elif remaining <= 0 %}
+                        <span class="px-2 py-0.5 rounded bg-red-100 text-red-800 text-xs font-bold">期限切れ</span>
+                    {% elif remaining <= 2 %}
+                        <span class="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs font-bold">残{{ remaining }}日</span>
+                    {% elif remaining <= 6 %}
+                        <span class="px-2 py-0.5 rounded bg-orange-100 text-orange-800 text-xs font-bold">残{{ remaining }}日</span>
+                    {% else %}
+                        <span class="px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-bold">残{{ remaining }}日</span>
+                    {% endif %}
+                </td>
+                <td class="px-4 py-3 text-xs">{{ order.payment_method or '-' }}</td>
+                <td class="px-4 py-3 text-sm {% if (order.profit or 0) >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
+                    ¥{{ "%.0f"|format(order.profit or 0) }}
+                    <span class="text-xs">({{ "%.1f"|format(order.profit_rate or 0) }}%)</span>
+                </td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-1 rounded text-xs
+                          {% if order.status == 'completed' %}bg-green-100 text-green-800
+                          {% elif order.status == 'cancelled' %}bg-red-100 text-red-800
+                          {% elif order.status == 'shipped' %}bg-blue-100 text-blue-800
+                          {% else %}bg-yellow-100 text-yellow-800{% endif %}">
+                        {{ order.status }}
+                    </span>
+                </td>
+                <td class="px-4 py-3">
+                    <a href="{{ url_for('main.edit_order', oid=order.id) }}" class="text-blue-600 hover:underline text-sm">編集</a>
+                    <form method="POST" action="{{ url_for('main.delete_order', oid=order.id) }}" class="inline"
+                          onsubmit="return confirm('本当に削除しますか？')">
+                        <button class="text-red-600 hover:underline text-sm ml-2">削除</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- 18日ルール解説 -->
+<div class="mt-8 bg-blue-50 rounded-lg p-4">
+    <h3 class="font-bold text-blue-800 mb-2">18日ルールとは</h3>
+    <p class="text-sm text-gray-700">BUYMAでは、購入者が商品を受け取ってから18日以内に支払いを行う必要があります。
+    決済方法によって延長期限が異なります：</p>
+    <div class="grid grid-cols-2 md:grid-cols-3 gap-2 text-sm">
+        <div><strong>45日:</strong> クレジットカード、楽天ペイ</div>
+        <div><strong>25日:</strong> d払い、au PAY、Paidy</div>
+        <div><strong>90日:</strong> 銀行振込,コンビニ,PayPay,Amazon PAY</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block script %}
+// 統計更新
+document.getElementById('pending-count').textContent = {{ orders | selectattr('status', 'in', ['pending', 'shipped']) | list | length }};
+document.getElementById('urgent-count').textContent = {{ orders | selectattr('remaining_days') - if o.remaining_days() is not none and o.remaining_days() <= 0) | list | length }};
+</script>

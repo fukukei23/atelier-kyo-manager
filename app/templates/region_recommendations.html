@@ -1,0 +1,85 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold text-gray-800">買付先地域レコメンド</h1>
+    <a href="{{ url_for('main.create_region') }}" class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">+ 地域追加</a>
+</div>
+
+<!-- サマリー -->
+<div class="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">登録地域数</div>
+        <div class="text-2xl font-bold">{{ regions|length }}</div>
+    </div>
+    {% if regions %}
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">最高推奨地域</div>
+        <div class="text-2xl font-bold text-green-600">{{ regions[0].region_name or regions[0].region }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">平均利益率</div>
+        <div class="text-2xl font-bold text-blue-600">{{ "%.1f"|format(regions|map(attribute='avg_profit_rate')|select|sum / (regions|length or 1)) }}%</div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="overflow-x-auto">
+    <table class="min-w-full bg-white rounded-lg shadow">
+        <thead class="bg-gray-50">
+            <tr>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">地域</th>
+                <th class="px-4 py-3 text-left text-sm font-medium text-gray-700">地域名</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">取扱商品数</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">平均利益率</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">配送日数</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">関税率</th>
+                <th class="px-4 py-3 text-center text-sm font-medium text-gray-700">リスク</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">信頼性</th>
+                <th class="px-4 py-3 text-right text-sm font-medium text-gray-700">推奨スコア</th>
+                <th class="px-4 py-3 text-center text-sm font-medium text-gray-700">評価</th>
+                <th class="px-4 py-3 text-center text-sm font-medium text-gray-700">操作</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in regions %}
+            <tr class="border-b hover:bg-gray-50">
+                <td class="px-4 py-3 text-sm font-mono font-bold">{{ r.region }}</td>
+                <td class="px-4 py-3 text-sm">{{ r.region_name or '-' }}</td>
+                <td class="px-4 py-3 text-sm text-right">{{ r.total_products or 0 }}</td>
+                <td class="px-4 py-3 text-sm text-right">{{ "%.1f"|format(r.avg_profit_rate or 0) }}%</td>
+                <td class="px-4 py-3 text-sm text-right">{{ r.avg_shipping_days or '-' }}日</td>
+                <td class="px-4 py-3 text-sm text-right">{{ "%.1f"|format(r.avg_customs_rate or 0) }}%</td>
+                <td class="px-4 py-3 text-center">
+                    <span class="px-2 py-0.5 rounded text-xs
+                        {% if r.risk_color() == 'green' %}bg-green-100 text-green-800
+                        {% elif r.risk_color() == 'yellow' %}bg-yellow-100 text-yellow-800
+                        {% else %}bg-red-100 text-red-800{% endif %}">
+                        {{ r.risk_label() }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-sm text-right">{{ "%.0f"|format(r.reliability_score or 0) }}</td>
+                <td class="px-4 py-3 text-sm text-right font-bold">{{ "%.1f"|format(r.recommendation_score or r.calc_recommendation() or 0) }}</td>
+                <td class="px-4 py-3 text-center">
+                    {% set rec = r.recommendation_score or 0 %}
+                    <span class="px-2 py-0.5 rounded text-xs
+                        {% if rec >= 70 %}bg-green-100 text-green-800
+                        {% elif rec >= 40 %}bg-yellow-100 text-yellow-800
+                        {% else %}bg-red-100 text-red-800{% endif %}">
+                        {{ r.recommendation_label() }}
+                    </span>
+                </td>
+                <td class="px-4 py-3 text-center">
+                    <form method="POST" action="{{ url_for('main.delete_region', rid=r.id) }}" class="inline" onsubmit="return confirm('削除しますか？')">
+                        <button class="text-red-600 hover:underline text-sm">削除</button>
+                    </form>
+                </td>
+            </tr>
+            {% endfor %}
+            {% if not regions %}
+            <tr><td colspan="11" class="px-4 py-8 text-center text-gray-400">データがありません</td></tr>
+            {% endif %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
