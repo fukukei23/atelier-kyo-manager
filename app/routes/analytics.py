@@ -9,6 +9,7 @@ from flask_login import login_required
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from types import SimpleNamespace
+from datetime import datetime
 
 from app.extensions import db
 from app.models import Product
@@ -260,7 +261,8 @@ def create_stock_check():
         except Exception as e:
             db.session.rollback()
             flash(f"登録に失敗しました: {e}", "error")
-    return render_template("stock_check_form.html")
+    preselected_id = request.args.get("product_id", type=int)
+    return render_template("stock_check_form.html", preselected_id=preselected_id)
 
 
 @bp.post("/stock-check/<int:sid>/delete")
@@ -313,6 +315,69 @@ def api_fetch_stock(sid: int):
         return jsonify({"success": False, "message": str(e)}), 500
     finally:
         scraper.close()
+
+
+# ---- F10-a: クイック価格入力API -----------------------------------------
+@bp.post("/api/stock-check/quick-update")
+@login_required
+def api_quick_update_price():
+    """インライン価格更新"""
+    from app.models.stock_check import StockCheck
+    data = request.get_json(silent=True) or {}
+    sid = data.get("id")
+    new_price = data.get("current_price")
+    if sid is None or new_price is None:
+        return jsonify({"success": False, "error": "id, current_price required"}), 400
+    sc = StockCheck.query.get(sid)
+    if not sc:
+        return jsonify({"success": False, "error": "not found"}), 404
+    try:
+        if sc.current_price != new_price:
+            sc.previous_price = sc.current_price
+            sc.price_changed = sc.previous_price is not None and sc.previous_price != new_price
+        sc.current_price = new_price
+        sc.checked_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({"success": True, "data": sc.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.post("/api/stock-check/quick-add")
+@login_required
+def api_quick_add_check():
+    """クイック追加（商品ID・価格・在庫のみ）"""
+    from app.models.stock_check import StockCheck
+    data = request.get_json(silent=True) or {}
+    pid = data.get("product_id")
+    price = data.get("current_price")
+    if pid is None or price is None:
+        return jsonify({"success": False, "error": "product_id, current_price required"}), 400
+    try:
+        sc = StockCheck(
+            product_id=pid,
+            source_url=data.get("source_url", ""),
+            current_price=price,
+            in_stock=bool(data.get("in_stock", True)),
+            checked_at=datetime.utcnow(),
+            notes=data.get("notes", ""),
+        )
+        db.session.add(sc)
+        db.session.commit()
+        return jsonify({"success": True, "id": sc.id}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.get("/api/products-list")
+@login_required
+def api_products_list():
+    """商品一覧（クイック入力用ドロップダウン）"""
+    prods = Product.query.order_by(Product.brand, Product.name).all()
+    return jsonify([{"id": p.id, "name": f"{p.brand or ''} {p.name}",
+                     "supplier_url": p.supplier_url or ""} for p in prods])
 
 
 @bp.post("/api/stock-check/fetch-all")
