@@ -70,7 +70,7 @@ class Order(db.Model):
 
     # 紐付け
     product_id = db.Column(Integer, db.ForeignKey("product.id"), nullable=True)
-    partner_id = db.Column(Integer, nullable=True, comment="担当パートナーID")
+    partner_id = db.Column(Integer, db.ForeignKey("partner.id"), nullable=True, comment="担当パートナーID")
 
     notes = db.Column(Text, nullable=True)
     created_at = db.Column(DateTime, default=datetime.utcnow)
