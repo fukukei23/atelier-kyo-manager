@@ -142,6 +142,20 @@ def import_csv():
         flash("CSV ファイルが選択されていません。", "error")
         return redirect(url_for("main.manage_products"))
 
+    # ファイル名・拡張子チェック
+    filename = file.filename or ""
+    if not filename.lower().endswith(".csv"):
+        flash("CSV ファイルのみアップロード可能です。", "error")
+        return redirect(url_for("main.manage_products"))
+
+    # ファイルサイズチェック（10MB上限）
+    file.seek(0, 2)
+    size = file.tell()
+    file.seek(0)
+    if size > 10 * 1024 * 1024:
+        flash("ファイルサイズは10MB以下にしてください。", "error")
+        return redirect(url_for("main.manage_products"))
+
     try:
         data = file.read().decode("utf-8-sig")
         reader = csv.DictReader(io.StringIO(data))
