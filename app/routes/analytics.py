@@ -7,6 +7,7 @@ from __future__ import annotations
 from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 from sqlalchemy import func
+from sqlalchemy.orm import joinedload
 from types import SimpleNamespace
 
 from app.extensions import db
@@ -230,7 +231,9 @@ def brand_analytics():
 def stock_check_list():
     """在庫＆価格チェック一覧"""
     from app.models.stock_check import StockCheck
-    checks = StockCheck.query.order_by(StockCheck.checked_at.desc()).all()
+    checks = StockCheck.query.options(
+        joinedload(StockCheck.product)
+    ).order_by(StockCheck.checked_at.desc()).all()
     return render_template("stock_check.html", checks=checks)
 
 
@@ -358,7 +361,9 @@ def api_fetch_all_stocks():
 def popularity_list():
     """人気度トラッキング一覧"""
     from app.models.popularity_tracker import PopularityTracker
-    trackers = PopularityTracker.query.order_by(PopularityTracker.popularity_score.desc()).all()
+    trackers = PopularityTracker.query.options(
+        joinedload(PopularityTracker.product)
+    ).order_by(PopularityTracker.popularity_score.desc()).all()
     avg_score = db.session.query(func.avg(PopularityTracker.popularity_score)).scalar() or 0
     top_count = sum(1 for t in trackers if (t.popularity_score or 0) >= 100)
     low_count = sum(1 for t in trackers if (t.popularity_score or 0) < 20)
