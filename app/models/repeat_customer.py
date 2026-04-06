@@ -58,21 +58,6 @@ class RepeatCustomer(db.Model):
         }
         return colors.get(self.segment or "new", "gray")
 
-    def segment_label(self) -> str:
-        labels = {
-            "new": "新規",
-            "active": "アクティブ",
-            "vip": "VIP",
-            "at_risk": "離脱危惧",
-            "churned": "離脱済",
-        }
-        return labels.get(self.segment or "new", "不明")
-
-    def days_since_last(self) -> int | None:
-        if self.last_order_date is None:
-            return None
-        return (datetime.utcnow() - self.last_order_date).days
-
     def update_avg(self) -> None:
         if self.total_orders and self.total_orders > 0:
             self.avg_order_value = (self.total_spent or 0) / self.total_orders
