@@ -10,7 +10,7 @@
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">商品ID <span class="text-red-500">*</span></label>
                 <input type="number" name="product_id" required
-                       value="{{ check.product_id if check else '' }}"
+                       value="{{ check.product_id if check else (preselected_id or '') }}"
                        class="w-full border rounded px-3 py-2">
             </div>
             <div>
