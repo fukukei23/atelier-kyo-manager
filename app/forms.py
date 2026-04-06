@@ -8,9 +8,9 @@ from __future__ import annotations
 from flask_wtf import FlaskForm
 from wtforms import (
     StringField, FloatField, BooleanField, SubmitField,
-    SelectField, TextAreaField,
+    SelectField, TextAreaField, IntegerField,
 )
-from wtforms.validators import DataRequired, Optional, URL, NumberRange
+from wtforms.validators import DataRequired, Optional, URL, NumberRange, Email, Length
 
 class ProductForm(FlaskForm):
     # 基本
@@ -69,3 +69,112 @@ class ProductForm(FlaskForm):
 class AutoResearchForm(FlaskForm):
     """自動リサーチ画面のCSRF用（必要ならパラメータを追加可）"""
     submit = SubmitField("実行")
+
+
+# ---- F05: 注文管理 ----
+class OrderForm(FlaskForm):
+    order_number = StringField("注文番号", validators=[DataRequired(), Length(max=64)])
+    product_name = StringField("商品名", validators=[DataRequired(), Length(max=255)])
+    customer_name = StringField("顧客名", validators=[Optional()])
+    order_date = StringField("注文日", validators=[Optional()])
+    selling_price = FloatField("販売価格", validators=[DataRequired(), NumberRange(min=0)])
+    purchase_cost = FloatField("仕入原価", validators=[DataRequired(), NumberRange(min=0)])
+    customs_duty = FloatField("関税", validators=[Optional(), NumberRange(min=0)])
+    payment_method = SelectField("決済方法", choices=[
+        ("credit_card", "クレジット"), ("rakuten_pay", "楽天ペイ"),
+        ("d_pay", "d払い"), ("au_pay", "auかんたん決済"),
+        ("paidy", "Paidy"), ("bank_transfer", "銀行振込"),
+        ("convenience", "コンビニ"), ("paypay", "PayPay"), ("amazon_pay", "Amazon Pay"),
+    ], validators=[Optional()])
+    source_type = SelectField("仕入区分", choices=[
+        ("domestic", "国内"), ("overseas", "海外"),
+    ], validators=[Optional()])
+    status = SelectField("ステータス", choices=[
+        ("pending", "保留"), ("shipped", "発送済"), ("completed", "完了"), ("cancelled", "キャンセル"),
+    ], validators=[Optional()])
+    notes = TextAreaField("メモ", validators=[Optional()])
+    submit = SubmitField("保存")
+
+
+# ---- F06: パートナー管理 ----
+class PartnerForm(FlaskForm):
+    name = StringField("名前", validators=[DataRequired()])
+    email = StringField("メール", validators=[Optional(), Email()])
+    phone = StringField("電話番号", validators=[Optional()])
+    active_regions = StringField("活動地域", validators=[Optional()])
+    specialty_brands = StringField("得意ブランド", validators=[Optional()])
+    priority_level = SelectField("優先度", choices=[
+        ("low", "低"), ("medium", "中"), ("high", "高"),
+    ], validators=[Optional()])
+    status = SelectField("ステータス", choices=[
+        ("active", "有効"), ("inactive", "無効"), ("suspended", "停止"),
+    ], validators=[Optional()])
+    notes = TextAreaField("メモ", validators=[Optional()])
+    submit = SubmitField("保存")
+
+
+# ---- F13: リピーター管理 ----
+class CustomerForm(FlaskForm):
+    customer_name = StringField("顧客名", validators=[DataRequired()])
+    email = StringField("メール", validators=[Optional()])
+    phone = StringField("電話番号", validators=[Optional()])
+    total_orders = IntegerField("総注文数", validators=[Optional()], default=0)
+    total_spent = FloatField("総購入額", validators=[Optional()], default=0)
+    first_order_date = StringField("初回注文日", validators=[Optional()])
+    last_order_date = StringField("最終注文日", validators=[Optional()])
+    notes = TextAreaField("メモ", validators=[Optional()])
+    submit = SubmitField("保存")
+
+
+# ---- F03: 出品テンプレート ----
+class ListingTemplateForm(FlaskForm):
+    name = StringField("テンプレート名", validators=[DataRequired()])
+    template_text = TextAreaField("本文", validators=[DataRequired()])
+    category = SelectField("カテゴリ", choices=[
+        ("general", "一般"), ("fashion", "ファッション"), ("luxury", "ラグジュアリー"),
+    ], validators=[Optional()])
+    is_default = BooleanField("デフォルトにする")
+    submit = SubmitField("保存")
+
+
+# ---- F10: 在庫チェック ----
+class StockCheckForm(FlaskForm):
+    product_id = IntegerField("商品ID", validators=[DataRequired()])
+    source_url = StringField("仕入先URL", validators=[Optional(), URL(require_tld=False)])
+    current_price = FloatField("現在価格", validators=[Optional(), NumberRange(min=0)])
+    in_stock = BooleanField("在庫あり")
+    notes = TextAreaField("メモ", validators=[Optional()])
+    submit = SubmitField("保存")
+
+
+# ---- F07: 品出し進捗 ----
+class ListingProgressForm(FlaskForm):
+    record_date = StringField("記録日", validators=[Optional()])
+    listings_count = IntegerField("出品数", validators=[Optional()], default=0)
+    target_daily = IntegerField("目標(日)", validators=[Optional()], default=20)
+    target_monthly = IntegerField("目標(月)", validators=[Optional()], default=600)
+    cumulative_monthly = IntegerField("累計(月)", validators=[Optional()], default=0)
+    notes = TextAreaField("メモ", validators=[Optional()])
+    submit = SubmitField("保存")
+
+
+# ---- F11: 人気度トラッキング ----
+class PopularityForm(FlaskForm):
+    product_id = IntegerField("商品ID", validators=[DataRequired()])
+    views = IntegerField("閲覧数", validators=[Optional()], default=0)
+    favorites = IntegerField("お気に入り数", validators=[Optional()], default=0)
+    inquiries = IntegerField("問い合わせ数", validators=[Optional()], default=0)
+    sold_count = IntegerField("販売数", validators=[Optional()], default=0)
+    submit = SubmitField("保存")
+
+
+# ---- F12: 地域レコメンド ----
+class RegionForm(FlaskForm):
+    region = StringField("地域コード", validators=[DataRequired()])
+    region_name = StringField("地域名", validators=[Optional()])
+    avg_profit_rate = FloatField("平均利益率", validators=[Optional(), NumberRange(min=0)])
+    avg_shipping_days = IntegerField("平均配送日数", validators=[Optional()])
+    avg_customs_rate = FloatField("平均関税率", validators=[Optional(), NumberRange(min=0)])
+    risk_score = FloatField("リスクスコア", validators=[Optional(), NumberRange(min=0, max=100)], default=50)
+    reliability_score = FloatField("信頼性スコア", validators=[Optional(), NumberRange(min=0, max=100)], default=50)
+    submit = SubmitField("保存")
