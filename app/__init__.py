@@ -45,7 +45,7 @@ def create_app(config_name: str | None = None) -> Flask:
     login_manager.init_app(app)
 
     # --- Blueprint 登録 ---
-    from .routes import bp as main_bp
+    from .routes import bp as main_bp  # noqa: F811 — routes パッケージから一括インポート
     app.register_blueprint(main_bp)
 
     from .auth import bp as auth_bp
