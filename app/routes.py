@@ -35,7 +35,7 @@ from flask import (
 
 from flask_login import login_required
 
-from .extensions import db
+from .extensions import db, csrf
 from app.models import Product  # Product is exported from app.models package
 from app.forms import ProductForm, AutoResearchForm
 
@@ -136,7 +136,8 @@ def edit_product(product_id: int):
             db.session.rollback()
             flash(f"更新に失敗しました: {e}", "error")
 
-    return render_template("products/manage.html", form=form, products=[])
+    products = Product.query.order_by(Product.id.desc()).all()
+    return render_template("products/manage.html", form=form, products=products)
 
 @bp.post("/products/<int:id>/delete")
 @login_required
@@ -311,6 +312,8 @@ except Exception:
     _shipping_agent_import_ok = False
 
 @bp.get("/api/warehouses")
+@login_required
+@csrf.exempt
 def api_warehouses():
     """
     GET /api/warehouses?country=HK
@@ -360,7 +363,12 @@ def edit_listing_template(tid: int | None = None):
 
         if not name or not template_text:
             flash("テンプレート名と本文は必須です。", "error")
-            return render_template("edit_listing_template.html", tpl=tpl or type('Obj', (), {'name': name, 'template_text': template_text, 'category': category, 'is_default': is_default})())
+            from types import SimpleNamespace
+            return render_template("edit_listing_template.html",
+                                   tpl=tpl or SimpleNamespace(name=name,
+                                                              template_text=template_text,
+                                                              category=category,
+                                                              is_default=is_default))
 
         if tpl is None:
             tpl = ListingTemplate()
@@ -380,9 +388,13 @@ def edit_listing_template(tid: int | None = None):
 def delete_listing_template(tid: int):
     from app.models.listing_template import ListingTemplate
     tpl = ListingTemplate.query.get_or_404(tid)
-    db.session.delete(tpl)
-    db.session.commit()
-    flash("テンプレートを削除しました。", "success")
+    try:
+        db.session.delete(tpl)
+        db.session.commit()
+        flash("テンプレートを削除しました。", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"削除に失敗しました: {e}", "error")
     return redirect(url_for("main.listing_templates"))
 
 @bp.get("/products/<int:product_id>/generate-listing")
@@ -521,14 +533,14 @@ def edit_order(oid: int):
                 order.order_date = _dt.strptime(order_date_str, "%Y-%m-%d")
             order.order_number = request.form.get("order_number", order.order_number)
             order.product_name = request.form.get("product_name", order.product_name)
-            order.customer_name = request.form.get("customer_name", "")
+            order.customer_name = request.form.get("customer_name", order.customer_name)
             order.selling_price = float(request.form.get("selling_price", 0) or 0)
             order.purchase_cost = float(request.form.get("purchase_cost", 0) or 0)
             order.customs_duty = float(request.form.get("customs_duty", 0) or 0)
-            order.payment_method = request.form.get("payment_method", "")
+            order.payment_method = request.form.get("payment_method", order.payment_method)
             order.source_type = request.form.get("source_type", "domestic")
             order.status = request.form.get("status", order.status)
-            order.notes = request.form.get("notes", "")
+            order.notes = request.form.get("notes", order.notes)
             order.calc_deadlines()
             order.calc_profit()
             db.session.commit()
@@ -547,9 +559,13 @@ def delete_order(oid: int):
     """注文削除"""
     from app.models.order import Order
     order = Order.query.get_or_404(oid)
-    db.session.delete(order)
-    db.session.commit()
-    flash("注文を削除しました。", "success")
+    try:
+        db.session.delete(order)
+        db.session.commit()
+        flash("注文を削除しました。", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"削除に失敗しました: {e}", "error")
     return redirect(url_for("main.order_list"))
 
 @bp.get("/api/orders/dashboard")
@@ -624,10 +640,10 @@ def edit_partner(pid: int):
     if request.method == "POST":
         try:
             p.name = request.form.get("name", p.name)
-            p.email = request.form.get("email", "")
-            p.phone = request.form.get("phone", "")
-            p.active_regions = request.form.get("active_regions", "")
-            p.specialty_brands = request.form.get("specialty_brands", "")
+            p.email = request.form.get("email", p.email)
+            p.phone = request.form.get("phone", p.phone)
+            p.active_regions = request.form.get("active_regions", p.active_regions)
+            p.specialty_brands = request.form.get("specialty_brands", p.specialty_brands)
             p.priority_level = request.form.get("priority_level", "medium")
             p.status = request.form.get("status", "active")
             p.notes = request.form.get("notes", "")
@@ -645,9 +661,13 @@ def delete_partner(pid: int):
     """パートナー削除"""
     from app.models.partner import Partner
     p = Partner.query.get_or_404(pid)
-    db.session.delete(p)
-    db.session.commit()
-    flash("パートナーを削除しました。", "success")
+    try:
+        db.session.delete(p)
+        db.session.commit()
+        flash("パートナーを削除しました。", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"削除に失敗しました: {e}", "error")
     return redirect(url_for("main.partner_list"))
 
 # =====================================================================
@@ -702,9 +722,13 @@ def delete_listing_progress(rid: int):
     """進捗記録削除"""
     from app.models.listing_progress import ListingProgress
     r = ListingProgress.query.get_or_404(rid)
-    db.session.delete(r)
-    db.session.commit()
-    flash("進捗記録を削除しました。", "success")
+    try:
+        db.session.delete(r)
+        db.session.commit()
+        flash("進捗記録を削除しました。", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"削除に失敗しました: {e}", "error")
     return redirect(url_for("main.listing_progress_view"))
 
 # =====================================================================
@@ -832,9 +856,13 @@ def delete_stock_check(sid: int):
     """在庫チェック削除"""
     from app.models.stock_check import StockCheck
     sc = StockCheck.query.get_or_404(sid)
-    db.session.delete(sc)
-    db.session.commit()
-    flash("チェック記録を削除しました。", "success")
+    try:
+        db.session.delete(sc)
+        db.session.commit()
+        flash("チェック記録を削除しました。", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"削除に失敗しました: {e}", "error")
     return redirect(url_for("main.stock_check_list"))
 
 
@@ -967,9 +995,13 @@ def delete_popularity(tid: int):
     """人気度記録削除"""
     from app.models.popularity_tracker import PopularityTracker
     pt = PopularityTracker.query.get_or_404(tid)
-    db.session.delete(pt)
-    db.session.commit()
-    flash("記録を削除しました。", "success")
+    try:
+        db.session.delete(pt)
+        db.session.commit()
+        flash("記録を削除しました。", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"削除に失敗しました: {e}", "error")
     return redirect(url_for("main.popularity_list"))
 
 # =====================================================================
@@ -1017,9 +1049,13 @@ def delete_region(rid: int):
     """地域削除"""
     from app.models.region_recommendation import RegionRecommendation
     rr = RegionRecommendation.query.get_or_404(rid)
-    db.session.delete(rr)
-    db.session.commit()
-    flash("地域を削除しました。", "success")
+    try:
+        db.session.delete(rr)
+        db.session.commit()
+        flash("地域を削除しました。", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"削除に失敗しました: {e}", "error")
     return redirect(url_for("main.region_list"))
 
 # =====================================================================
@@ -1103,9 +1139,13 @@ def delete_customer(cid: int):
     """顧客削除"""
     from app.models.repeat_customer import RepeatCustomer
     c = RepeatCustomer.query.get_or_404(cid)
-    db.session.delete(c)
-    db.session.commit()
-    flash("顧客を削除しました。", "success")
+    try:
+        db.session.delete(c)
+        db.session.commit()
+        flash("顧客を削除しました。", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"削除に失敗しました: {e}", "error")
     return redirect(url_for("main.customer_list"))
 
 

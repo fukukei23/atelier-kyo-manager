@@ -23,7 +23,7 @@ class User(UserMixin, db.Model):
     username = db.Column(String(64), unique=True, nullable=False, index=True)
     password_hash = db.Column(String(256), nullable=False)
     display_name = db.Column(String(128), nullable=True)
-    is_admin = db.Column(Boolean, default=True, nullable=False)
+    is_admin = db.Column(Boolean, default=False, nullable=False)
     is_active = db.Column(Boolean, default=True, nullable=False)
     created_at = db.Column(DateTime, default=datetime.utcnow)
 
