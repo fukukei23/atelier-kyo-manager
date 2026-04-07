@@ -28,8 +28,12 @@ def create_partner():
     from app.models.partner import Partner
     if request.method == "POST":
         try:
+            name = request.form.get("name", "").strip()
+            if not name:
+                flash("パートナー名は必須です。", "error")
+                return render_template("partner_form.html", partner=None)
             p = Partner(
-                name=request.form.get("name", ""),
+                name=name,
                 email=request.form.get("email", ""),
                 phone=request.form.get("phone", ""),
                 active_regions=request.form.get("active_regions", ""),
@@ -107,12 +111,17 @@ def create_customer():
     from datetime import datetime as _dt
     if request.method == "POST":
         try:
+            total_orders = int(request.form.get("total_orders", 0) or 0)
+            total_spent = float(request.form.get("total_spent", 0) or 0)
+            if total_orders < 0 or total_spent < 0:
+                flash("注文件数・合計金額に負の値は入力できません。", "error")
+                return render_template("repeat_customer_form.html", customer=None)
             c = RepeatCustomer(
                 customer_name=request.form.get("customer_name", ""),
                 email=request.form.get("email", ""),
                 phone=request.form.get("phone", ""),
-                total_orders=int(request.form.get("total_orders", 0) or 0),
-                total_spent=float(request.form.get("total_spent", 0) or 0),
+                total_orders=total_orders,
+                total_spent=total_spent,
             )
             fod = request.form.get("first_order_date", "")
             lod = request.form.get("last_order_date", "")

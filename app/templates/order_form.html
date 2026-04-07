@@ -99,10 +99,8 @@
         </div>
     </form>
 </div>
-{% endblock %}
 
-{% block script %}
-// 自動計算プレビュー
+<script>
 document.querySelector('form').addEventListener('input', function() {
     const selling = parseFloat(document.querySelector('[name=selling_price]').value) || 0;
     const cost = parseFloat(document.querySelector('[name=purchase_cost]').value) || 0;
@@ -113,6 +111,6 @@ document.querySelector('form').addEventListener('input', function() {
     const fees = commission + 220;
     const profit = selling - cost - fees - duty;
     const profitRate = selling > 0 ? (profit / selling * 100).toFixed(1) : 0;
-    // 利益は自動計算されるのでユーザーにヒント表示可能
 });
 </script>
+{% endblock %}
