@@ -70,7 +70,10 @@
                     </span>
                 </td>
                 <td class="px-4 py-3 text-center">
-                    <form method="POST" action="{{ url_for('main.delete_region', rid=r.id) }}" class="inline" onsubmit="return confirm('削除しますか？')">
+                    <form method="POST"
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}/
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">>
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"> action="{{ url_for('main.delete_region', rid=r.id) }}" class="inline" onsubmit="return confirm('削除しますか？')">
                         <button class="text-red-600 hover:underline text-sm">削除</button>
                     </form>
                 </td>

@@ -159,12 +159,19 @@ def create_listing_progress():
             from datetime import date as _date
             record_date_str = request.form.get("record_date", "")
             record_date = _date.fromisoformat(record_date_str) if record_date_str else _date.today()
+            listings_count = int(request.form.get("listings_count", 0) or 0)
+            target_daily = int(request.form.get("target_daily", 20) or 20)
+            target_monthly = int(request.form.get("target_monthly", 600) or 600)
+            cumulative_monthly = int(request.form.get("cumulative_monthly", 0) or 0)
+            if any(v < 0 for v in [listings_count, target_daily, target_monthly, cumulative_monthly]):
+                flash("出品数・目標値に負の値は入力できません。", "error")
+                return render_template("listing_progress_form.html", record=None)
             lp = ListingProgress(
                 record_date=record_date,
-                listings_count=int(request.form.get("listings_count", 0) or 0),
-                target_daily=int(request.form.get("target_daily", 20) or 20),
-                target_monthly=int(request.form.get("target_monthly", 600) or 600),
-                cumulative_monthly=int(request.form.get("cumulative_monthly", 0) or 0),
+                listings_count=listings_count,
+                target_daily=target_daily,
+                target_monthly=target_monthly,
+                cumulative_monthly=cumulative_monthly,
                 notes=request.form.get("notes", ""),
             )
             db.session.add(lp)
@@ -472,12 +479,19 @@ def create_popularity():
     from datetime import date as _date
     if request.method == "POST":
         try:
+            views = int(request.form.get("views", 0) or 0)
+            favorites = int(request.form.get("favorites", 0) or 0)
+            inquiries = int(request.form.get("inquiries", 0) or 0)
+            sold_count = int(request.form.get("sold_count", 0) or 0)
+            if any(v < 0 for v in [views, favorites, inquiries, sold_count]):
+                flash("閲覧数・お気に入り・問い合わせ・販売数に負の値は入力できません。", "error")
+                return render_template("popularity_form.html")
             pt = PopularityTracker(
                 product_id=int(request.form.get("product_id", 0)),
-                views=int(request.form.get("views", 0) or 0),
-                favorites=int(request.form.get("favorites", 0) or 0),
-                inquiries=int(request.form.get("inquiries", 0) or 0),
-                sold_count=int(request.form.get("sold_count", 0) or 0),
+                views=views,
+                favorites=favorites,
+                inquiries=inquiries,
+                sold_count=sold_count,
                 tracking_date=_date.today(),
             )
             pt.popularity_score = pt.calc_score()
@@ -525,14 +539,21 @@ def create_region():
     from datetime import datetime as _dt
     if request.method == "POST":
         try:
+            avg_profit_rate = float(request.form.get("avg_profit_rate", 0) or 0)
+            avg_shipping_days = int(request.form.get("avg_shipping_days", 0) or 0)
+            risk_score = float(request.form.get("risk_score", 50) or 50)
+            reliability_score = float(request.form.get("reliability_score", 50) or 50)
+            if avg_shipping_days < 0:
+                flash("配送日数に負の値は入力できません。", "error")
+                return render_template("region_form.html")
             rr = RegionRecommendation(
                 region=request.form.get("region", ""),
                 region_name=request.form.get("region_name", ""),
-                avg_profit_rate=float(request.form.get("avg_profit_rate", 0) or 0),
-                avg_shipping_days=int(request.form.get("avg_shipping_days", 0) or 0),
+                avg_profit_rate=avg_profit_rate,
+                avg_shipping_days=avg_shipping_days,
                 avg_customs_rate=float(request.form.get("avg_customs_rate", 0) or 0),
-                risk_score=float(request.form.get("risk_score", 50) or 50),
-                reliability_score=float(request.form.get("reliability_score", 50) or 50),
+                risk_score=risk_score,
+                reliability_score=reliability_score,
                 last_updated=_dt.utcnow(),
             )
             rr.recommendation_score = rr.calc_recommendation() or 0
