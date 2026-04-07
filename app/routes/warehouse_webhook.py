@@ -30,8 +30,10 @@ def forward2me_events():
 
 
 def _verify_signature(body: bytes, signature: str, secret: str) -> bool:
+    if not signature:
+        return False
     expected = hmac.new(secret.encode("utf-8"), body, sha256).hexdigest()
-    return hmac.compare_digest(expected, signature or "")
+    return hmac.compare_digest(expected, signature)
 
 
 def _load_forward2me_config() -> Dict[str, Any]:
