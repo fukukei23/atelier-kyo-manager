@@ -60,7 +60,11 @@ def edit_partner(pid: int):
     p = Partner.query.get_or_404(pid)
     if request.method == "POST":
         try:
-            p.name = request.form.get("name", p.name)
+            name = request.form.get("name", "").strip()
+            if not name:
+                flash("パートナー名は必須です。", "error")
+                return render_template("partner_form.html", partner=p)
+            p.name = name
             p.email = request.form.get("email", p.email)
             p.phone = request.form.get("phone", p.phone)
             p.active_regions = request.form.get("active_regions", p.active_regions)
@@ -156,6 +160,9 @@ def edit_customer(cid: int):
             c.phone = request.form.get("phone", "")
             c.total_orders = int(request.form.get("total_orders", 0) or 0)
             c.total_spent = float(request.form.get("total_spent", 0) or 0)
+            if c.total_orders < 0 or c.total_spent < 0:
+                flash("注文件数・合計金額に負の値は入力できません。", "error")
+                return render_template("repeat_customer_form.html", customer=c)
             fod = request.form.get("first_order_date", "")
             lod = request.form.get("last_order_date", "")
             if fod:
