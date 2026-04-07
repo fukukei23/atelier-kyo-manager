@@ -253,10 +253,22 @@ def create_stock_check():
     from datetime import datetime as _dt
     if request.method == "POST":
         try:
+            product_id = int(request.form.get("product_id", 0))
+            current_price = float(request.form.get("current_price", 0) or 0)
+            if product_id <= 0:
+                flash("商品を選択してください。", "error")
+                return render_template("stock_check_form.html", preselected_id=None)
+            if current_price < 0:
+                flash("価格に負の値は入力できません。", "error")
+                return render_template("stock_check_form.html", preselected_id=product_id)
+            product = Product.query.get(product_id)
+            if not product:
+                flash("指定された商品が存在しません。", "error")
+                return render_template("stock_check_form.html", preselected_id=None)
             sc = StockCheck(
-                product_id=int(request.form.get("product_id", 0)),
+                product_id=product_id,
                 source_url=request.form.get("source_url", ""),
-                current_price=float(request.form.get("current_price", 0) or 0),
+                current_price=current_price,
                 in_stock="in_stock" in request.form,
                 checked_at=_dt.utcnow(),
                 notes=request.form.get("notes", ""),
