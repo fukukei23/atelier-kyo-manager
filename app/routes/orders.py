@@ -33,14 +33,22 @@ def create_order():
             order_date_str = request.form.get("order_date", "")
             order_date = _dt.strptime(order_date_str, "%Y-%m-%d") if order_date_str else _dt.utcnow()
 
+            selling_price = float(request.form.get("selling_price", 0) or 0)
+            purchase_cost = float(request.form.get("purchase_cost", 0) or 0)
+            customs_duty = float(request.form.get("customs_duty", 0) or 0)
+            if selling_price < 0 or purchase_cost < 0 or customs_duty < 0:
+                flash("金額に負の値は入力できません。", "error")
+                return render_template("order_form.html", order=None,
+                                       payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys()))
+
             order = Order(
                 order_number=request.form.get("order_number", ""),
                 product_name=request.form.get("product_name", ""),
                 customer_name=request.form.get("customer_name", ""),
                 order_date=order_date,
-                selling_price=float(request.form.get("selling_price", 0) or 0),
-                purchase_cost=float(request.form.get("purchase_cost", 0) or 0),
-                customs_duty=float(request.form.get("customs_duty", 0) or 0),
+                selling_price=selling_price,
+                purchase_cost=purchase_cost,
+                customs_duty=customs_duty,
                 payment_method=request.form.get("payment_method", ""),
                 source_type=request.form.get("source_type", "domestic"),
                 status=request.form.get("status", "pending"),
@@ -78,6 +86,10 @@ def edit_order(oid: int):
             order.selling_price = float(request.form.get("selling_price", 0) or 0)
             order.purchase_cost = float(request.form.get("purchase_cost", 0) or 0)
             order.customs_duty = float(request.form.get("customs_duty", 0) or 0)
+            if order.selling_price < 0 or order.purchase_cost < 0 or order.customs_duty < 0:
+                flash("金額に負の値は入力できません。", "error")
+                return render_template("order_form.html", order=order,
+                                       payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys()))
             order.payment_method = request.form.get("payment_method", order.payment_method)
             order.source_type = request.form.get("source_type", "domestic")
             order.status = request.form.get("status", order.status)
