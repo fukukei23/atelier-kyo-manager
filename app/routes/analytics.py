@@ -11,7 +11,7 @@ from sqlalchemy.orm import joinedload
 from types import SimpleNamespace
 from datetime import datetime
 
-from app.extensions import db
+from app.extensions import db, csrf
 from app.models import Product
 
 from . import bp
@@ -320,6 +320,7 @@ def api_fetch_stock(sid: int):
 # ---- F10-a: クイック価格入力API -----------------------------------------
 @bp.post("/api/stock-check/quick-update")
 @login_required
+@csrf.exempt
 def api_quick_update_price():
     """インライン価格更新"""
     from app.models.stock_check import StockCheck
@@ -328,6 +329,13 @@ def api_quick_update_price():
     new_price = data.get("current_price")
     if sid is None or new_price is None:
         return jsonify({"success": False, "error": "id, current_price required"}), 400
+    # 価格バリデーション: 数値型で0以上であること
+    try:
+        new_price = float(new_price)
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "error": "current_price must be a number"}), 400
+    if new_price < 0:
+        return jsonify({"success": False, "error": "current_price must be >= 0"}), 400
     sc = StockCheck.query.get(sid)
     if not sc:
         return jsonify({"success": False, "error": "not found"}), 404
@@ -346,6 +354,7 @@ def api_quick_update_price():
 
 @bp.post("/api/stock-check/quick-add")
 @login_required
+@csrf.exempt
 def api_quick_add_check():
     """クイック追加（商品ID・価格・在庫のみ）"""
     from app.models.stock_check import StockCheck
@@ -354,14 +363,28 @@ def api_quick_add_check():
     price = data.get("current_price")
     if pid is None or price is None:
         return jsonify({"success": False, "error": "product_id, current_price required"}), 400
+    # バリデーション: 価格は0以上の数値
+    try:
+        price = float(price)
+    except (ValueError, TypeError):
+        return jsonify({"success": False, "error": "current_price must be a number"}), 400
+    if price < 0:
+        return jsonify({"success": False, "error": "current_price must be >= 0"}), 400
+    # バリデーション: product_id存在チェック
+    product = Product.query.get(pid)
+    if not product:
+        return jsonify({"success": False, "error": f"product_id {pid} not found"}), 400
+    # source_urlサニタイズ（HTMLタグ除去）
+    source_url = str(data.get("source_url", ""))[:2000]
+    source_url = source_url.replace("<", "&lt;").replace(">", "&gt;")
     try:
         sc = StockCheck(
             product_id=pid,
-            source_url=data.get("source_url", ""),
+            source_url=source_url,
             current_price=price,
             in_stock=bool(data.get("in_stock", True)),
             checked_at=datetime.utcnow(),
-            notes=data.get("notes", ""),
+            notes=str(data.get("notes", "")).replace("<", "&lt;").replace(">", "&gt;"),
         )
         db.session.add(sc)
         db.session.commit()
