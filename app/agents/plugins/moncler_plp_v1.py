@@ -6,61 +6,84 @@ from .base import StrategyPlugin
 
 logger = logging.getLogger(__name__)
 
+# Moncler PLP抽出用定数（browser/extractor.py から参照）
+_MONCLER_PLP_TILE_TUPLE = (
+    "a[href*='/products/']",
+    "a[href*='/product/']",
+    "a[href*='/p/']",
+    "a[href*='/p-']",
+    "[data-testid='product-card']",
+    "[data-test='product-card']",
+    "div[data-testid='product-card']",
+    "div[data-testid='product-tile']",
+    "div[class*='product-card' i]",
+    "div[class*='product-tile' i]",
+    "div.product-tile",
+    "div.c-product-tile",
+    "div[data-component*='ProductCard']",
+    "li:has(a[href*='/products/'])",
+    "article:has(a[href*='/products/'])",
+    "div:has(a[href*='/products/'])",
+    "section[role='region'] .product-list a[href*='/products/']",
+)
+
+MONCLER_PLP_CONTAINER_SELECTORS = [
+    "div[class*='product-tile']",
+    "div[class*='product-card']",
+    "div[data-testid='product-tile']",
+    "div[data-testid='product-card']",
+    "li[class*='product-item']",
+    "article[class*='product']",
+]
+
+MONCLER_PLP_TILE_SELECTORS = _MONCLER_PLP_TILE_TUPLE
+
+MONCLER_PLP_PDP_LINK_SELECTORS = [
+    "a[href*='/products/']",
+    "a[href*='/product/']",
+    "a[href*='/p/']",
+]
+
+MONCLER_PLP_PDP_LINK_SELECTORS_PRIMARY = [
+    "a[href*='/products/']",
+]
+
+MONCLER_PLP_PDP_LINK_SELECTORS_SECONDARY = [
+    "a[href*='/product/']",
+    "a[href*='/p/']",
+]
+
+MONCLER_PLP_PDP_LINK_SELECTORS_TERTIARY = [
+    "a[href*='/p-']",
+]
+
 
 class MonclerPLPStrategy(StrategyPlugin):
     site = "MONCLER_OFFICIAL"
     _DEFAULT_LOCALE = "en-int"
     _DEFAULT_COUNTRY = "GB"
     _HARD_PLP_URL = "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
-    _PLP_TILE_SELECTORS = (
-        # PDP/PLP href variants
-        "a[href*='/products/']",
-        "a[href*='/product/']",
-        "a[href*='/p/']",
-        "a[href*='/p-']",
-        # data-testid/data-test
-        "[data-testid='product-card']",
-        "[data-test='product-card']",
-        "div[data-testid='product-card']",
-        "div[data-testid='product-tile']",
-        # class and generic tile containers
-        "div[class*='product-card' i]",
-        "div[class*='product-tile' i]",
-        "div.product-tile",
-        "div.c-product-tile",
-        "div[data-component*='ProductCard']",
-        # list/article fallback
-        "li:has(a[href*='/products/'])",
-        "article:has(a[href*='/products/'])",
-        "div:has(a[href*='/products/'])",
-        # region/list section fallback
-        "section[role='region'] .product-list a[href*='/products/']",
-    )
+    _PLP_TILE_SELECTORS = _MONCLER_PLP_TILE_TUPLE
 
     def before_navigate(self, url: str, ctx) -> str:
-        # 1) フラグメント除去
         url = self.strip_fragment(url)
-        # 2) ロケール/配送国を固定（overridesの有無にかかわらず安全側で）
         locale, country = self._preferred_locale(ctx)
         url = self.force_query(url, {
             "forceLocale": locale,
             "shipToCountry": country
         })
-        # 3) ホーム/モンクラーグループ/ロケールルートに落ちたら正規PLPへ強制戻し
         host = self.hostname(url)
         if "monclergroup.com" in host:
             return self._HARD_PLP_URL
         path = self._path(url)
         if not path or path == "/" or re.match(r"^/en-[a-z]{2}/?$", path or "", re.IGNORECASE):
             return self._HARD_PLP_URL
-        # 4) PLPらしさが無いURLは正規PLPへ戻す
         if host and host.endswith("moncler.com"):
             if not re.search(r"/(outerwear|search|products|p[-/])", path, re.IGNORECASE):
                 return self._HARD_PLP_URL
         return url
 
     async def after_navigate(self, page, ctx):
-        # ルート書き換えを一度だけ仕込む（documentナビを en-int に強制）
         if isinstance(ctx, dict) and not ctx.get("_moncler_route_patched"):
             ctx["_moncler_route_patched"] = True
             async def _route_enforce(route, request):
@@ -68,11 +91,9 @@ class MonclerPLPStrategy(StrategyPlugin):
                     if request.resource_type == "document":
                         url = request.url
                         if "moncler.com" in url:
-                            # ロケールが en-int 以外なら置換して継続
                             if ("/en-jp/" in url) or ("/en-de/" in url) or ("/en-int/" not in url):
                                 new_url = re.sub(r"/en-[a-z]{2}/", "/en-int/", url, flags=re.IGNORECASE)
                                 if new_url == url:
-                                    # en-xx が無いケースは先頭に付与
                                     new_url = "https://www.moncler.com/en-int/"
                                 try:
                                     await route.continue_(url=new_url)
@@ -87,13 +108,9 @@ class MonclerPLPStrategy(StrategyPlugin):
             except Exception:
                 logger.debug("[MonclerPLPStrategy] page.route setup failed", exc_info=True)
 
-        # 0) 強制ロケールを localStorage / cookie / URL に焼き付ける
         await self._pin_locale(page, ctx)
-        # 1) 同意処理
         await self.dismiss_consent(page)
-        # 2) ロケーションモーダルでUK/ENを選択する
         await self._handle_locale_modal(page)
-        # 3) Cookie/ロケールボタンを順番に叩く
         try:
             for sel in [
                 "#onetrust-accept-btn-handler",
@@ -112,18 +129,15 @@ class MonclerPLPStrategy(StrategyPlugin):
             logger.debug("[MonclerPLPStrategy] Continue/cookie fallback click skipped", exc_info=True)
 
     async def assert_plp(self, page, ctx) -> bool:
-        # カード候補の合計が一定数以上でPLPとみなす
         min_cards = int(ctx.get("plp_min_cards", 8))
         return await self._count_tiles(page) >= min_cards
 
     async def materialize(self, page, ctx) -> bool:
-        """スクロールでカードを出し切る。成功ならTrue。"""
         min_cards = int(ctx.get("plp_min_cards", 8))
         max_passes = int(ctx.get("scroll_max_passes", 10))
         last = 0
         for _ in range(max_passes):
             try:
-                # パスごとにロケールホーム/他ロケールへ戻されていないか監視し、戻されたら即PLPへ復帰
                 if ("/en-int/" not in page.url) or self._is_locale_root(page.url):
                     try:
                         await page.goto(self._HARD_PLP_URL, wait_until="domcontentloaded")
@@ -136,16 +150,13 @@ class MonclerPLPStrategy(StrategyPlugin):
                 curr = await self._count_tiles(page)
                 if curr >= min_cards:
                     return True
-                if curr == last:  # 伸びてない
+                if curr == last:
                     await page.wait_for_timeout(500)
                 last = curr
             except Exception:
                 pass
         return False
 
-    # ------------------------------------------------------------------
-    # 内部ユーティリティ
-    # ------------------------------------------------------------------
     def _site_config(self, ctx) -> dict:
         if isinstance(ctx, dict):
             return (ctx.get("site_config") or ctx.get("site") or {}) or {}
@@ -193,7 +204,6 @@ class MonclerPLPStrategy(StrategyPlugin):
         try:
             await page.add_init_script(init_script, payload)
         except Exception:
-            # add_init_script は一部環境で失敗する場合があるため警告のみ
             logger.debug("[MonclerPLPStrategy] add_init_script failed", exc_info=True)
         try:
             await page.evaluate(init_script, payload)

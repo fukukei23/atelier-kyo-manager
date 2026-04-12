@@ -8,6 +8,8 @@
 from .ai_llm_controller import AILlmController
 import logging
 
+logger = logging.getLogger(__name__)
+
 class DescriptionGenerator:
     """商品説明文の生成を専門に行うエージェントクラス。"""
     def __init__(self):
@@ -49,17 +51,17 @@ class DescriptionGenerator:
         """複数の商品情報を一括で処理する。"""
         descriptions = []
         for i, info in enumerate(products_info, 1):
-            print(f"Processing item {i}/{len(products_info)}: {info.get('name', 'N/A')}")
+            logger.info(f"Processing item {i}/{len(products_info)}: {info.get('name', 'N/A')}")
             desc = self.generate(info, model_name)
             descriptions.append(desc)
         return descriptions
 
 # --- このファイルが直接実行された場合のテスト用コード ---
 if __name__ == '__main__':
+    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s")
     # このテストを実行するには、Flaskアプリケーションのコンテキストが必要です。
     # 実際の使用時は、Flaskのルート（routes.pyなど）から呼び出してください。
-    print("これは商品説明文生成モジュールです。")
-    print("Flaskアプリケーションのルートから呼び出して使用してください。")
+    logger.info("これは商品説明文生成モジュールです。Flaskアプリケーションのルートから呼び出して使用してください。")
 
     # --- 使用方法のサンプル ---
     # from app.utils.ai_generate_descriptions import DescriptionGenerator

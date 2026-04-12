@@ -381,26 +381,27 @@ class ShippingAgent:
 
 # --- 単体実行テスト ---
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s")
+    logger = logging.getLogger(__name__)
+
     try:
         from dotenv import load_dotenv
         load_dotenv()
-        print(".envファイルを読み込みました。")
+        logger.info(".envファイルを読み込みました。")
     except ImportError:
-        print("python-dotenvが未インストールのため、.envファイルは読み込まれません。")
-
-    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s:%(name)s:%(message)s")
+        logger.warning("python-dotenvが未インストールのため、.envファイルは読み込まれません。")
 
     # headless=None にすると環境変数(PLAYWRIGHT_HEADFUL)で制御
     agent = ShippingAgent(headless=None)
 
-    print("\n--- アメリカ(US)の倉庫情報を取得 ---")
+    logger.info("--- アメリカ(US)の倉庫情報を取得 ---")
     us_result = agent.get_warehouses_by_country("US")
-    print(us_result)
+    logger.info(f"Result: {us_result}")
 
-    print("\n--- 香港(HK)の倉庫情報を取得 ---")
+    logger.info("--- 香港(HK)の倉庫情報を取得 ---")
     hk_result = agent.get_warehouses_by_country("HK")
-    print(hk_result)
+    logger.info(f"Result: {hk_result}")
 
-    print("\n--- イギリス(UK)の倉庫情報を取得 ---")
+    logger.info("--- イギリス(UK)の倉庫情報を取得 ---")
     uk_result = agent.get_warehouses_by_country("UK")
-    print(uk_result)
+    logger.info(f"Result: {uk_result}")

@@ -355,22 +355,30 @@ def api_history_export():
     """Export history data as CSV or JSON."""
     brand = request.args.get("brand", "").strip() or "GUCCI"
     days = int(request.args.get("days", DAYS_DEFAULT))
+    purchase_price = float(request.args.get("purchase_price")) if request.args.get("purchase_price") else None
     format_type = request.args.get("format", "json").lower()
 
     data_source = DataSource(use_db=FLASK_AVAILABLE)
     rows = data_source.fetch_history(brand, days)
 
     if format_type == "csv":
-        output = "captured_at,brand,name,url,price,list_price,discount_pct\n"
+        output = "captured_at,brand,name,url,price,list_price,discount_pct,purchase_price,current_profit,current_profit_rate,trend_direction,volatility,recommendation\n"
+        bucket: Dict[str, List[HistoryRow]] = {}
         for r in rows:
-            output += f"{r.captured_at.isoformat()},{r.brand},{r.name},{r.url},{r.price},{r.list_price},{r.discount_pct}\n"
+            if r.url:
+                bucket.setdefault(r.url, []).append(r)
+        for url, items in bucket.items():
+            items_sorted = sorted(items, key=lambda x: x.captured_at)
+            metrics = calculate_profitability_metrics(items_sorted, purchase_price)
+            latest = items_sorted[-1] if items_sorted else None
+            output += f"{latest.captured_at.isoformat() if latest else ''},{brand},{latest.name if latest else ''},{url},{latest.price if latest else ''},{latest.list_price if latest else ''},{latest.discount_pct if latest else ''},{purchase_price or ''},{metrics.current_profit or ''},{metrics.current_profit_rate or ''},{metrics.trend_direction},{metrics.price_volatility or ''},{metrics.recommendation}\n"
         return Response(
             output,
             mimetype="text/csv",
             headers={"Content-Disposition": f"attachment; filename=history_{brand}_{days}days.csv"}
         )
     else:
-        payload = build_series_for_web(rows)
+        payload = build_series_for_web(rows, purchase_price)
         return jsonify(payload)
 
 

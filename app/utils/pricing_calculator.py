@@ -1,6 +1,13 @@
 # pricing_calculator.py (修正版)
+import logging
 import math
 import requests
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_EXCHANGE_RATE = 150.0
+BUYMA_COMMISSION_RATE = 0.073
+BUYMA_SYSTEM_FEE = 200
 
 def get_exchange_rate(from_currency: str, to_currency: str) -> float:
     """
@@ -13,17 +20,17 @@ def get_exchange_rate(from_currency: str, to_currency: str) -> float:
         data = response.json()
         rate = data['rates'].get(to_currency)
         if rate:
-            print(f"DEBUG: Fetched exchange rate {from_currency} to {to_currency}: {rate}")
+            logger.info(f"[FX] {from_currency} -> {to_currency}: {rate}")
             return rate
         else:
-            print(f"WARNING: Could not find exchange rate for {to_currency}. Using default.")
-            return 150.0
+            logger.warning(f"[FX] Rate not found for {to_currency}, using default {DEFAULT_EXCHANGE_RATE}")
+            return DEFAULT_EXCHANGE_RATE
     except requests.exceptions.RequestException as e:
-        print(f"ERROR: Failed to fetch exchange rate from API: {e}. Using default.")
-        return 150.0
+        logger.warning(f"[FX] API request failed: {e}, using default {DEFAULT_EXCHANGE_RATE}")
+        return DEFAULT_EXCHANGE_RATE
     except Exception as e:
-        print(f"ERROR: An unexpected error occurred: {e}. Using default.")
-        return 150.0
+        logger.warning(f"[FX] Unexpected error: {e}, using default {DEFAULT_EXCHANGE_RATE}")
+        return DEFAULT_EXCHANGE_RATE
 
 
 def calculate_profit(
@@ -31,8 +38,8 @@ def calculate_profit(
     source_price: float,
     shipping_cost: float,
     customs_duty_rate: float = 0.1,
-    buyma_commission_rate: float = 0.073,
-    buyma_system_fee: float = 200,
+    buyma_commission_rate: float = BUYMA_COMMISSION_RATE,
+    buyma_system_fee: float = BUYMA_SYSTEM_FEE,
     source_currency: str = "USD"
 ) -> dict:
     """
@@ -57,6 +64,8 @@ def calculate_profit(
 
 # テスト用の使用例 (このファイルが直接実行された場合のみ)
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s")
+
     # 例: BUYMA価格 26800円, SSENSE価格 120 USD, 送料 20 USD
     result = calculate_profit(
         buyma_price=26800,
@@ -64,8 +73,8 @@ if __name__ == "__main__":
         shipping_cost=20,
         source_currency="USD"
     )
-    print(f"推定利益: {result['profit_estimate']} 円")
-    print(f"利益率: {result['profit_rate']}%") # ★★★ ここを修正しました ★★★
+    logger.info(f"推定利益: {result['profit_estimate']} 円")
+    logger.info(f"利益率: {result['profit_rate']}%")
 
     # 例2: 利益が出ないケース
     result_low = calculate_profit(
@@ -74,5 +83,5 @@ if __name__ == "__main__":
         shipping_cost=20,
         source_currency="USD"
     )
-    print(f"推定利益 (低): {result_low['profit_estimate']} 円")
-    print(f"利益率 (低): {result_low['profit_rate']}%") # ★★★ ここを修正しました ★★★
+    logger.info(f"推定利益 (低): {result_low['profit_estimate']} 円")
+    logger.info(f"利益率 (低): {result_low['profit_rate']}%")

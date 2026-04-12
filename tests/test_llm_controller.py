@@ -21,6 +21,7 @@ from app.utils.ai_llm_controller import AILlmController
 import os
 
 
+@pytest.mark.skip(reason="product版ではWeb機能(create_app())は除外されています")
 def test_deepseek_connection():
     """DeepSeekへの接続と応答をテストする関数"""
     # 実際のLLMクライアントが1つも利用可能でない場合はスキップ

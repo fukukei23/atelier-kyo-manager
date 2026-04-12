@@ -1,7 +1,7 @@
 {
   "version": "1.0.0",
   "description": "Failure Knowledge Base - 失敗パターンと対策的记忆",
-  "last_updated": "2026-03-21",
+  "last_updated": "2026-03-23",
   "entries": [
     {
       "id": "moncler_plp_001",
@@ -221,6 +221,190 @@
         "navigate_to_base_plp"
       ],
       "verified_date": "2026-03-22"
+    },
+    {
+      "id": "ssense_bot_detection_001",
+      "site": "SSENSE",
+      "error_signature": "PLP materialized but product count is 1 or very low",
+      "conditions": {
+        "tile_count_le": 2,
+        "page_load_complete": true,
+        "url_valid_plp": true
+      },
+      "root_cause": "Cloudflare或者其他Bot检测机制正在阻止完整的PLP内容加载。即使页面显示正常，实际商品数量也极少（1-2件）。",
+      "solution_pattern": [
+        "enable_stealth_mode",
+        "try_residential_proxy",
+        "fallback_to_csv_import"
+      ],
+      "recovery_url": null,
+      "alternate_selectors": [],
+      "note": "SSENSE Bot回避は完全回避が困難。プロキシ導入または手動CSVインポートを推奨。",
+      "verified_date": "2026-03-23"
+    },
+    {
+      "id": "ssense_stealth_001",
+      "site": "SSENSE",
+      "error_signature": "Cloudflare challenge page detected",
+      "conditions": {
+        "dom_contains": ["cloudflare", "challenge", "Checking your browser"],
+        "tile_count": 0
+      },
+      "root_cause": "CloudflareのBot検出チャレンジ页面が表示されている",
+      "solution_pattern": [
+        "retry_with_stealth",
+        "wait_and_retry",
+        "use_residential_proxy"
+      ],
+      "auto_apply_rules": {
+        "max_retries": 2,
+        "retry_delay_ms": 5000,
+        "stealth_required": true
+      },
+      "verified_date": "2026-03-23"
+    },
+    {
+      "id": "gucci_plp_002",
+      "site": "GUCCI",
+      "error_signature": "Locale trap detected - wrong locale redirect",
+      "conditions": {
+        "url_pattern": "/[a-z]{2}/[a-z]{2}/"
+      },
+      "root_cause": "GUCCIが 잘못된 ロケール (/it/it/, /fr/fr/ 等) へリダイレクトしている",
+      "solution_pattern": [
+        "force_locale_to_en_us",
+        "strip_locale_from_url",
+        "navigate_to_hard_plp_url"
+      ],
+      "recovery_url": "https://www.gucci.com/us/en-ca/women/handbags",
+      "verified_date": "2026-03-23"
+    },
+    {
+      "id": "prada_plp_002",
+      "site": "PRADA",
+      "error_signature": "Load More button not working or timing out",
+      "conditions": {
+        "tile_count_stable": true,
+        "load_more_clicked": true,
+        "tile_count_after": 0
+      },
+      "root_cause": "PRADAのLoad Moreボタンが機能していないか、タイムアウトしている",
+      "solution_pattern": [
+        "try_alternate_load_more_selector",
+        "scroll_and_wait_incrementally",
+        "use_json_ld_fallback"
+      ],
+      "alternate_selectors": [
+        "button:has-text('Load More')",
+        "button:has-text('LOAD MORE')",
+        "[data-testid='load-more-button']",
+        ".load-more button"
+      ],
+      "verified_date": "2026-03-23"
+    },
+    {
+      "id": "generic_http403_001",
+      "site": "GENERIC",
+      "error_signature": "HTTP 403 Forbidden or net::ERR_HTTP2_PROTOCOL_ERROR",
+      "conditions": {
+        "error_message_contains": ["403", "ERR_HTTP2_PROTOCOL_ERROR", "Forbidden"]
+      },
+      "root_cause": "CloudflareまたはサーバーがBot検出でアクセスを拒否している",
+      "solution_pattern": [
+        "enable_stealth_mode",
+        "rotate_user_agent",
+        "use_residential_proxy",
+        "fallback_to_csv_import"
+      ],
+      "auto_apply_rules": {
+        "max_retries": 1,
+        "stealth_required": true,
+        "note": "HTTP 403はプロキシなしでは回避困難。手動CSVインポートを推奨。"
+      },
+      "verified_date": "2026-03-23"
+    },
+    {
+      "id": "generic_playwright_stealth_deprecated_001",
+      "site": "GENERIC",
+      "error_signature": "playwright-stealth not installed or ImportError",
+      "conditions": {
+        "error_message_contains": ["playwright-stealth", "ImportError", "No module named"]
+      },
+      "root_cause": "playwright-stealthは2025年に開発停止。新しいBot検出に対応していない",
+      "solution_pattern": [
+        "install_camoufox",
+        "use_nodriver",
+        "fallback_to_standard_playwright"
+      ],
+      "auto_apply_rules": {
+        "note": "Nodriver (undetected-chromedriverの後継) または Camoufox の導入を推奨"
+      },
+      "verified_date": "2026-03-23"
+    },
+    {
+      "id": "generic_connection_refused_001",
+      "site": "GENERIC",
+      "error_signature": "net::ERR_CONNECTION_REFUSED or ConnectionRefusedError",
+      "conditions": {
+        "error_message_contains": ["ERR_CONNECTION_REFUSED", "ConnectionRefusedError", "connect refused"]
+      },
+      "root_cause": "ターゲットサーバーが接続を拒否している（サーバー側問題またはポート不通）",
+      "solution_pattern": [
+        "retry_with_backoff",
+        "check_target_url_validity",
+        "skip_and_log"
+      ],
+      "auto_apply_rules": {
+        "max_retries": 3,
+        "retry_delay_ms": 5000,
+        "exponential_backoff": true
+      },
+      "verified_date": "2026-03-23"
+    },
+    {
+      "id": "generic_async_mock_001",
+      "site": "GENERIC",
+      "error_signature": "TypeError or AttributeError with Mock/AsyncMock",
+      "conditions": {
+        "error_message_contains": ["'_MockObject' object has no attribute", "coroutine", "TypeError"]
+      },
+      "root_cause": "Playwrightモック設定の誤り（AsyncMock vs MagicMockの混用、await忘れ等）",
+      "solution_pattern": [
+        "fix_mock_setup",
+        "ensure_async_methods_use_AsyncMock",
+        "check_await_usage"
+      ],
+      "verified_date": "2026-03-23"
+    },
+    {
+      "id": "generic_rembg_missing_001",
+      "site": "GENERIC",
+      "error_signature": "FileNotFoundError for target image or rembg not installed",
+      "conditions": {
+        "error_message_contains": ["FileNotFoundError", "No such file or directory", "TARGET"]
+      },
+      "root_cause": "rembgテストが特定のパス（例: D:\\catalog_images\\）存在する前提で書かれている",
+      "solution_pattern": [
+        "use_tmp_path_factory",
+        "skip_if_platform_windows",
+        "pytest.skip"
+      ],
+      "verified_date": "2026-03-23"
+    },
+    {
+      "id": "generic_trap_early_detection_001",
+      "site": "GENERIC",
+      "error_signature": "trap_url_detected",
+      "conditions": {
+        "error_message_contains": ["trap_url_detected", "trap_reason"]
+      },
+      "root_cause": "PlpDriverがトラップページ（/legal, /terms, /account等）を早期に検出",
+      "solution_pattern": [
+        "force_locale_to_correct",
+        "clear_cookies_and_retry",
+        "use_fallback_plp_url"
+      ],
+      "verified_date": "2026-03-23"
     }
   ],
   "auto_apply_rules": {

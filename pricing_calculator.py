@@ -96,7 +96,7 @@ if __name__ == "__main__":
         source_currency="USD"
     )
     print(f"推定利益: {result['profit_estimate']} 円")
-    print(f"利益率: {result['profit_rate']}%何度も
+    print(f"利益率: {result['profit_rate']}%")
 
     # 例2: 利益が出ないケース
     result_low = calculate_profit(
@@ -106,4 +106,4 @@ if __name__ == "__main__":
         source_currency="USD"
     )
     print(f"推定利益 (低): {result_low['profit_estimate']} 円")
-    print(f"利益率 (低): {result_low['profit_rate']}%何度も
+    print(f"利益率 (低): {result_low['profit_rate']}%")

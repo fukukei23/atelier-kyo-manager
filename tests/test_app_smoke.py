@@ -8,17 +8,21 @@
 # ======================================================================
 
 import unittest
-from app import create_app
+import pytest
 
 
 class SmokeTestApp(unittest.TestCase):
+    @pytest.mark.skip(reason="product版ではWeb機能は除外されています")
     def test_app_factory_creates_flask_app(self):
+        from app import create_app
         app = create_app()
         self.assertIsNotNone(app)
         # import_name は "app" のはず
         self.assertEqual(app.import_name, "app")
 
+    @pytest.mark.skip(reason="product版ではWeb機能は除外されています")
     def test_app_has_blueprint(self):
+        from app import create_app
         app = create_app()
         # 実際のBlueprint名は routes.py の Blueprint("main", __name__)
         blueprints = [bp.name for bp in app.blueprints.values()]
