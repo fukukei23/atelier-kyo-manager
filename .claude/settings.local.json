@@ -1,7 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git init:*)",
+      "Bash(git *)",
       "Bash(python:*)",
       "Bash(pip install:*)"
     ],
