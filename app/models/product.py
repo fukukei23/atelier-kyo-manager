@@ -58,6 +58,12 @@ class Product(db.Model):
     target_profit_rate = db.Column(Float, default=0.10)        # 目標利益率
     listing_status = db.Column(String(32), default="draft")    # draft/listed/sold/archived
 
+    # --- FR-005 実ベース利益計算フィールド ---
+    warehouse_shipping_cost = db.Column(Float, default=0.0)    # 転送倉庫送料（海外→転送倉庫）
+    original_currency = db.Column(String(8), default="JPY")    # 仕入れ通貨
+    exchange_rate = db.Column(Float, default=1.0)              # 適用為替レート
+    item_category = db.Column(String(64), nullable=True)       # 品目カテゴリ（関税率自動決定用）
+
     created_at = db.Column(DateTime, default=datetime.utcnow, nullable=True)
     updated_at = db.Column(
         DateTime,
@@ -99,25 +105,33 @@ class Product(db.Model):
         return 220.0
 
     def calculate_profit(self) -> float:
-        """利益計算（BUYMA仕様）"""
-        nz = lambda x: float(x or 0.0)
-        selling = nz(self.selling_price)
-        costs = (
-            nz(self.purchase_price)
-            + self.commission_fee()
-            + self.transfer_fee()
-            + nz(self.customs_duty)
-            + nz(self.shipping_cost)
-            + nz(self.procurement_fee)
-        )
-        return float(selling - costs)
+        """利益計算 — calculator.py に委譲（Thin Wrapper）"""
+        result = self._calculate_pricing()
+        return result.profit
 
     def profit_rate(self) -> float:
         """利益率%"""
-        selling = float(self.selling_price or 0)
-        if selling <= 0:
-            return 0.0
-        return self.calculate_profit() / selling * 100
+        result = self._calculate_pricing()
+        return result.profit_rate * 100
+
+    def _calculate_pricing(self):
+        """calculator.py を呼び出す内部メソッド"""
+        from app.core.pricing import calculate_pricing, PricingInput
+        nz = lambda x: float(x or 0.0)
+        inp = PricingInput(
+            purchase_price=nz(self.purchase_price),
+            selling_price=nz(self.selling_price),
+            transaction_fee=nz(self.transaction_fee),
+            shipping_cost=nz(self.shipping_cost),
+            customs_duty=nz(self.customs_duty),
+            procurement_fee=nz(self.procurement_fee),
+            warehouse_shipping_cost=nz(self.warehouse_shipping_cost),
+            original_currency=self.original_currency or "JPY",
+            exchange_rate=nz(self.exchange_rate) or 1.0,
+            item_category=self.item_category or "",
+            item_material=self.material or "",
+        )
+        return calculate_pricing(inp, source_type=self.source_type or "domestic")
 
     def recommended_selling_price(self) -> float | None:
         """目標利益率を満たす推奨売価"""
@@ -131,6 +145,28 @@ class Product(db.Model):
         # price * (1 - rate) = cost * (1 + target) + 220
         price = (cost * (1 + target) + 220) / (1 - rate)
         return round(price, 0)
+
+    # --- FR-007 出品候補リスト ---
+    @classmethod
+    def listing_candidates(cls, min_profit_rate: float = 10.0) -> list['Product']:
+        """出品候補リストを取得
+
+        フィルタ: 未出品 + 在庫あり + 利益率 >= min_profit_rate%
+        ソート: brand_tier(high→low) → profit_rate降順
+        """
+        candidates = db.session.scalars(
+            db.select(cls)
+            .filter(cls.listing_status != 'listed')
+            .filter(cls.stock_status == True)
+        ).all()
+
+        tier_order = {'high': 0, 'medium': 1, 'low': 2}
+        sorted_candidates = sorted(
+            candidates,
+            key=lambda p: (tier_order.get(p.brand_tier, 3), -p.profit_rate())
+        )
+
+        return [p for p in sorted_candidates if p.profit_rate() >= min_profit_rate]
 
     def __repr__(self) -> str:
         return f"<Product id={self.id} name={self.name!r}>"

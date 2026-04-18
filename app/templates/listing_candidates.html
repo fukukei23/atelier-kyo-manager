@@ -1,0 +1,168 @@
+<!--
+==============================================================================
+ファイル名 : app/templates/listing_candidates.html
+用途       : /listing-candidates（FR-007 出品候補リスト）
+日付       : 2026-04-19
+==============================================================================
+-->
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-3xl font-bold mb-6 text-gray-800">出品候補リスト</h1>
+
+<!-- フィルタ -->
+<div class="bg-white p-4 rounded-lg shadow-md mb-6">
+  <form method="GET" action="{{ url_for('main.listing_candidates') }}" class="flex items-end gap-4">
+    <div>
+      <label for="min_profit_rate" class="block text-sm font-medium text-gray-700">最低利益率(%)</label>
+      <input type="number" name="min_profit_rate" id="min_profit_rate"
+             value="{{ min_profit_rate }}" step="0.1" min="0" max="100"
+             class="mt-1 block w-32 border border-gray-300 rounded-md shadow-sm p-2">
+    </div>
+    <button type="submit" class="py-2 px-4 rounded-md text-white bg-blue-600 hover:bg-blue-700">
+      フィルタ適用
+    </button>
+    <a href="{{ url_for('main.export_listing_candidates', min_profit_rate=min_profit_rate) }}"
+       class="py-2 px-4 rounded-md text-white bg-purple-600 hover:bg-purple-700">
+      CSVダウンロード
+    </a>
+    <a href="{{ url_for('main.generate_buyma_csv') }}"
+       class="py-2 px-4 rounded-md text-white bg-green-600 hover:bg-green-700">
+      BUYMA CSV生成
+    </a>
+  </form>
+</div>
+
+<!-- 統計カード -->
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+  <div class="bg-white p-4 rounded-lg shadow-md text-center">
+    <p class="text-sm text-gray-500">候補数</p>
+    <p class="text-2xl font-bold text-gray-800">{{ candidates|length }}</p>
+  </div>
+  <div class="bg-white p-4 rounded-lg shadow-md text-center">
+    <p class="text-sm text-gray-500">平均利益率</p>
+    <p class="text-2xl font-bold text-green-600">
+      {% if candidates %}{{ "%.1f" | format(avg_profit_rate) }}%{% else %}-{% endif %}
+    </p>
+  </div>
+  <div class="bg-white p-4 rounded-lg shadow-md text-center">
+    <p class="text-sm text-gray-500">予想利益合計</p>
+    <p class="text-2xl font-bold text-blue-600">
+      ¥{{ total_profit | int }}
+    </p>
+  </div>
+</div>
+
+<!-- 候補リスト -->
+<div class="bg-white p-6 rounded-lg shadow-md">
+  {% if candidates %}
+  <!-- デスクトップ: テーブル -->
+  <div class="hidden md:block overflow-x-auto">
+    <table class="min-w-full divide-y divide-gray-200 border border-gray-300 rounded-lg">
+      <thead class="bg-gray-100">
+        <tr>
+          <th class="px-3 py-3 text-left text-xs font-bold text-gray-700">優先</th>
+          <th class="px-3 py-3 text-left text-xs font-bold text-gray-700">商品名</th>
+          <th class="px-3 py-3 text-left text-xs font-bold text-gray-700">ブランド</th>
+          <th class="px-3 py-3 text-center text-xs font-bold text-gray-700">階層</th>
+          <th class="px-3 py-3 text-right text-xs font-bold text-gray-700">仕入</th>
+          <th class="px-3 py-3 text-right text-xs font-bold text-gray-700">販売</th>
+          <th class="px-3 py-3 text-right text-xs font-bold text-gray-700">利益</th>
+          <th class="px-3 py-3 text-center text-xs font-bold text-gray-700">利益率</th>
+          <th class="px-3 py-3 text-center text-xs font-bold text-gray-700">ステータス</th>
+          <th class="px-3 py-3 text-center text-xs font-bold text-gray-700">操作</th>
+        </tr>
+      </thead>
+      <tbody class="bg-white divide-y divide-gray-200">
+        {% for product in candidates %}
+        {% set profit = product.calculate_profit() %}
+        {% set rate = product.profit_rate() %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-3 py-3 text-sm text-gray-500">{{ loop.index }}</td>
+          <td class="px-3 py-3 text-sm">
+            {% if product.supplier_url %}
+            <a href="{{ product.supplier_url }}" target="_blank" class="text-blue-600 hover:text-blue-800 underline">{{ product.name }}</a>
+            {% else %}
+            <span class="text-gray-900">{{ product.name }}</span>
+            {% endif %}
+          </td>
+          <td class="px-3 py-3 text-sm text-gray-700">{{ product.brand or '-' }}</td>
+          <td class="px-3 py-3 text-center">
+            {% set tier = product.brand_tier or 'low' %}
+            <span class="inline-block px-2 py-1 text-xs rounded-full {% if tier == 'high' %}bg-yellow-100 text-yellow-800{% elif tier == 'medium' %}bg-blue-100 text-blue-800{% else %}bg-gray-100 text-gray-600{% endif %}">
+              {% if tier == 'high' %}ハイ{% elif tier == 'medium' %}ミドル{% else %}ロー{% endif %}
+            </span>
+          </td>
+          <td class="px-3 py-3 text-sm text-right">¥{{ (product.purchase_price or 0) | int }}</td>
+          <td class="px-3 py-3 text-sm text-right">¥{{ (product.selling_price or 0) | int }}</td>
+          <td class="px-3 py-3 text-sm text-right">
+            <span class="{% if profit > 0 %}text-green-600 font-semibold{% else %}text-red-600{% endif %}">
+              ¥{{ profit | int }}
+            </span>
+          </td>
+          <td class="px-3 py-3 text-sm text-center">
+            <span class="{% if rate >= 20 %}text-green-600 font-semibold{% elif rate >= 10 %}text-green-600{% else %}text-yellow-600{% endif %}">
+              {{ "%.1f" | format(rate) }}%
+            </span>
+          </td>
+          <td class="px-3 py-3 text-center">
+            {% set st = product.listing_status or 'draft' %}
+            <span class="inline-block px-2 py-1 text-xs rounded-full bg-yellow-100 text-yellow-800">
+              {% if st == 'sold' %}売約{% elif st == 'archived' %}archived{% else %}下書き{% endif %}
+            </span>
+          </td>
+          <td class="px-3 py-3 text-center">
+            <a href="{{ url_for('main.edit_product', product_id=product.id) }}"
+               class="text-indigo-600 hover:text-indigo-800 text-sm">編集</a>
+            <a href="{{ url_for('main.generate_listing', product_id=product.id) }}"
+               class="text-green-600 hover:text-green-800 text-sm ml-2">出品文</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- モバイル: カード表示 -->
+  <div class="md:hidden space-y-4">
+    {% for product in candidates %}
+    {% set profit = product.calculate_profit() %}
+    {% set rate = product.profit_rate() %}
+    <div class="bg-gray-50 rounded-lg p-4 border border-gray-200">
+      <div class="flex justify-between items-start mb-2">
+        <div>
+          <span class="text-xs text-gray-400 mr-1">#{{ loop.index }}</span>
+          <span class="font-medium text-gray-900">{{ product.name }}</span>
+          <p class="text-xs text-gray-500">{{ product.brand or '-' }}</p>
+        </div>
+        {% set tier = product.brand_tier or 'low' %}
+        <span class="inline-block px-2 py-1 text-xs rounded-full {% if tier == 'high' %}bg-yellow-100 text-yellow-800{% elif tier == 'medium' %}bg-blue-100 text-blue-800{% else %}bg-gray-100 text-gray-600{% endif %}">
+          {% if tier == 'high' %}ハイ{% elif tier == 'medium' %}ミドル{% else %}ロー{% endif %}
+        </span>
+      </div>
+      <div class="grid grid-cols-3 gap-2 text-sm mb-3">
+        <div><span class="text-gray-500">仕入</span><br>¥{{ (product.purchase_price or 0) | int }}</div>
+        <div><span class="text-gray-500">販売</span><br>¥{{ (product.selling_price or 0) | int }}</div>
+        <div><span class="text-gray-500">利益率</span><br>
+          <span class="{% if rate >= 10 %}text-green-600 font-semibold{% else %}text-yellow-600{% endif %}">
+            {{ "%.1f" | format(rate) }}%
+          </span>
+        </div>
+      </div>
+      <div class="flex gap-2">
+        <a href="{{ url_for('main.edit_product', product_id=product.id) }}"
+           class="flex-1 text-center py-1.5 px-3 bg-indigo-100 text-indigo-700 rounded text-sm hover:bg-indigo-200">編集</a>
+        <a href="{{ url_for('main.generate_listing', product_id=product.id) }}"
+           class="flex-1 text-center py-1.5 px-3 bg-green-100 text-green-700 rounded text-sm hover:bg-green-200">出品文</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-center py-8">
+    <p class="text-gray-500 mb-2">出品候補が見つかりません。</p>
+    <p class="text-sm text-gray-400">条件: 在庫あり + 未出品 + 利益率 {{ min_profit_rate }}%以上</p>
+    <a href="{{ url_for('main.manage_products') }}" class="text-blue-600 hover:text-blue-800 text-sm mt-2 inline-block">商品を登録する</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
