@@ -71,6 +71,11 @@ def manage_products():
                 retail_price=form.retail_price.data or None,
                 target_profit_rate=(form.target_profit_rate.data or 10.0) / 100.0,
                 listing_status=form.listing_status.data or "draft",
+                # --- FR-005 実ベース利益計算 ---
+                warehouse_shipping_cost=form.warehouse_shipping_cost.data or 0.0,
+                original_currency=form.original_currency.data or "JPY",
+                exchange_rate=form.exchange_rate.data or 1.0,
+                item_category=form.item_category.data or None,
             )
             product.auto_classify_tier()
             db.session.add(product)
@@ -188,6 +193,11 @@ def import_csv():
                 retail_price=float(row.get("retail_price", 0) or 0) or None,
                 target_profit_rate=float(row.get("target_profit_rate", 10) or 10) / 100.0,
                 listing_status=row.get("listing_status") or "draft",
+                # --- FR-005 実ベース利益計算 ---
+                warehouse_shipping_cost=float(row.get("warehouse_shipping_cost", 0) or 0),
+                original_currency=row.get("original_currency", "JPY") or "JPY",
+                exchange_rate=float(row.get("exchange_rate", 1) or 1),
+                item_category=row.get("item_category") or None,
             )
             p.auto_classify_tier()
             db.session.add(p)
@@ -214,6 +224,8 @@ def export_csv():
         "source_type", "source_region", "color", "size", "material",
         "description", "retail_price", "target_profit_rate",
         "listing_status", "created_at", "updated_at",
+        # --- FR-005 実ベース利益計算 ---
+        "warehouse_shipping_cost", "original_currency", "exchange_rate", "item_category",
     ]
 
     buf = io.StringIO()
@@ -246,11 +258,73 @@ def export_csv():
             "listing_status": p.listing_status or "draft",
             "created_at": (p.created_at.isoformat(sep=" ", timespec="seconds") if p.created_at else ""),
             "updated_at": (p.updated_at.isoformat(sep=" ", timespec="seconds") if p.updated_at else ""),
+            # --- FR-005 実ベース利益計算 ---
+            "warehouse_shipping_cost": p.warehouse_shipping_cost or 0,
+            "original_currency": p.original_currency or "JPY",
+            "exchange_rate": p.exchange_rate or 1.0,
+            "item_category": p.item_category or "",
         })
 
     resp = make_response(buf.getvalue())
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
     resp.headers["Content-Disposition"] = "attachment; filename=products_export.csv"
+    return resp
+
+
+# ---- FR-007: 出品候補リスト ------------------------------------------------
+@bp.get("/listing-candidates")
+@login_required
+def listing_candidates():
+    """出品候補リスト（画面表示）"""
+    min_rate = request.args.get("min_profit_rate", 10.0, type=float)
+    candidates = Product.listing_candidates(min_profit_rate=min_rate)
+    avg_rate = sum(p.profit_rate() for p in candidates) / len(candidates) if candidates else 0
+    total_profit = sum(p.calculate_profit() for p in candidates)
+    return render_template(
+        "listing_candidates.html",
+        candidates=candidates,
+        min_profit_rate=min_rate,
+        avg_profit_rate=avg_rate,
+        total_profit=total_profit,
+    )
+
+
+@bp.get("/listing-candidates/export")
+@login_required
+def export_listing_candidates():
+    """出品候補リスト CSV エクスポート"""
+    min_rate = request.args.get("min_profit_rate", 10.0, type=float)
+    candidates = Product.listing_candidates(min_profit_rate=min_rate)
+
+    headers = [
+        "id", "name", "brand", "brand_tier", "purchase_price", "selling_price",
+        "profit", "profit_rate", "stock_status", "listing_status",
+        "target_profit_rate", "source_type", "item_category",
+    ]
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=headers)
+    writer.writeheader()
+
+    for p in candidates:
+        writer.writerow({
+            "id": p.id,
+            "name": p.name,
+            "brand": p.brand or "",
+            "brand_tier": p.brand_tier or "",
+            "purchase_price": p.purchase_price,
+            "selling_price": p.selling_price,
+            "profit": round(p.calculate_profit(), 0),
+            "profit_rate": round(p.profit_rate(), 1),
+            "stock_status": int(bool(p.stock_status)),
+            "listing_status": p.listing_status or "draft",
+            "target_profit_rate": round((p.target_profit_rate or 0) * 100, 1),
+            "source_type": p.source_type or "",
+            "item_category": p.item_category or "",
+        })
+
+    resp = make_response(buf.getvalue())
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Disposition"] = "attachment; filename=listing_candidates.csv"
     return resp
 
 
