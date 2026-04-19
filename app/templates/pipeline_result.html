@@ -1,0 +1,102 @@
+<!--
+==============================================================================
+ファイル名 : app/templates/pipeline_result.html
+用途       : /products/<id>/pipeline-result（FR-002/003 パイプライン結果表示）
+日付       : 2026-04-20
+==============================================================================
+-->
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-3xl font-bold mb-6 text-gray-800">
+  パイプライン結果: {{ product.name }}
+</h1>
+
+<!-- ステータスカード -->
+<div class="bg-white p-4 rounded-lg shadow-md mb-6">
+  <div class="flex items-center gap-4">
+    {% set ps = product.pipeline_status or 'pending' %}
+    <span class="inline-block px-3 py-1 text-sm rounded-full font-medium
+      {% if ps == 'success' %}bg-green-100 text-green-800
+      {% elif ps == 'partial' %}bg-yellow-100 text-yellow-800
+      {% elif ps == 'failed' %}bg-red-100 text-red-800
+      {% elif ps == 'running' %}bg-blue-100 text-blue-800
+      {% else %}bg-gray-100 text-gray-600{% endif %}">
+      {% if ps == 'success' %}完了{% elif ps == 'partial' %}部分成功{% elif ps == 'failed' %}失敗{% elif ps == 'running' %}実行中{% else %}未実行{% endif %}
+    </span>
+    {% if product.pipeline_run_at %}
+    <span class="text-sm text-gray-500">
+      実行日時: {{ product.pipeline_run_at.strftime('%Y-%m-%d %H:%M') }}
+    </span>
+    {% endif %}
+    {% if product.pipeline_error %}
+    <span class="text-sm text-red-600">エラー: {{ product.pipeline_error[:200] }}</span>
+    {% endif %}
+  </div>
+</div>
+
+<!-- 処理済み画像 -->
+<div class="bg-white p-6 rounded-lg shadow-md mb-6">
+  <h2 class="text-xl font-semibold mb-4 text-gray-700">処理済み画像 ({{ processed_images|length }}枚)</h2>
+  {% if processed_images %}
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+    {% for img_path in processed_images %}
+    <div class="border rounded-lg overflow-hidden bg-gray-50">
+      <img src="{{ url_for('static', filename='../../' + img_path) }}"
+           alt="処理済み画像"
+           class="w-full h-40 object-contain"
+           onerror="this.src=''; this.alt='画像が見つかりません'; this.classList.add('p-4','text-gray-400','text-sm')">
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="text-gray-400 text-sm">処理済み画像はありません。</p>
+
+  <!-- 手動アップロード -->
+  <div class="mt-4 p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+    <h3 class="text-sm font-medium text-gray-600 mb-2">画像を手動アップロード</h3>
+    <form method="POST" action="{{ url_for('main.upload_images', product_id=product.id) }}"
+          enctype="multipart/form-data"
+          class="flex items-end gap-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <input type="file" name="images" multiple accept="image/*"
+             class="block text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+      <button type="submit" class="py-2 px-4 rounded-md text-white bg-blue-600 hover:bg-blue-700 text-sm">
+        アップロード
+      </button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+
+<!-- 説明文 -->
+{% if product.description %}
+<div class="bg-white p-6 rounded-lg shadow-md mb-6">
+  <h2 class="text-xl font-semibold mb-4 text-gray-700">生成された説明文</h2>
+  <div class="bg-gray-50 p-4 rounded-lg whitespace-pre-wrap text-sm text-gray-800">{{ product.description }}</div>
+</div>
+{% endif %}
+
+<!-- 出品テキストプレビュー -->
+{% if listing_text %}
+<div class="bg-white p-6 rounded-lg shadow-md mb-6">
+  <h2 class="text-xl font-semibold mb-4 text-gray-700">出品テキストプレビュー</h2>
+  <div class="bg-gray-50 p-4 rounded-lg whitespace-pre-wrap text-sm text-gray-800">{{ listing_text }}</div>
+</div>
+{% endif %}
+
+<!-- 操作 -->
+<div class="flex gap-3">
+  <a href="{{ url_for('main.listing_candidates') }}"
+     class="py-2 px-4 rounded-md text-white bg-gray-600 hover:bg-gray-700 text-sm">
+    候補リストに戻る
+  </a>
+  <form method="POST" action="{{ url_for('main.run_pipeline', product_id=product.id) }}"
+        onsubmit="return confirm('パイプラインを再実行しますか？')">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit"
+            class="py-2 px-4 rounded-md text-white bg-orange-600 hover:bg-orange-700 text-sm">
+      パイプライン再実行
+    </button>
+  </form>
+</div>
+{% endblock %}

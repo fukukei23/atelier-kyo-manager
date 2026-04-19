@@ -110,11 +110,26 @@
               {% if st == 'sold' %}売約{% elif st == 'archived' %}archived{% else %}下書き{% endif %}
             </span>
           </td>
-          <td class="px-3 py-3 text-center">
+          <td class="px-3 py-3 text-center whitespace-nowrap">
             <a href="{{ url_for('main.edit_product', product_id=product.id) }}"
                class="text-indigo-600 hover:text-indigo-800 text-sm">編集</a>
             <a href="{{ url_for('main.generate_listing', product_id=product.id) }}"
                class="text-green-600 hover:text-green-800 text-sm ml-2">出品文</a>
+            {% set ps = product.pipeline_status or 'pending' %}
+            {% if ps == 'success' %}
+            <a href="{{ url_for('main.pipeline_result', product_id=product.id) }}"
+               class="text-teal-600 hover:text-teal-800 text-sm ml-2">結果</a>
+            {% else %}
+            <form method="POST" action="{{ url_for('main.run_pipeline', product_id=product.id) }}"
+                  class="inline ml-1"
+                  onsubmit="return confirm('パイプラインを実行しますか？（数秒〜数分かかります）')">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit"
+                      class="text-orange-600 hover:text-orange-800 text-sm underline bg-transparent border-none cursor-pointer p-0">
+                実行
+              </button>
+            </form>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
