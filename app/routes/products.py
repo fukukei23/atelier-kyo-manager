@@ -353,3 +353,73 @@ def generate_buyma_csv():
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
     resp.headers["Content-Disposition"] = "attachment; filename=buyma_listing.csv"
     return resp
+
+
+# ---- FR-002/003: パイプライン統合 ----------------------------------------
+@bp.post("/products/<int:product_id>/run-pipeline")
+@login_required
+def run_pipeline(product_id: int):
+    """画像収集→背景除去→説明文生成→出品文生成の統合パイプライン"""
+    product = Product.query.get_or_404(product_id)
+    from app.services.pipeline_service import PipelineService
+    svc = PipelineService()
+    site_key = request.form.get("site_key", "")
+    result = svc.run(product_id=product_id, site_key=site_key)
+
+    if result.status == "failed":
+        flash(f"パイプライン実行に失敗しました: {'; '.join(result.errors)}", "error")
+    elif result.status == "partial":
+        flash(f"パイプライン部分成功（{result.elapsed_sec}秒）。一部エラー: {'; '.join(result.errors)}", "warning")
+    else:
+        flash(f"パイプライン完了（{result.elapsed_sec}秒）。画像{len(result.processed_paths)}枚処理。", "success")
+
+    return redirect(url_for("main.pipeline_result", product_id=product_id))
+
+
+@bp.get("/products/<int:product_id>/pipeline-result")
+@login_required
+def pipeline_result(product_id: int):
+    """パイプライン実行結果の表示"""
+    product = Product.query.get_or_404(product_id)
+    import json as _json
+    processed = []
+    if product.processed_images:
+        try:
+            processed = _json.loads(product.processed_images)
+        except (ValueError, TypeError):
+            processed = []
+
+    from app.services.template_service import generate_listing_text
+    try:
+        listing_text = generate_listing_text(product)
+    except Exception:
+        listing_text = ""
+
+    return render_template(
+        "pipeline_result.html",
+        product=product,
+        processed_images=processed,
+        listing_text=listing_text,
+    )
+
+
+@bp.post("/products/<int:product_id>/upload-images")
+@login_required
+def upload_images(product_id: int):
+    """手動画像アップロード（スクレイピングブロック時フォールバック）"""
+    product = Product.query.get_or_404(product_id)
+    files = request.files.getlist("images")
+    if not files or all(f.filename == "" for f in files):
+        flash("画像ファイルが選択されていません。", "error")
+        return redirect(url_for("main.pipeline_result", product_id=product_id))
+
+    from app.services.pipeline_service import PipelineService
+    svc = PipelineService()
+    saved = svc.save_uploaded_images(product_id, files)
+
+    if saved:
+        flash(f"{len(saved)}枚の画像をアップロードしました。", "success")
+    else:
+        flash("有効な画像ファイルがありませんでした。", "error")
+
+    return redirect(url_for("main.pipeline_result", product_id=product_id))
