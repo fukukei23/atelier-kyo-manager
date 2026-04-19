@@ -7,7 +7,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Optional
 
-from sqlalchemy import Integer, String, Float, DateTime, Text
+from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean
 from app.extensions import db
 
 
@@ -72,6 +72,10 @@ class Order(db.Model):
     product_id = db.Column(Integer, db.ForeignKey("product.id"), nullable=True)
     partner_id = db.Column(Integer, db.ForeignKey("partner.id"), nullable=True, comment="担当パートナーID")
 
+    # 延長申請
+    extension_requested = db.Column(Boolean, default=False, comment="延長申請済み")
+    extension_reason = db.Column(Text, nullable=True, comment="延長理由")
+
     notes = db.Column(Text, nullable=True)
     created_at = db.Column(DateTime, default=datetime.utcnow)
     updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -94,16 +98,29 @@ class Order(db.Model):
         self.expected_payment_date = self.order_date + timedelta(days=pay_days)
 
     def calc_profit(self) -> None:
-        """利益・手数料を自動計算"""
-        rate = COMMISSION_RATES.get(self.source_type or "domestic", 0.077)
-        commission = float(self.selling_price or 0) * rate
-        customs = float(self.customs_duty or 0)
-        self.fees = commission + TRANSFER_FEE
-
-        selling = float(self.selling_price or 0)
-        cost = float(self.purchase_cost or 0)
-        self.profit = selling - cost - self.fees - customs
-        self.profit_rate = (self.profit / selling * 100) if selling > 0 else 0
+        """利益・手数料を自動計算（calculator.pyに委譲）"""
+        try:
+            from app.core.pricing import calculate_pricing, PricingInput
+            nz = lambda x: float(x or 0.0)
+            inp = PricingInput(
+                purchase_price=nz(self.purchase_cost),
+                selling_price=nz(self.selling_price),
+                customs_duty=nz(self.customs_duty),
+            )
+            result = calculate_pricing(inp, source_type=self.source_type or "domestic")
+            self.fees = result.total_cost - nz(self.purchase_cost) - nz(self.customs_duty)
+            self.profit = result.profit
+            self.profit_rate = result.profit_rate * 100
+        except ImportError:
+            # フォールバック: calculator.py が利用できない場合
+            rate = COMMISSION_RATES.get(self.source_type or "domestic", 0.077)
+            commission = float(self.selling_price or 0) * rate
+            customs = float(self.customs_duty or 0)
+            self.fees = commission + TRANSFER_FEE
+            selling = float(self.selling_price or 0)
+            cost = float(self.purchase_cost or 0)
+            self.profit = selling - cost - self.fees - customs
+            self.profit_rate = (self.profit / selling * 100) if selling > 0 else 0
 
     def remaining_days(self) -> int | None:
         """18日ルールの残日数"""
@@ -113,17 +130,34 @@ class Order(db.Model):
         return delta.days
 
     def deadline_color(self) -> str:
-        """残日数に応じた色"""
+        """残日数に応じた色（仕様準拠4段階）"""
         remaining = self.remaining_days()
         if remaining is None:
             return "gray"
-        if remaining <= 0:
-            return "red"
+        if remaining < 0:
+            return "black"       # 期限切れ（キャンセル対象）
+        if remaining == 0:
+            return "red"         # 当日（危険）
         if remaining <= 2:
-            return "yellow"
-        if remaining <= 6:
-            return "orange"
+            return "orange"      # 2日以内（警告）
+        if remaining <= 4:
+            return "yellow"      # 4日以内（注意）
         return "green"
+
+    def deadline_message(self) -> str:
+        """残日数に応じたメッセージ"""
+        remaining = self.remaining_days()
+        if remaining is None:
+            return ""
+        if remaining < 0:
+            return "期限切れです。至急対応してください。"
+        if remaining == 0:
+            return "本日が期限です。発送準備をお願いします。"
+        if remaining <= 2:
+            return "残りわずかです。発送手配を確認してください。"
+        if remaining <= 4:
+            return "期限が近づいています。発送準備を始めてください。"
+        return ""
 
     @staticmethod
     def get_extension_days(payment_method: str) -> int:

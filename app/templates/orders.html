@@ -8,9 +8,10 @@
 
 <!-- 統計カード -->
 {% set pending = orders | rejectattr('status', 'equalto', 'completed') | rejectattr('status', 'equalto', 'cancelled') | list %}
-{% set ns = namespace(urgent=0) %}
+{% set ns = namespace(urgent=0, warning=0) %}
 {% for o in orders %}
-{% if o.remaining_days() is not none and o.remaining_days() <= 0 %}{% set ns.urgent = ns.urgent + 1 %}{% endif %}
+{% if o.remaining_days() is not none and o.remaining_days() < 0 %}{% set ns.urgent = ns.urgent + 1 %}{% endif %}
+{% if o.remaining_days() is not none and o.remaining_days() >= 0 and o.remaining_days() <= 2 %}{% set ns.warning = ns.warning + 1 %}{% endif %}
 {% endfor %}
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
     <div class="bg-white rounded-lg shadow p-4">
@@ -18,8 +19,12 @@
         <div class="text-2xl font-bold">{{ pending | length }}</div>
     </div>
     <div class="bg-white rounded-lg shadow p-4">
-        <div class="text-sm text-gray-500">本日期限切れ</div>
+        <div class="text-sm text-gray-500">期限切れ</div>
         <div class="text-2xl font-bold text-red-600">{{ ns.urgent }}</div>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+        <div class="text-sm text-gray-500">警告（2日以内）</div>
+        <div class="text-2xl font-bold text-orange-600">{{ ns.warning }}</div>
     </div>
     <div class="bg-white rounded-lg shadow p-4">
         <div class="text-sm text-gray-500">合計利益</div>
@@ -46,7 +51,7 @@
         </thead>
         <tbody>
             {% for order in orders %}
-            <tr class="border-b hover:bg-gray-50 {% if order.remaining_days() is not none and order.remaining_days() <= 0 %}bg-red-50{% endif %}">
+            <tr class="border-b hover:bg-gray-50 {% if order.remaining_days() is not none and order.remaining_days() < 0 %}bg-gray-100{% elif order.remaining_days() is not none and order.remaining_days() == 0 %}bg-red-50{% elif order.remaining_days() is not none and order.remaining_days() <= 2 %}bg-orange-50{% elif order.remaining_days() is not none and order.remaining_days() <= 4 %}bg-yellow-50{% endif %}">
                 <td class="px-4 py-3 font-mono text-sm">{{ order.order_number }}</td>
                 <td class="px-4 py-3">{{ order.product_name }}</td>
                 <td class="px-4 py-3 text-sm">{{ order.order_date.strftime('%m/%d') if order.order_date else '-' }}</td>
@@ -56,14 +61,19 @@
                     {% set remaining = order.remaining_days() %}
                     {% if remaining is none %}
                         <span class="text-gray-400">-</span>
-                    {% elif remaining <= 0 %}
-                        <span class="px-2 py-0.5 rounded bg-red-100 text-red-800 text-xs font-bold">期限切れ</span>
+                    {% elif remaining < 0 %}
+                        <span class="px-2 py-0.5 rounded bg-black text-white text-xs font-bold">期限切れ（キャンセル）</span>
+                    {% elif remaining == 0 %}
+                        <span class="px-2 py-0.5 rounded bg-red-100 text-red-800 text-xs font-bold">本日期限！</span>
                     {% elif remaining <= 2 %}
-                        <span class="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs font-bold">残{{ remaining }}日</span>
-                    {% elif remaining <= 6 %}
-                        <span class="px-2 py-0.5 rounded bg-orange-100 text-orange-800 text-xs font-bold">残{{ remaining }}日</span>
+                        <span class="px-2 py-0.5 rounded bg-orange-100 text-orange-800 text-xs font-bold">残{{ remaining }}日（警告）</span>
+                    {% elif remaining <= 4 %}
+                        <span class="px-2 py-0.5 rounded bg-yellow-100 text-yellow-800 text-xs font-bold">残{{ remaining }}日（注意）</span>
                     {% else %}
                         <span class="px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-bold">残{{ remaining }}日</span>
+                    {% endif %}
+                    {% if order.deadline_message() %}
+                        <div class="text-xs text-gray-500 mt-1">{{ order.deadline_message() }}</div>
                     {% endif %}
                 </td>
                 <td class="px-4 py-3 text-xs">{{ order.payment_method or '-' }}</td>
@@ -82,11 +92,18 @@
                 </td>
                 <td class="px-4 py-3">
                     <a href="{{ url_for('main.edit_order', oid=order.id) }}" class="text-blue-600 hover:underline text-sm">編集</a>
-                    <form method="POST"
-<input type="hidden" name="csrf_token" value="{{ csrf_token() }}/
-    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">>
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"> action="{{ url_for('main.delete_order', oid=order.id) }}" class="inline"
+                    {% if order.status in ['pending', 'shipped'] and not order.extension_requested %}
+                    <form method="POST" action="{{ url_for('main.extend_order', oid=order.id) }}" class="inline"
+                          onsubmit="return confirm('延長申請を記録しますか？')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="text-purple-600 hover:underline text-sm ml-2">延長申請</button>
+                    </form>
+                    {% elif order.extension_requested %}
+                    <span class="text-xs text-purple-600 ml-2">延長済</span>
+                    {% endif %}
+                    <form method="POST" action="{{ url_for('main.delete_order', oid=order.id) }}" class="inline"
                           onsubmit="return confirm('本当に削除しますか？')">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button class="text-red-600 hover:underline text-sm ml-2">削除</button>
                     </form>
                 </td>
