@@ -3,15 +3,15 @@
 """
 from app.core.pricing.schemas import PricingInput
 from app.core.pricing.calculator import calculate_pricing
-from app.core.pricing.rules import PricingConfig
+from app.core.pricing.rules import PricingConfig, resolve_customs_rate
 
 
 def test_calculate_pricing_basic():
     """基本的な利益計算のテスト"""
     cfg = PricingConfig(
-        buyma_platform_fee_rate=0.077,     # 7.7% (プラットフォーム手数料)
-        buyma_effective_fee_rate=0.10,     # 10% (テスト用)
-        additional_fee_rate=0.02,          # 2%
+        domestic_commission_rate=0.10,
+        additional_fee_rate=0.02,
+        transfer_fee=0.0,
     )
     inp = PricingInput(
         purchase_price=20000,
@@ -24,10 +24,9 @@ def test_calculate_pricing_basic():
 
     res = calculate_pricing(inp, cfg)
 
-    # 手計算:
-    # buyma_fee = 30000 * 0.10 = 3000
+    # commission = 30000 * 0.10 = 3000
     # additional = 30000 * 0.02 = 600
-    # total_cost = 20000 + 2000 + 1000 + 500 + 0 + 3000 + 600 = 27100
+    # total_cost = 20000 + 2000 + 1000 + 500 + 0 + 3000 + 600 + 0 = 27100
     # profit = 30000 - 27100 = 2900
     assert res.revenue == 30000
     assert res.total_cost == 27100
@@ -38,9 +37,9 @@ def test_calculate_pricing_basic():
 def test_calculate_pricing_zero_selling_price():
     """販売価格がゼロの場合のテスト（利益率がゼロになるべき）"""
     cfg = PricingConfig(
-        buyma_platform_fee_rate=0.077,
-        buyma_effective_fee_rate=0.10,
+        domestic_commission_rate=0.10,
         additional_fee_rate=0.02,
+        transfer_fee=0.0,
     )
     inp = PricingInput(
         purchase_price=20000,
@@ -53,9 +52,9 @@ def test_calculate_pricing_zero_selling_price():
 
     res = calculate_pricing(inp, cfg)
 
-    # selling_price が 0 なので revenue は 0
-    # total_cost は 20000 + 2000 + 1000 + 500 = 23500
-    # profit は 0 - 23500 = -23500
+    # selling_price が 0 なので revenue は 0, commission も 0
+    # total_cost = 20000 + 2000 + 1000 + 500 + 0 + 0 + 0 + 0 = 23500
+    # profit = 0 - 23500 = -23500
     # profit_rate は 0 (ゼロ除算回避)
     assert res.revenue == 0
     assert res.total_cost == 23500
@@ -64,7 +63,7 @@ def test_calculate_pricing_zero_selling_price():
 
 
 def test_calculate_pricing_default_config():
-    """デフォルト設定（BUYMA手数料 14.2%）でのテスト"""
+    """デフォルト設定（国内成約手数料 7.7% + 振込手数料 220円）でのテスト"""
     inp = PricingInput(
         purchase_price=10000,
         selling_price=20000,
@@ -76,23 +75,24 @@ def test_calculate_pricing_default_config():
 
     res = calculate_pricing(inp)  # config は None → デフォルト使用
 
-    # buyma_fee = 20000 * 0.142 = 2840
-    # additional_fee = 20000 * 0.0 = 0
-    # total_cost = 10000 + 1500 + 800 + 300 + 100 + 2840 + 0 = 15540
-    # profit = 20000 - 15540 = 4460
-    # profit_rate = 4460 / 20000 = 0.223
+    # commission = 20000 * 0.077 = 1540
+    # additional = 0
+    # transfer_fee = 220
+    # total_cost = 10000 + 1500 + 800 + 300 + 100 + 1540 + 0 + 220 = 14460
+    # profit = 20000 - 14460 = 5540
+    # profit_rate = 5540 / 20000 = 0.277
     assert res.revenue == 20000
-    assert res.total_cost == 15540
-    assert res.profit == 4460
-    assert round(res.profit_rate, 3) == 0.223
+    assert res.total_cost == 14460
+    assert res.profit == 5540
+    assert round(res.profit_rate, 3) == 0.277
 
 
 def test_calculate_pricing_no_fees():
     """手数料がゼロの場合のテスト"""
     cfg = PricingConfig(
-        buyma_platform_fee_rate=0.0,
-        buyma_effective_fee_rate=0.0,
+        domestic_commission_rate=0.0,
         additional_fee_rate=0.0,
+        transfer_fee=0.0,
     )
     inp = PricingInput(
         purchase_price=5000,
@@ -105,21 +105,22 @@ def test_calculate_pricing_no_fees():
 
     res = calculate_pricing(inp, cfg)
 
-    # total_cost = 5000
-    # profit = 10000 - 5000 = 5000
-    # profit_rate = 5000 / 10000 = 0.5
+    # customs_duty=0 → 自動計算, でも category/material 空 → default 10%
+    # auto_customs_duty = (5000 + 0) * 0.10 = 500
+    # total_cost = 5000 + 0 + 500 + 0 + 0 + 0 + 0 + 0 = 5500
+    # profit = 10000 - 5500 = 4500
     assert res.revenue == 10000
-    assert res.total_cost == 5000
-    assert res.profit == 5000
-    assert res.profit_rate == 0.5
+    assert res.total_cost == 5500
+    assert res.profit == 4500
+    assert res.profit_rate == 0.45
 
 
 def test_calculate_pricing_negative_profit():
     """赤字（負の利益）のテスト"""
     cfg = PricingConfig(
-        buyma_platform_fee_rate=0.077,
-        buyma_effective_fee_rate=0.15,
+        domestic_commission_rate=0.15,
         additional_fee_rate=0.03,
+        transfer_fee=0.0,
     )
     inp = PricingInput(
         purchase_price=25000,
@@ -132,11 +133,10 @@ def test_calculate_pricing_negative_profit():
 
     res = calculate_pricing(inp, cfg)
 
-    # buyma_fee = 20000 * 0.15 = 3000
-    # additional_fee = 20000 * 0.03 = 600
-    # total_cost = 25000 + 3000 + 2000 + 1000 + 500 + 3000 + 600 = 35100
+    # commission = 20000 * 0.15 = 3000
+    # additional = 20000 * 0.03 = 600
+    # total_cost = 25000 + 3000 + 2000 + 1000 + 500 + 3000 + 600 + 0 = 35100
     # profit = 20000 - 35100 = -15100
-    # profit_rate = -15100 / 20000 = -0.755
     assert res.revenue == 20000
     assert res.total_cost == 35100
     assert res.profit == -15100
@@ -146,9 +146,9 @@ def test_calculate_pricing_negative_profit():
 def test_calculate_pricing_rounding():
     """小数点以下の丸め処理のテスト"""
     cfg = PricingConfig(
-        buyma_platform_fee_rate=0.077,
-        buyma_effective_fee_rate=0.142,
+        domestic_commission_rate=0.142,
         additional_fee_rate=0.0,
+        transfer_fee=0.0,
     )
     inp = PricingInput(
         purchase_price=10000.555,
@@ -161,16 +161,177 @@ def test_calculate_pricing_rounding():
 
     res = calculate_pricing(inp, cfg)
 
-    # すべての値が小数点以下2桁に丸められていることを確認
     assert isinstance(res.revenue, float)
     assert isinstance(res.total_cost, float)
     assert isinstance(res.profit, float)
     assert isinstance(res.profit_rate, float)
-    
-    # revenue は selling_price を丸めたもの
+
     assert res.revenue == 20000.78
-    
-    # 計算結果も丸められている
     assert len(str(res.total_cost).split('.')[-1]) <= 2
     assert len(str(res.profit).split('.')[-1]) <= 2
 
+
+# --- FR-005 新テスト ---
+
+def test_exchange_rate_conversion():
+    """為替変換テスト（USD→JPY）"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=100,          # 100 USD
+        selling_price=20000,         # 20000 JPY
+        customs_duty=0,              # 自動計算
+        exchange_rate=150.0,         # 1 USD = 150 JPY
+        original_currency="USD",
+        item_category="accessory",   # 10%
+    )
+
+    res = calculate_pricing(inp, cfg)
+
+    # purchase_price_jpy = 100 * 150 = 15000
+    # auto_customs_duty = (15000 + 0) * 0.10 = 1500
+    # total_cost = 15000 + 0 + 1500 + 0 + 0 + 0 + 0 + 0 = 16500
+    # profit = 20000 - 16500 = 3500
+    assert res.purchase_price_jpy == 15000.0
+    assert res.profit == 3500.0
+
+
+def test_warehouse_shipping_cost():
+    """転送倉庫送料合算テスト"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=10000,
+        selling_price=20000,
+        customs_duty=1000,
+        shipping_cost=1500,            # 国内送料
+        warehouse_shipping_cost=3000,  # 転送倉庫送料
+    )
+
+    res = calculate_pricing(inp, cfg)
+
+    # total_shipping_cost = 1500 + 3000 = 4500
+    # total_cost = 10000 + 4500 + 1000 + 0 + 0 + 0 + 0 + 0 = 15500
+    # profit = 20000 - 15500 = 4500
+    assert res.total_shipping_cost == 4500.0
+    assert res.profit == 4500.0
+
+
+def test_auto_customs_bag():
+    """関税自動計算テスト（bag=11%）"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=50000,
+        selling_price=80000,
+        customs_duty=0,              # 0 → 自動計算
+        item_category="bag",
+    )
+
+    res = calculate_pricing(inp, cfg)
+
+    # customs_rate = 0.11 (bag)
+    # auto_customs_duty = (50000 + 0) * 0.11 = 5500
+    # total_cost = 50000 + 0 + 5500 + 0 + 0 + 0 + 0 + 0 = 55500
+    # profit = 80000 - 55500 = 24500
+    assert res.customs_rate_used == 0.11
+    assert res.auto_customs_duty == 5500.0
+    assert res.profit == 24500.0
+
+
+def test_manual_customs_override():
+    """関税手動入力優先テスト"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=50000,
+        selling_price=80000,
+        customs_duty=3000,           # 手動入力 → 自動計算を上書き
+        item_category="bag",         # 自動なら11%だが手動が優先
+    )
+
+    res = calculate_pricing(inp, cfg)
+
+    # customs_duty = 3000 (手動優先)
+    # customs_rate_used = 0 (手動時は記録しない)
+    # total_cost = 50000 + 0 + 3000 + 0 + 0 + 0 + 0 + 0 = 53000
+    assert res.customs_rate_used == 0.0
+    assert res.auto_customs_duty == 0.0
+    assert res.total_cost == 53000.0
+    assert res.profit == 27000.0
+
+
+def test_overseas_source_type():
+    """海外仕入れ時の成約手数料テスト（5.5%）"""
+    cfg = PricingConfig(
+        overseas_commission_rate=0.055,
+        transfer_fee=220.0,
+    )
+    inp = PricingInput(
+        purchase_price=100,
+        selling_price=30000,
+        customs_duty=0,
+        exchange_rate=150.0,
+        original_currency="EUR",
+        item_category="bag",
+        item_material="leather",
+    )
+
+    res = calculate_pricing(inp, cfg, source_type="overseas")
+
+    # purchase_price_jpy = 100 * 150 = 15000
+    # auto_customs_duty = (15000 + 0) * 0.12 = 1800  (material=leather → 12%)
+    # commission = 30000 * 0.055 = 1650 (overseas rate)
+    # total_cost = 15000 + 0 + 1800 + 0 + 0 + 1650 + 0 + 220 = 18670
+    # profit = 30000 - 18670 = 11330
+    assert res.purchase_price_jpy == 15000.0
+    assert res.customs_rate_used == 0.12
+    assert res.profit == 11330.0
+
+
+def test_resolve_customs_rate():
+    """関税率解決のユニットテスト"""
+    assert resolve_customs_rate("bag", None) == 0.11
+    assert resolve_customs_rate("shoes", None) == 0.11
+    assert resolve_customs_rate("wallet", None) == 0.12
+    assert resolve_customs_rate("watch", None) == 0.10
+    assert resolve_customs_rate(None, "leather") == 0.12
+    assert resolve_customs_rate(None, "革") == 0.12
+    assert resolve_customs_rate(None, "レザー") == 0.12
+    assert resolve_customs_rate(None, None) == 0.10  # default
+    assert resolve_customs_rate("unknown", "cotton") == 0.10  # default
+
+
+def test_backward_compatible_jpy():
+    """後方互換: JPY の場合 exchange_rate を無視"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=10000,
+        selling_price=20000,
+        customs_duty=1000,
+        original_currency="JPY",
+        exchange_rate=150.0,         # JPY なので為替適用なし
+    )
+
+    res = calculate_pricing(inp, cfg)
+
+    # purchase_price_jpy = 10000 (JPY の場合は為替適用なし)
+    # total_cost = 10000 + 0 + 1000 + 0 + 0 + 0 + 0 + 0 = 11000
+    assert res.purchase_price_jpy == 10000.0
+    assert res.profit == 9000.0

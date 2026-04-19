@@ -47,10 +47,14 @@ except ImportError:
 # --- Pricing Config（手数料率の一元管理）をインポート ---
 try:
     from app.core.pricing.rules import load_pricing_config
+    from app.core.pricing.calculator import calculate_pricing
+    from app.core.pricing.schemas import PricingInput
     PRICING_CONFIG_AVAILABLE = True
 except ImportError:
     logging.warning("PricingConfig not found. Using hardcoded fee rates.")
     load_pricing_config = None
+    calculate_pricing = None
+    PricingInput = None
     PRICING_CONFIG_AVAILABLE = False
 
 try:
@@ -112,13 +116,17 @@ class ProfitabilityAgent:
             return 150.0
 
     def _resolve_customs_rate(self, category: Optional[str], material: Optional[str]) -> float:
-        """商品情報に基づき、関税率を決定する（将来拡張用）。"""
-        # 例: 革製品や特定のカテゴリは関税率を高めに設定
-        if material and any(m in material for m in ["レザー", "革"]):
-            return 0.12 # 革製品: 12%
-        if category and any(c in category for c in ["バッグ", "シューズ"]):
-            return 0.11 # バッグ・靴: 11%
-        return 0.10 # デフォルト: 10%
+        """商品情報に基づき、関税率を決定する。rules.py の一元化ロジックを使用。"""
+        try:
+            from app.core.pricing.rules import resolve_customs_rate
+            return resolve_customs_rate(category, material)
+        except ImportError:
+            # フォールバック: rules.py が利用できない場合
+            if material and any(m in material for m in ["レザー", "革", "leather"]):
+                return 0.12
+            if category and any(c in category for c in ["バッグ", "シューズ", "bag", "shoes"]):
+                return 0.11
+            return 0.10
 
     def _get_dynamic_shipping_cost(self, source_currency: str) -> float:
         """ShippingAgentと連携し、動的な送料を取得する。"""
@@ -134,37 +142,44 @@ class ProfitabilityAgent:
 
     def _calculate_core_profit(self, market: MarketData, supplier: SupplierData) -> Dict[str, Any]:
         """
-        中核となる利益計算ロジック。
-        
-        手数料率は app/core/pricing/rules.py の PricingConfig から取得します。
+        中核となる利益計算ロジック。calculator.py を再利用。
+
+        市場分析・シミュレーション用途のため、buyma_platform_fee_rate（7.7%）を使用。
+        実取引の計算（14.2%実効レート）は Product._calculate_pricing() 経由で行う。
         """
         exchange_rate = self._get_exchange_rate_jpy(supplier.currency)
         shipping_cost = self._get_dynamic_shipping_cost(supplier.currency)
-        customs_rate = self._resolve_customs_rate(supplier.category, supplier.material)
 
+        # calculator.py が利用可能な場合はそちらに委譲
+        if PRICING_CONFIG_AVAILABLE and calculate_pricing and PricingInput:
+            inp = PricingInput(
+                purchase_price=supplier.price,
+                selling_price=market.buyma_price,
+                shipping_cost=shipping_cost,
+                original_currency=supplier.currency.upper(),
+                exchange_rate=exchange_rate,
+                item_category=supplier.category or "",
+                item_material=supplier.material or "",
+            )
+            result = calculate_pricing(inp, source_type="overseas")
+
+            return {
+                "profit_estimate": int(round(result.profit)),
+                "profit_rate": round(result.profit_rate * 100, 2),
+                "total_cost_jpy": int(round(result.total_cost)),
+                "exchange_rate_used": exchange_rate,
+                "source_currency": supplier.currency.upper(),
+            }
+
+        # フォールバック: calculator.py が利用できない場合の従来ロジック
+        customs_rate = self._resolve_customs_rate(supplier.category, supplier.material)
         source_price_jpy = supplier.price * exchange_rate
         shipping_cost_jpy = shipping_cost * exchange_rate
-
         cost_before_customs = source_price_jpy + shipping_cost_jpy
         customs_duty = cost_before_customs * customs_rate
         total_cost_jpy = cost_before_customs + customs_duty
-
-        # ▼ 手数料率を PricingConfig から取得 ▼
-        if PRICING_CONFIG_AVAILABLE and load_pricing_config:
-            cfg = load_pricing_config()
-            # buyma_platform_fee_rate:
-            #   - 「プラットフォーム販売手数料」のみを表す簡易レート（デフォルト 7.7%）
-            #   - 市場分析・シミュレーション用の純粋なプラットフォーム手数料
-            #   - core/pricing 側で扱う buyma_effective_fee_rate (14.2%) とは役割が異なる
-            #     ※ 14.2%は販売手数料+決済手数料等を含む実運用での総負担率
-            platform_fee_rate = cfg.buyma_platform_fee_rate
-        else:
-            # フォールバック: PricingConfig が利用できない場合は 7.7% を使用
-            platform_fee_rate = 0.077
-        
+        platform_fee_rate = 0.077
         buyma_commission = market.buyma_price * platform_fee_rate
-        # ▲ 修正ここまで ▲
-
         net_revenue = market.buyma_price - buyma_commission
         profit_estimate = net_revenue - total_cost_jpy
         profit_rate = (profit_estimate / market.buyma_price) * 100 if market.buyma_price > 0 else 0
