@@ -1,49 +1,47 @@
 # requirements.txt
+# 最終更新: 2026-04-20
 
 # --- Flask Core ---
 Flask
-python-dotenv
-
-# --- Selenium & Web Scraping ---
-selenium
-selenium-stealth
-webdriver-manager
-beautifulsoup4
-icrawler
-requests
-
-# --- AI & Image Processing ---
-tensorflow
-rembg
-Pillow
-opencv-python
-numpy
-torch
-torchvision
-onnx
-onnxruntime
-
-# --- Data Handling & Google連携 ---
-pandas
-gspread
-google-auth-oauthlib
-google-api-python-client
-
-# --- Utilities ---
-pyoxipng
-
-# --- Generative AI Libs ---
-google-generativeai
-openai
 Flask-SQLAlchemy
 Flask-WTF
 flask_migrate
 Flask-Login
+python-dotenv
+
+# --- Browser & Scraping ---
 playwright
+selenium
+selenium-stealth
+webdriver-manager
+beautifulsoup4
+requests
+httpx
+
+# --- Image Processing ---
+Pillow
+opencv-python-headless
+numpy
+rembg
+icrawler
+pixelmatch
+
+# --- Observability ---
+opentelemetry-api
+diskcache
+
+# --- Data Handling ---
+pandas
 
 # --- Testing ---
 pytest
 pytest-asyncio
+pytest-cov
 
-# --- Dashboard ---
-streamlit
+# --- Phase 2 以降で必要（現在未使用） ---
+# google-generativeai
+# openai
+# gspread
+# google-auth-oauthlib
+# google-api-python-client
+# streamlit
