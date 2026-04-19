@@ -376,6 +376,29 @@ def run_pipeline(product_id: int):
     return redirect(url_for("main.pipeline_result", product_id=product_id))
 
 
+@bp.post("/run-pipeline-batch")
+@login_required
+def run_pipeline_batch():
+    """FR-008: 複数商品のパイプライン一括実行"""
+    product_ids = request.form.getlist("product_ids", type=int)
+    site_key = request.form.get("site_key", "")
+    if not product_ids:
+        flash("商品が選択されていません。", "error")
+        return redirect(url_for("main.listing_candidates"))
+
+    from app.services.pipeline_service import PipelineService
+    svc = PipelineService()
+    batch = svc.run_batch(product_ids=product_ids, site_key=site_key)
+
+    flash(
+        f"一括実行完了（{batch.elapsed_sec}秒）: "
+        f"成功{batch.success}件, 部分成功{batch.partial}件, "
+        f"失敗{batch.failed}件, スキップ{batch.skipped}件",
+        "success" if batch.failed == 0 else "warning",
+    )
+    return redirect(url_for("main.listing_candidates"))
+
+
 @bp.get("/products/<int:product_id>/pipeline-result")
 @login_required
 def pipeline_result(product_id: int):
