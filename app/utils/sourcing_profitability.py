@@ -90,6 +90,8 @@ def calculate_profitability(normalized_data: Optional[Dict[str, Any]]) -> Dict[s
             known_cost_sum += float(normalized_data["procurement_fee"])
         if normalized_data.get("transaction_fee") is not None:
             known_cost_sum += float(normalized_data["transaction_fee"])
+        if normalized_data.get("warehouse_shipping_cost") is not None:
+            known_cost_sum += float(normalized_data["warehouse_shipping_cost"])
         known_cost_sum += buyma_fee
         known_cost_sum += additional_fee
         
@@ -116,6 +118,11 @@ def calculate_profitability(normalized_data: Optional[Dict[str, Any]]) -> Dict[s
         customs_duty=normalized_data.get("customs_duty", 0.0),
         procurement_fee=normalized_data.get("procurement_fee", 0.0),
         transaction_fee=normalized_data.get("transaction_fee", 0.0),
+        warehouse_shipping_cost=normalized_data.get("warehouse_shipping_cost", 0.0),
+        original_currency=normalized_data.get("original_currency", "JPY"),
+        exchange_rate=normalized_data.get("exchange_rate", 1.0),
+        item_category=normalized_data.get("item_category", ""),
+        item_material=normalized_data.get("item_material", ""),
     )
     
     result = calculate_pricing(inp)
