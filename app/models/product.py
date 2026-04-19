@@ -64,6 +64,12 @@ class Product(db.Model):
     exchange_rate = db.Column(Float, default=1.0)              # 適用為替レート
     item_category = db.Column(String(64), nullable=True)       # 品目カテゴリ（関税率自動決定用）
 
+    # --- FR-002/003 パイプライン ---
+    pipeline_status = db.Column(String(16), default="pending")  # pending/running/success/partial/failed
+    pipeline_error = db.Column(Text, nullable=True)
+    processed_images = db.Column(Text, nullable=True)           # JSON: ["path1.png", ...]
+    pipeline_run_at = db.Column(DateTime, nullable=True)
+
     created_at = db.Column(DateTime, default=datetime.utcnow, nullable=True)
     updated_at = db.Column(
         DateTime,
