@@ -24,9 +24,9 @@ atelier-kyo-managerは、海外公式ブランドサイトから転送倉庫を�
 | FR-002 | 画像AI処理 | Must | 実装済み | ブランドカタログ画像収集、AI背景除去＆最適化、AI説明文生成 |
 | FR-003 | AI価格最適化 | Must | 実装済み | `price_optimization_system/`。市場動向を加味した最適価格算出 |
 | FR-004 | BUYMA価格調査 | Must | 部分実装 | `brightdata_scraper.py`。Bright DataでBUYMA側データ自動取得 |
-| FR-005 | **実ベース利益計算** | Must | **未実装** | 転送料金・関税・BUYMA手数料（7.7%）込みの正確な利益計算 |
-| FR-006 | **18日ルール管理** | Must | **未実装** | 発送期限のカウントダウン・警告・延長申請リマインダー |
-| FR-007 | CSV在庫連携 | Must | 実装済み | CSV経由の製品データインポート・在庫管理 |
+| FR-005 | **実ベース利益計算** | Must | ✅ 実装済み (Sprint 1) | `calculator.py`。仕入れ先別手数料・関税・BUYMA手数料込み。13テスト |
+| FR-006 | **18日ルール管理** | Must | ✅ 実装済み (Sprint 2) | 4段階アラート・延長申請リマインダー。17テスト |
+| FR-007 | 出品候補リスト生成 | Must | ✅ 実装済み (Sprint 3) | Product model + calculator活用で出品候補自動抽出・CSV出力 |
 
 ### Phase 2（運用効率化・CS削減）
 
