@@ -31,6 +31,17 @@ class ProductForm(FlaskForm):
     customs_duty = FloatField("関税・輸入消費税", validators=[Optional(), NumberRange(min=0)])
     procurement_fee = FloatField("買付代行料", validators=[Optional(), NumberRange(min=0)])
 
+    # --- FR-005 実ベース利益計算フィールド ---
+    warehouse_shipping_cost = FloatField("転送倉庫送料", validators=[Optional(), NumberRange(min=0)])
+    original_currency = SelectField(
+        "仕入れ通貨",
+        choices=[("JPY", "JPY"), ("USD", "USD"), ("EUR", "EUR"), ("GBP", "GBP"), ("CNY", "CNY"), ("KRW", "KRW")],
+        validators=[Optional()],
+        default="JPY",
+    )
+    exchange_rate = FloatField("為替レート", validators=[Optional(), NumberRange(min=0)])
+    item_category = StringField("品目カテゴリ", validators=[Optional()])
+
     # URL・在庫
     supplier_url = StringField("仕入先URL", validators=[Optional(), URL(require_tld=False, message="URLの形式で入力してください")])
     image_url = StringField("画像URL", validators=[Optional(), URL(require_tld=False, message="URLの形式で入力してください")])

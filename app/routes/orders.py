@@ -143,11 +143,34 @@ def api_order_dashboard():
             "extension_deadline": o.extension_deadline.isoformat() if o.extension_deadline else None,
             "remaining_days": remaining,
             "color": o.deadline_color(),
+            "message": o.deadline_message(),
+            "extension_requested": o.extension_requested or False,
             "profit": o.profit,
             "status": o.status,
             "payment_method": o.payment_method,
         })
     return jsonify(result)
+
+
+@bp.post("/orders/<int:oid>/extend")
+@login_required
+def extend_order(oid: int):
+    """延長申請"""
+    from app.models.order import Order
+    order = Order.query.get_or_404(oid)
+    if order.extension_requested:
+        flash("この注文は既に延長申請済みです。", "warning")
+        return redirect(url_for("main.order_list"))
+    reason = request.form.get("extension_reason", "")
+    order.extension_requested = True
+    order.extension_reason = reason
+    try:
+        db.session.commit()
+        flash("延長申請を記録しました。", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"延長申請の記録に失敗しました: {e}", "error")
+    return redirect(url_for("main.order_list"))
 
 
 # ---- F08: キャッシュフロー予測 -------------------------------------------
