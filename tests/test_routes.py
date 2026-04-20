@@ -171,3 +171,110 @@ class TestPriceScraper:
             from app.services.price_scraper import PriceScraper
             result = PriceScraper().fetch("http://example.com")
             assert result["in_stock"] is False
+
+
+# ---- PriceScraper Fallback (FR-004) ----
+class TestPriceScraperFallback:
+    def test_classify_error_blocked(self):
+        from app.services.price_scraper import PriceScraper
+        assert PriceScraper.classify_error("403") == "blocked"
+        assert PriceScraper.classify_error("429") == "blocked"
+        assert PriceScraper.classify_error("Cloudflare") == "blocked"
+
+    def test_classify_error_not_found(self):
+        from app.services.price_scraper import PriceScraper
+        assert PriceScraper.classify_error("404") == "not_found"
+
+    def test_classify_error_timeout(self):
+        from app.services.price_scraper import PriceScraper
+        assert PriceScraper.classify_error("タイムアウト") == "timeout"
+        assert PriceScraper.classify_error("Timeout") == "timeout"
+
+    def test_classify_error_connection(self):
+        from app.services.price_scraper import PriceScraper
+        assert PriceScraper.classify_error("接続失敗") == "connection"
+
+    def test_classify_error_server(self):
+        from app.services.price_scraper import PriceScraper
+        assert PriceScraper.classify_error("HTTP 500") == "server_error"
+
+    def test_classify_error_unknown(self):
+        from app.services.price_scraper import PriceScraper
+        assert PriceScraper.classify_error("何か不明なエラー") == "unknown"
+
+    def test_fetch_with_retry_success_first(self):
+        from app.services.price_scraper import PriceScraper
+        with patch("app.services.price_scraper.requests.Session.get") as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.text = '<html><title>OK</title><span>¥9,999</span></html>'
+            mock_resp.url = "http://example.com"
+            mock_resp.headers = {}
+            mock_get.return_value = mock_resp
+
+            scraper = PriceScraper()
+            result = scraper.fetch_with_retry("http://example.com")
+            assert result["success"] is True
+            assert result["retry_count"] == 0
+            assert result.get("error_category") is None
+            scraper.close()
+
+    @patch("time.sleep", return_value=None)
+    def test_fetch_with_retry_blocked_retries(self, mock_sleep):
+        from app.services.price_scraper import PriceScraper
+        import requests as _req
+        with patch("app.services.price_scraper.requests.Session.get") as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 403
+            mock_resp.raise_for_status.side_effect = _req.HTTPError(response=mock_resp)
+            mock_resp.text = "Forbidden"
+            mock_resp.url = "http://example.com"
+            mock_resp.headers = {}
+            mock_get.return_value = mock_resp
+
+            scraper = PriceScraper()
+            result = scraper.fetch_with_retry("http://example.com", max_retries=3)
+            assert result["success"] is False
+            assert result["retry_count"] == 2
+            assert result["error_category"] == "blocked"
+            assert mock_get.call_count == 3
+            assert mock_sleep.call_count == 2
+            scraper.close()
+
+    def test_fetch_with_retry_not_found_no_retry(self):
+        from app.services.price_scraper import PriceScraper
+        import requests as _req
+        with patch("app.services.price_scraper.requests.Session.get") as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 404
+            mock_resp.raise_for_status.side_effect = _req.HTTPError(response=mock_resp)
+            mock_resp.text = "Not Found"
+            mock_resp.url = "http://example.com"
+            mock_resp.headers = {}
+            mock_get.return_value = mock_resp
+
+            scraper = PriceScraper()
+            result = scraper.fetch_with_retry("http://example.com")
+            assert result["success"] is False
+            assert result["retry_count"] == 0
+            assert result["error_category"] == "not_found"
+            assert mock_get.call_count == 1
+            scraper.close()
+
+    def test_fetch_cached_returns_cache(self):
+        from app.services.price_scraper import PriceScraper
+        with patch("app.services.price_scraper.requests.Session.get") as mock_get:
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.text = '<html><title>C</title><span>¥1,000</span></html>'
+            mock_resp.url = "http://example.com/cached"
+            mock_resp.headers = {}
+            mock_get.return_value = mock_resp
+
+            scraper = PriceScraper()
+            r1 = scraper.fetch_cached("http://example.com/cached")
+            assert r1["success"] is True
+            r2 = scraper.fetch_cached("http://example.com/cached")
+            assert r2["success"] is True
+            assert mock_get.call_count == 1  # キャッシュヒットで2回目は呼ばれない
+            scraper.close()
