@@ -4,12 +4,15 @@
 # ======================================================================
 from __future__ import annotations
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+import csv
+from io import StringIO
+
+from flask import flash, jsonify, redirect, render_template, request, url_for, Response
 from flask_login import login_required
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from types import SimpleNamespace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.extensions import db, csrf
 from app.models import Product
@@ -313,9 +316,42 @@ def brand_analytics():
 @login_required
 def dashboard():
     """Analyticsダッシュボード: KPI + パイプライン + 在庫 + ブランド階層"""
+    # フィルター
+    query = Product.query
+    period = request.args.get("period", "")
+    if period == "7d":
+        query = query.filter(Product.created_at >= datetime.utcnow() - timedelta(days=7))
+    elif period == "30d":
+        query = query.filter(Product.created_at >= datetime.utcnow() - timedelta(days=30))
+    brand = request.args.get("brand", "")
+    if brand:
+        query = query.filter(Product.brand == brand)
+
+    # CSVエクスポート
+    if request.args.get("export") == "csv":
+        products = query.order_by(Product.created_at.desc()).all()
+        output = StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["商品名", "ブランド", "仕入価格", "販売価格", "利益率", "パイプライン状態", "在庫", "出品状態"])
+        for p in products:
+            margin = ""
+            if p.purchase_price and p.selling_price and p.purchase_price > 0:
+                margin = f"{((p.selling_price - p.purchase_price) / p.purchase_price * 100):.1f}%"
+            writer.writerow([
+                p.name, p.brand, p.purchase_price, p.selling_price,
+                margin, p.pipeline_status or "",
+                "あり" if p.stock_status else "なし", p.listing_status or "",
+            ])
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        return Response(
+            output.getvalue(),
+            mimetype="text/csv; charset=utf-8-sig",
+            headers={"Content-Disposition": f"attachment; filename=dashboard_{ts}.csv"},
+        )
+
     # KPI
-    total_products = Product.query.count()
-    products = Product.query.all()
+    total_products = query.count()
+    products = query.all()
     rates = [p.profit_rate() for p in products]
     profits = [p.calculate_profit() for p in products]
     kpi = {
@@ -361,6 +397,9 @@ def dashboard():
         tier_labels.append(label_map[tier])
         tier_rates.append(round(avg, 1))
 
+    # ブランド一覧（フィルター用）
+    brands = [r[0] for r in db.session.query(Product.brand).distinct().all() if r[0]]
+
     return render_template(
         "dashboard.html",
         kpi=kpi,
@@ -369,6 +408,9 @@ def dashboard():
         listing_summary=listing_summary,
         tier_labels=tier_labels,
         tier_rates=tier_rates,
+        period=period,
+        brand=brand,
+        brands=brands,
     )
 
 
