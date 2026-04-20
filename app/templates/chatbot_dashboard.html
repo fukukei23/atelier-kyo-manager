@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}顧客対応 ChatBot{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-3xl font-bold text-gray-800">顧客対応 ChatBot</h1>
+    <a href="{{ url_for('main.chatbot_create') }}"
+       class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+      新規問い合わせ作成
+    </a>
+  </div>
+
+  <!-- ステータスフィルター -->
+  <div class="mb-6 border-b border-gray-200">
+    <ul class="flex flex-wrap -mb-px text-sm font-medium text-center text-gray-500">
+      <li class="mr-2">
+        <a href="{{ url_for('main.chatbot_dashboard', status='all') }}"
+           class="inline-flex p-4 border-b-2 {% if status_filter == 'all' %}border-blue-600 text-blue-600{% else %}border-transparent hover:text-gray-600{% endif %} rounded-t-lg">全て</a>
+      </li>
+      <li class="mr-2">
+        <a href="{{ url_for('main.chatbot_dashboard', status='pending') }}"
+           class="inline-flex p-4 border-b-2 {% if status_filter == 'pending' %}border-yellow-500 text-yellow-600{% else %}border-transparent hover:text-gray-600{% endif %} rounded-t-lg">保留中</a>
+      </li>
+      <li class="mr-2">
+        <a href="{{ url_for('main.chatbot_dashboard', status='matched') }}"
+           class="inline-flex p-4 border-b-2 {% if status_filter == 'matched' %}border-blue-600 text-blue-600{% else %}border-transparent hover:text-gray-600{% endif %} rounded-t-lg">AI回答済</a>
+      </li>
+      <li class="mr-2">
+        <a href="{{ url_for('main.chatbot_dashboard', status='approved') }}"
+           class="inline-flex p-4 border-b-2 {% if status_filter == 'approved' %}border-green-600 text-green-600{% else %}border-transparent hover:text-gray-600{% endif %} rounded-t-lg">承認済</a>
+      </li>
+      <li class="mr-2">
+        <a href="{{ url_for('main.chatbot_dashboard', status='rejected') }}"
+           class="inline-flex p-4 border-b-2 {% if status_filter == 'rejected' %}border-red-600 text-red-600{% else %}border-transparent hover:text-gray-600{% endif %} rounded-t-lg">却下済</a>
+      </li>
+    </ul>
+  </div>
+
+  <!-- テーブル -->
+  <div class="bg-white shadow-md rounded-lg overflow-hidden">
+    <table class="min-w-full leading-normal">
+      <thead>
+        <tr>
+          <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase">ID</th>
+          <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase">顧客名</th>
+          <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase">件名</th>
+          <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase">ステータス</th>
+          <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase">作成日</th>
+          <th class="px-5 py-3 border-b-2 border-gray-200 bg-gray-100 text-left text-xs font-semibold text-gray-600 uppercase">アクション</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for inquiry in inquiries %}
+        <tr class="hover:bg-gray-50">
+          <td class="px-5 py-5 border-b border-gray-200 text-sm">{{ inquiry.id }}</td>
+          <td class="px-5 py-5 border-b border-gray-200 text-sm">{{ inquiry.customer_name or '-' }}</td>
+          <td class="px-5 py-5 border-b border-gray-200 text-sm">{{ inquiry.subject }}</td>
+          <td class="px-5 py-5 border-b border-gray-200 text-sm">
+            <span class="px-3 py-1 font-semibold text-sm rounded-full
+              {% if inquiry.status == 'pending' %}text-yellow-900 bg-yellow-200
+              {% elif inquiry.status == 'matched' %}text-blue-900 bg-blue-200
+              {% elif inquiry.status == 'approved' %}text-green-900 bg-green-200
+              {% elif inquiry.status == 'rejected' %}text-red-900 bg-red-200
+              {% endif %}">
+              {{ inquiry.status }}
+            </span>
+          </td>
+          <td class="px-5 py-5 border-b border-gray-200 text-sm">{{ inquiry.created_at.strftime('%Y-%m-%d %H:%M') if inquiry.created_at else '' }}</td>
+          <td class="px-5 py-5 border-b border-gray-200 text-sm">
+            <a href="{{ url_for('main.chatbot_detail', inquiry_id=inquiry.id) }}"
+               class="text-blue-600 hover:text-blue-900">詳細</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="px-5 py-5 border-b border-gray-200 text-sm text-center text-gray-500">
+            問い合わせはありません
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

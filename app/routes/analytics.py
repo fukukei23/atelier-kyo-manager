@@ -922,3 +922,86 @@ def report_auto_order_error(oid: int):
     db.session.commit()
     flash(f"注文 #{order.order_number} をエラー状態にしました。", "error")
     return redirect(url_for("main.auto_orders"))
+
+
+# ---- FR-010: 顧客対応AI ChatBot -------------------------------------------
+@bp.get("/chatbot")
+@login_required
+def chatbot_dashboard():
+    """ChatBot ダッシュボード: 問い合わせ一覧"""
+    from app.models.customer_inquiry import CustomerInquiry
+    status_filter = request.args.get("status", "all")
+    query = CustomerInquiry.query
+    if status_filter != "all":
+        query = query.filter_by(status=status_filter)
+    inquiries = query.order_by(CustomerInquiry.created_at.desc()).all()
+    return render_template(
+        "chatbot_dashboard.html",
+        inquiries=inquiries,
+        status_filter=status_filter,
+    )
+
+
+@bp.get("/chatbot/<int:inquiry_id>")
+@login_required
+def chatbot_detail(inquiry_id):
+    """問い合わせ詳細"""
+    from app.models.customer_inquiry import CustomerInquiry
+    inquiry = CustomerInquiry.query.get_or_404(inquiry_id)
+    return render_template("chatbot_detail.html", inquiry=inquiry)
+
+
+@bp.route("/chatbot/create", methods=["GET", "POST"])
+@login_required
+def chatbot_create():
+    """新規問い合わせ作成"""
+    from app.services.chatbot_service import ChatBotService
+    if request.method == "POST":
+        subject = request.form.get("subject", "").strip()
+        message = request.form.get("message", "").strip()
+        customer_name = request.form.get("customer_name", "").strip()
+        customer_email = request.form.get("customer_email", "").strip()
+        if not subject or not message:
+            flash("件名と本文は必須です。", "error")
+            return render_template("chatbot_create.html")
+        try:
+            inquiry = ChatBotService.process_inquiry(
+                subject=subject,
+                message=message,
+                customer_name=customer_name,
+                customer_email=customer_email,
+            )
+            flash("問い合わせを処理しました。", "success")
+            return redirect(url_for("main.chatbot_detail", inquiry_id=inquiry.id))
+        except Exception as e:
+            db.session.rollback()
+            flash(f"処理に失敗しました: {e}", "error")
+    return render_template("chatbot_create.html")
+
+
+@bp.post("/chatbot/<int:inquiry_id>/approve")
+@login_required
+def chatbot_approve(inquiry_id):
+    """回答を承認"""
+    from app.models.customer_inquiry import CustomerInquiry
+    inquiry = CustomerInquiry.query.get_or_404(inquiry_id)
+    if inquiry.can_approve():
+        inquiry.mark_approved()
+        db.session.commit()
+        flash("回答を承認しました。", "success")
+    else:
+        flash("この問い合わせは承認できません。", "error")
+    return redirect(url_for("main.chatbot_dashboard"))
+
+
+@bp.post("/chatbot/<int:inquiry_id>/reject")
+@login_required
+def chatbot_reject(inquiry_id):
+    """回答を却下"""
+    from app.models.customer_inquiry import CustomerInquiry
+    inquiry = CustomerInquiry.query.get_or_404(inquiry_id)
+    reason = request.form.get("reason", "")
+    inquiry.mark_rejected(reason=reason)
+    db.session.commit()
+    flash("回答を却下しました。", "success")
+    return redirect(url_for("main.chatbot_dashboard"))
