@@ -40,6 +40,23 @@ class NotificationService:
         except requests.exceptions.RequestException as e:
             return {"success": False, "error": str(e)}
 
+    def send_order_status(
+        self,
+        order_number: str,
+        from_status: str,
+        to_status: str,
+        product_name: str = "",
+        error: str = None,
+    ) -> dict:
+        """自動発注ステータス変更通知"""
+        if to_status == "error":
+            message = f":rotating_light: 注文 #{order_number} ({product_name}) エラー: {error}"
+        elif from_status == to_status:
+            message = f":information_source: 注文 #{order_number} ({product_name}) ステータス確認: {to_status}"
+        else:
+            message = f":package: 注文 #{order_number} ({product_name}): {from_status} → {to_status}"
+        return self.send(message)
+
     def send_pipeline_result(
         self,
         product_name: str,
