@@ -5,8 +5,9 @@ source_urlから価格・在庫情報を自動取得する
 
 import json
 import re
+import time
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import requests
 from bs4 import BeautifulSoup
@@ -43,6 +44,7 @@ class PriceScraper:
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
             "Accept-Language": "ja,en-US;q=0.7,en;q=0.3",
         })
+        self._cache: Dict[str, Dict[str, Any]] = {}
 
     def fetch(self, url: str) -> Dict[str, Any]:
         """URLから価格・在庫情報を取得"""
@@ -77,6 +79,74 @@ class PriceScraper:
         except Exception as e:
             result["error"] = str(e)
 
+        return result
+
+    # ---- FR-004: フォールバック機能 ---------------------------------------
+
+    @staticmethod
+    def classify_error(error_string: str) -> str:
+        """エラー文字列からカテゴリを分類"""
+        s = str(error_string)
+        if any(k in s for k in ("403", "429", "Cloudflare", "cloudflare")):
+            return "blocked"
+        if "404" in s:
+            return "not_found"
+        if "タイムアウト" in s or "Timeout" in s:
+            return "timeout"
+        if "接続失敗" in s or "ConnectionError" in s:
+            return "connection"
+        if "HTTP 5" in s:
+            return "server_error"
+        return "unknown"
+
+    def fetch_with_retry(self, url: str, max_retries: int = 3) -> Dict[str, Any]:
+        """リトライ付き取得（blocked/server_errorのみリトライ）"""
+        attempts: List[Dict[str, Any]] = []
+        retry_count = 0
+        result: Dict[str, Any] = {}
+
+        for attempt in range(max_retries):
+            result = self.fetch(url)
+
+            if result.get("success"):
+                result["attempts"] = attempts
+                result["retry_count"] = retry_count
+                result["error_category"] = None
+                return result
+
+            error = result.get("error", "")
+            error_category = self.classify_error(str(error))
+            attempts.append({
+                "attempt": attempt + 1,
+                "error": error,
+                "error_category": error_category,
+            })
+
+            # blocked/server_error以外はリトライしない
+            if error_category not in ("blocked", "server_error"):
+                result["attempts"] = attempts
+                result["retry_count"] = retry_count
+                result["error_category"] = error_category
+                return result
+
+            if attempt < max_retries - 1:
+                retry_count += 1
+                time.sleep(2 ** attempt)  # 指数バックオフ: 1s, 2s, 4s
+
+        result["attempts"] = attempts
+        result["retry_count"] = retry_count
+        result["error_category"] = self.classify_error(str(result.get("error", "")))
+        return result
+
+    def fetch_cached(self, url: str, cache_hours: int = 24) -> Dict[str, Any]:
+        """キャッシュ付き取得（同一URL 24h以内は再利用）"""
+        if url in self._cache:
+            cached = self._cache[url]
+            if time.time() - cached["timestamp"] < cache_hours * 3600:
+                return cached["result"]
+
+        result = self.fetch_with_retry(url)
+        self._cache[url] = {"result": result, "timestamp": time.time()}
         return result
 
     # ---- private -------------------------------------------------------

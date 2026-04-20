@@ -378,7 +378,7 @@ def api_fetch_stock(sid: int):
 
     scraper = PriceScraper()
     try:
-        result = scraper.fetch(sc.source_url)
+        result = scraper.fetch_with_retry(sc.source_url)
         if result["success"]:
             sc.previous_price = sc.current_price
             sc.previous_in_stock = sc.in_stock
@@ -503,7 +503,7 @@ def api_fetch_all_stocks():
     results = []
     try:
         for sc in stocks:
-            r = scraper.fetch(sc.source_url)
+            r = scraper.fetch_cached(sc.source_url)
             if r["success"]:
                 sc.previous_price = sc.current_price
                 sc.previous_in_stock = sc.in_stock
