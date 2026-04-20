@@ -34,6 +34,17 @@ class PipelineResult:
     elapsed_sec: float = 0.0
 
 
+@dataclass
+class BatchResult:
+    total: int = 0
+    success: int = 0
+    partial: int = 0
+    failed: int = 0
+    skipped: int = 0
+    results: list[PipelineResult] = field(default_factory=list)
+    elapsed_sec: float = 0.0
+
+
 class PipelineService:
     """商品出品パイプラインの統合オーケストレータ"""
 
@@ -109,6 +120,46 @@ class PipelineService:
 
         result.elapsed_sec = round(time.time() - t0, 2)
         return result
+
+    def run_batch(self, product_ids: list[int], site_key: str = "") -> BatchResult:
+        """複数商品のパイプラインを順次実行（同期・シーケンシャル）"""
+        batch = BatchResult(total=len(product_ids))
+        t0 = time.time()
+
+        for pid in product_ids:
+            product = db.session.get(Product, pid)
+            if product is None:
+                logger.warning("Product %d not found – skipping", pid)
+                batch.skipped += 1
+                batch.results.append(PipelineResult(
+                    product_id=pid, status="failed",
+                    errors=[f"Product {pid} not found"],
+                ))
+                continue
+
+            try:
+                result = self.run(product_id=pid, site_key=site_key)
+            except Exception as exc:
+                logger.exception("run() raised for product %d", pid)
+                result = PipelineResult(
+                    product_id=pid, status="failed", errors=[str(exc)],
+                )
+
+            batch.results.append(result)
+            if result.status == "success":
+                batch.success += 1
+            elif result.status == "partial":
+                batch.partial += 1
+            else:
+                batch.failed += 1
+
+        batch.elapsed_sec = round(time.time() - t0, 2)
+        logger.info(
+            "Batch: total=%d ok=%d partial=%d fail=%d skip=%d %.1fs",
+            batch.total, batch.success, batch.partial,
+            batch.failed, batch.skipped, batch.elapsed_sec,
+        )
+        return batch
 
     # ------------------------------------------------------------------
     # 各ステップ
