@@ -18,10 +18,12 @@ from .stock_check import StockCheck
 from .popularity_tracker import PopularityTracker
 from .region_recommendation import RegionRecommendation
 from .repeat_customer import RepeatCustomer
+from .faq_template import FaqTemplate
 
 __all__ = [
     "Product", "User", "GenerateResult", "DiscoveryResult",
     "ListingTemplate", "ProhibitedSource",
     "Order", "Partner", "ListingProgress",
     "StockCheck", "PopularityTracker", "RegionRecommendation", "RepeatCustomer",
+    "FaqTemplate",
 ]
