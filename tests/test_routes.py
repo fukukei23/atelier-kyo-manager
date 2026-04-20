@@ -278,3 +278,70 @@ class TestPriceScraperFallback:
             assert r2["success"] is True
             assert mock_get.call_count == 1  # キャッシュヒットで2回目は呼ばれない
             scraper.close()
+
+
+# ---- NotificationService (FR-009基盤) ----
+class TestNotificationService:
+    def test_send_no_webhook_url(self):
+        from app.services.notification_service import NotificationService
+        ns = NotificationService()
+        result = ns.send("test")
+        assert result["success"] is False
+        assert "未設定" in result["error"]
+
+    def test_send_success(self):
+        from app.services.notification_service import NotificationService
+        with patch("app.services.notification_service.requests.post") as mock_post:
+            mock_resp = MagicMock()
+            mock_resp.raise_for_status.return_value = None
+            mock_post.return_value = mock_resp
+
+            ns = NotificationService()
+            ns.webhook_url = "https://hooks.slack.com/test"
+            result = ns.send("Hello Slack")
+            assert result["success"] is True
+            mock_post.assert_called_once()
+
+    def test_send_connection_error(self):
+        from app.services.notification_service import NotificationService
+        import requests as _req
+        with patch("app.services.notification_service.requests.post") as mock_post:
+            mock_post.side_effect = _req.ConnectionError("fail")
+
+            ns = NotificationService()
+            ns.webhook_url = "https://hooks.slack.com/test"
+            result = ns.send("Hello")
+            assert result["success"] is False
+
+    def test_send_pipeline_result_success(self):
+        from app.services.notification_service import NotificationService
+        with patch("app.services.notification_service.requests.post") as mock_post:
+            mock_resp = MagicMock()
+            mock_resp.raise_for_status.return_value = None
+            mock_post.return_value = mock_resp
+
+            ns = NotificationService()
+            ns.webhook_url = "https://hooks.slack.com/test"
+            result = ns.send_pipeline_result("TestProduct", "success", 12.5)
+            assert result["success"] is True
+            assert "✅" in mock_post.call_args[1]["json"]["text"]
+            assert "TestProduct" in mock_post.call_args[1]["json"]["text"]
+
+    def test_send_pipeline_result_failed(self):
+        from app.services.notification_service import NotificationService
+        with patch("app.services.notification_service.requests.post") as mock_post:
+            mock_resp = MagicMock()
+            mock_resp.raise_for_status.return_value = None
+            mock_post.return_value = mock_resp
+
+            ns = NotificationService()
+            ns.webhook_url = "https://hooks.slack.com/test"
+            result = ns.send_pipeline_result("TestProduct", "failed", 5.0, errors="timeout")
+            assert result["success"] is True
+            assert "❌" in mock_post.call_args[1]["json"]["text"]
+
+    def test_init_app_reads_config(self, app):
+        from app.services.notification_service import NotificationService
+        ns = NotificationService()
+        ns.init_app(app)
+        assert ns.webhook_url == ""  # test config has no SLACK_WEBHOOK_URL
