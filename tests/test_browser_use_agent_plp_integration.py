@@ -167,21 +167,22 @@ def browser_use_agent(run_context):
     return agent
 
 
-@pytest.mark.skip(reason="PlpDriver is now called via BrowserOrchestrator, not BrowserUseAgent directly. Needs rewrite.")
 @pytest.mark.asyncio
 async def test_browser_use_agent_delegates_to_plp_driver(
-    browser_use_agent, mock_page, mock_context, site_config, run_context
+    mock_page, mock_context, site_config, run_context
 ):
     """
-    BrowserUseAgent が PlpDriver.navigate_to_pdp を正しく呼び出しているか確認
-    
-    コラボレーションの契約をテスト：
-    - BrowserUseAgent が PlpDriver.navigate_to_pdp を呼ぶ
-    - nav_outcome=None → NavigationDriver.collect_pdp_links → 空 → PlpDriver にフォールバック
+    BrowserOrchestrator.run_plp_to_pdp() が nav_outcome.pdp_links=[] のとき
+    PlpDriver.navigate_to_pdp を1回呼ぶことを確認。
+
+    旧テストは BrowserUseAgent → PlpDriver 直接呼び出しを想定していたが、
+    アーキテクチャ変更により BrowserOrchestrator → PlpDriver 経由になったため書き直し。
     """
-    from app.agents.browser_use_agent import BrowserUseAgent
+    from app.agents.browser_orchestrator import BrowserOrchestrator
     from app.agents.browser.plp_driver import PlpNavigationResult
-    
+    from app.agents.browser.navigation_driver import NavigationOutcome
+    import time
+
     expected_result = PlpNavigationResult(
         pdp_url="https://example.com/product/123",
         pdp_opened_in_new_tab=False,
@@ -195,81 +196,54 @@ async def test_browser_use_agent_delegates_to_plp_driver(
         navigation_method="same_tab",
         errors=[],
     )
-    
-    # PlpDriver をモック: navigate_to_pdp が expected_result を返す
-    # CR-ATELIER-003 Phase C-4 Step 2: Orchestrator 経由でもモックが効くように、
-    # browser_orchestrator.PlpDriver もモックする
-    with patch("app.agents.browser_orchestrator.PlpDriver") as mock_plp_driver_class, \
-         patch("app.agents.browser_orchestrator.PlpDriver") as mock_orchestrator_plp_driver_class:
-        mock_plp_driver_instance = MagicMock()
-        mock_plp_driver_instance.navigate_to_pdp = AsyncMock(return_value=expected_result)
-        mock_plp_driver_instance.page = mock_page
-        mock_plp_driver_class.return_value = mock_plp_driver_instance
-        # Orchestrator 用のモックも同じインスタンスを使用
-        mock_orchestrator_plp_driver_class.return_value = mock_plp_driver_instance
-        
-        # NavigationDriver 側は「pdp_links が空で PlpDriver 経由になる」最低限の動きだけ残す
-        with patch("app.agents.browser_use_agent.NavigationDriver") as mock_nav_driver_class, \
-             patch.object(browser_use_agent, "_looks_like_trap_or_legal", return_value=False), \
-             patch.object(browser_use_agent, "_click_continue_shopping_if_present", new_callable=AsyncMock):
-            from app.agents.browser.navigation_driver import NavigationOutcome
 
-            mock_nav_driver_instance = MagicMock()
-            # nav_outcome=None の場合、run_plp_flow が例外を投げて nav_outcome=None になる
-            mock_nav_driver_instance.run_plp_flow = AsyncMock(side_effect=Exception("NavigationDriver failed"))
-            # collect_pdp_links は2回呼ばれる（最初と header_search_fallback 後）
-            mock_nav_driver_instance.collect_pdp_links = AsyncMock(return_value=[])
-            mock_nav_driver_instance.header_search_fallback = AsyncMock(return_value=True)
-            mock_nav_driver_instance.ensure_plp_materialized = AsyncMock()
-            mock_nav_driver_instance.recover_plp = AsyncMock(return_value=True)
-            mock_nav_driver_class.return_value = mock_nav_driver_instance
-            
-            # page.locator().count() もモック（anchors < 6 になるように）
-            mock_locator = MagicMock()
-            mock_locator.count = AsyncMock(return_value=0)  # anchors < 6 になるように
-            mock_page.locator = MagicMock(return_value=mock_locator)
-            
-            import time
-            try:
-                await browser_use_agent._run_plp_flow(
-                    page=mock_page,
-                    context=mock_context,
-                    site="test_site",
-                    query="test query",
-                    site_config=site_config,
-                    settings={"timeout_sec": 60},
-                    run_context=run_context,
-                    target_url="https://example.com/category",
-                    start_t=time.time(),
-                    budget_ms=30000,
-                    nav_outcome=None,
-                )
-            except Exception:
-                # _run_pdp_flow が呼ばれる可能性があるが、それは問題ない
-                pass
-    
-    # PlpDriver.navigate_to_pdp が 1 回呼ばれていることだけを確認
-    mock_plp_driver_instance.navigate_to_pdp.assert_awaited_once()
+    # nav_outcome を直接渡して NavigationDriver.run_plp_flow() をバイパス
+    nav_outcome = NavigationOutcome(
+        entry_url="https://example.com/category",
+        pdp_links=[],
+    )
 
+    with patch("app.agents.browser_orchestrator.PlpDriver") as mock_plp_cls,          patch("app.agents.browser_orchestrator.NavigationDriver"),          patch("app.agents.browser_orchestrator.NavigationContext"):
+        mock_plp_instance = MagicMock()
+        mock_plp_instance.navigate_to_pdp = AsyncMock(return_value=expected_result)
+        mock_plp_cls.return_value = mock_plp_instance
 
-@pytest.mark.skip(reason="PlpDriver is now called via BrowserOrchestrator, not BrowserUseAgent directly. Needs rewrite.")
+        orchestrator = BrowserOrchestrator()
+        await orchestrator.run_plp_to_pdp(
+            page=mock_page,
+            context=mock_context,
+            site="test_site",
+            query="test query",
+            site_config=site_config,
+            settings={"timeout_sec": 60},
+            run_context=run_context,
+            target_url="https://example.com/category",
+            start_t=time.time(),
+            budget_ms=30000,
+            nav_outcome=nav_outcome,
+        )
+
+    # PlpDriver.navigate_to_pdp が 1 回だけ呼ばれたことを確認
+    mock_plp_instance.navigate_to_pdp.assert_awaited_once()
+
 @pytest.mark.asyncio
 async def test_browser_use_agent_uses_plp_driver_result(
-    browser_use_agent, mock_page, mock_context, site_config, run_context
+    mock_page, mock_context, site_config, run_context
 ):
     """
-    BrowserUseAgent が PlpDriver.navigate_to_pdp の戻り値（pdp_url）を正しく使用しているか確認
-    
-    コラボレーションの契約をテスト：
-    - PlpDriver.navigate_to_pdp が返す pdp_url を、BrowserUseAgent がそのまま結果として扱う
-    - plp_driver.page が _run_pdp_flow に渡されていること
+    BrowserOrchestrator.run_plp_to_pdp() が PlpDriver.navigate_to_pdp の戻り値を
+    そのまま返すことを確認。
+
+    旧テストは BrowserUseAgent._run_plp_flow() が pdp_url を使うことを想定していたが、
+    BrowserOrchestrator 経由に変わったため書き直し。
     """
+    from app.agents.browser_orchestrator import BrowserOrchestrator
     from app.agents.browser.plp_driver import PlpNavigationResult
-    from app.models.result_models import DiscoveryResult
-    
-    expected_pdp_url = "https://example.com/product/123"
+    from app.agents.browser.navigation_driver import NavigationOutcome
+    import time
+
     plp_result = PlpNavigationResult(
-        pdp_url=expected_pdp_url,
+        pdp_url="https://example.com/product/456",
         pdp_opened_in_new_tab=False,
         plp_url="https://example.com/category",
         tiles_seen=5,
@@ -281,53 +255,19 @@ async def test_browser_use_agent_uses_plp_driver_result(
         navigation_method="same_tab",
         errors=[],
     )
-    
-    with patch("app.agents.browser_orchestrator.PlpDriver") as mock_plp_driver_class, \
-         patch("app.agents.browser_orchestrator.PlpDriver") as mock_orchestrator_plp_driver_class, \
-         patch("app.agents.browser_use_agent.NavigationDriver") as mock_nav_driver_class, \
-         patch("app.agents.browser_use_agent.NavigationContext") as mock_nav_ctx_class, \
-         patch.object(browser_use_agent, "_run_pdp_flow", new_callable=AsyncMock) as mock_run_pdp_flow, \
-         patch.object(browser_use_agent, "_looks_like_trap_or_legal", return_value=False), \
-         patch.object(browser_use_agent, "_click_continue_shopping_if_present", new_callable=AsyncMock), \
-         patch.object(browser_use_agent, "_pause_for_operator", new_callable=AsyncMock):
-        mock_plp_driver_instance = MagicMock()
-        mock_plp_driver_instance.navigate_to_pdp = AsyncMock(return_value=plp_result)
-        mock_plp_driver_instance.page = mock_page
-        mock_plp_driver_class.return_value = mock_plp_driver_instance
-        # Orchestrator 用のモックも同じインスタンスを使用
-        mock_orchestrator_plp_driver_class.return_value = mock_plp_driver_instance
-        
-        # NavigationDriver は「pdp_links が空」になるようにだけ整える
-        from app.agents.browser.navigation_driver import NavigationOutcome
-        mock_nav_outcome = NavigationOutcome(
-            entry_url="https://example.com/category",
-            plp_materialized=False,
-            trap_detected=False,
-            pdp_links=[],
-        )
-        
-        mock_nav_driver_instance = MagicMock()
-        mock_nav_driver_instance.run_plp_flow = AsyncMock(return_value=mock_nav_outcome)
-        # collect_pdp_links は2回呼ばれる（最初と header_search_fallback 後）
-        mock_nav_driver_instance.collect_pdp_links = AsyncMock(return_value=[])
-        mock_nav_driver_instance.header_search_fallback = AsyncMock(return_value=True)
-        mock_nav_driver_instance.ensure_plp_materialized = AsyncMock()
-        mock_nav_driver_instance.recover_plp = AsyncMock(return_value=True)
-        mock_nav_driver_class.return_value = mock_nav_driver_instance
-        mock_nav_ctx_class.return_value = MagicMock()
-        
-        # page.locator().count() もモック（anchors < 6 になるように）
-        mock_locator = MagicMock()
-        mock_locator.count = AsyncMock(return_value=0)  # anchors < 6 になるように
-        mock_page.locator = MagicMock(return_value=mock_locator)
-        
-        # _run_pdp_flow の戻り値は適当な DiscoveryResult
-        mock_run_pdp_flow.return_value = DiscoveryResult(
-            ok=True, site="example", query="test", message="ok"
-        )
-        
-        import time
-        result = await browser_use_agent._run_plp_flow(
+
+    nav_outcome = NavigationOutcome(
+        entry_url="https://example.com/category",
+        pdp_links=[],
+    )
+
+    with patch("app.agents.browser_orchestrator.PlpDriver") as mock_plp_cls,          patch("app.agents.browser_orchestrator.NavigationDriver"),          patch("app.agents.browser_orchestrator.NavigationContext"):
+        mock_plp_instance = MagicMock()
+        mock_plp_instance.navigate_to_pdp = AsyncMock(return_value=plp_result)
+        mock_plp_cls.return_value = mock_plp_instance
+
+        orchestrator = BrowserOrchestrator()
+        result = await orchestrator.run_plp_to_pdp(
             page=mock_page,
             context=mock_context,
             site="example",
@@ -338,16 +278,11 @@ async def test_browser_use_agent_uses_plp_driver_result(
             target_url="https://example.com/category",
             start_t=time.time(),
             budget_ms=60000,
+            nav_outcome=nav_outcome,
         )
-    
-    # PlpDriver.navigate_to_pdp が呼ばれていること
-    mock_plp_driver_instance.navigate_to_pdp.assert_awaited_once()
-    
-    # _run_pdp_flow が plp_driver.page を受け取っている（= PlpDriver の結果がパイプラインに乗っている）こと
-    if mock_run_pdp_flow.called:
-        call_args = mock_run_pdp_flow.call_args
-        assert call_args.args[0] == mock_page
 
+    # PlpDriver.navigate_to_pdp の戻り値がそのまま返ることを確認
+    assert result is plp_result
 
 @pytest.mark.asyncio
 async def test_browser_use_agent_handles_trap_detection(
@@ -490,28 +425,23 @@ async def test_browser_use_agent_saves_overlays_handled(
         assert "geo" in result.overlays_handled
 
 
-@pytest.mark.skip(reason="PlpDriver is now called via BrowserOrchestrator, not BrowserUseAgent directly. Needs rewrite.")
 @pytest.mark.asyncio
 async def test_run_plp_flow_saves_plp_navigation_result(
-    browser_use_agent, mock_page, mock_context, site_config, run_context
+    mock_page, mock_context, site_config, run_context
 ):
     """
-    Stage 4: BrowserUseAgent._run_plp_flow() を実際に通す薄い統合テスト
-    
-    Given:
-    - BrowserUseAgent instance
-    - Mocked Page, BrowserContext, RunContext
-    - PlpDriver が特定の PlpNavigationResult を返す
-    
-    When:
-    - BrowserUseAgent._run_plp_flow() が実行される
-    
-    Then:
-    - PlpDriver.navigate_to_pdp() が新シグネチャ（target_url, timeout_ms）で呼ばれる
-    - RunContext.save_json("plp_navigation_result.json", ...) が呼ばれる
-    - 保存内容に新フィールドが含まれている
+    BrowserOrchestrator.run_plp_to_pdp() が PlpNavigationResult を返し、
+    navigate_to_pdp が正しいシグネチャ（target_url, timeout_ms, start_t, budget_ms）で
+    呼ばれることを確認。
+
+    旧テストは BrowserUseAgent._run_plp_flow() が RunContext.save_json を呼ぶことを
+    確認していたが、Orchestrator 経由に変わり save_json は不要になったため書き直し。
     """
-    # PlpNavigationResult をモック
+    from app.agents.browser_orchestrator import BrowserOrchestrator
+    from app.agents.browser.plp_driver import PlpNavigationResult
+    from app.agents.browser.navigation_driver import NavigationOutcome
+    import time
+
     nav_result = PlpNavigationResult(
         pdp_url="https://example.com/product/123",
         pdp_opened_in_new_tab=False,
@@ -525,75 +455,25 @@ async def test_run_plp_flow_saves_plp_navigation_result(
         navigation_method="same_tab",
         errors=[],
     )
-    
-    # RunContext.save_json を Spy 化
-    saved_data = {}
-    original_save_json = run_context.save_json
-    
-    def spy_save_json(name: str, data: Dict[str, Any]) -> None:
-        if name == "plp_navigation_result.json":
-            saved_data.clear()
-            saved_data.update(data)
-        else:
-            original_save_json(name, data)
-    
-    run_context.save_json = spy_save_json
-    
-    # NavigationDriver とその他の依存関係をモック
-    from app.agents.browser.navigation_driver import NavigationOutcome, NavigationContext
-    
-    mock_nav_outcome = NavigationOutcome(
-        entry_url="https://example.com/category",  # CR-ATELIER-003 Phase C 修正: entry_url を追加
-        plp_materialized=False,
-        trap_detected=False,
-        pdp_links=[],  # 空リストで PlpDriver が呼ばれるようにする
+
+    nav_outcome = NavigationOutcome(
+        entry_url="https://example.com/category",
+        pdp_links=[],
     )
-    
-    # settings を準備
+
     settings = {
         "timeout_sec": 60,
         "overall_plp_budget_ms": 120000,
     }
-    
-    # PlpDriver と NavigationDriver をモック
-    # CR-ATELIER-003 Phase C-4 Final: Orchestrator 経由でもモックが効くように、
-    # browser_orchestrator.PlpDriver と browser_orchestrator.NavigationDriver もモックする
-    with patch('app.agents.browser_orchestrator.PlpDriver') as mock_plp_driver_class, \
-         patch("app.agents.browser_orchestrator.PlpDriver") as mock_orchestrator_plp_driver_class, \
-         patch('app.agents.browser_use_agent.NavigationDriver') as mock_nav_driver_class, \
-         patch("app.agents.browser_orchestrator.NavigationDriver") as mock_orchestrator_nav_driver_class, \
-         patch('app.agents.browser_use_agent.NavigationContext') as mock_nav_ctx_class, \
-         patch.object(browser_use_agent, '_run_pdp_flow', new_callable=AsyncMock) as mock_run_pdp_flow:
-        
-        # _run_pdp_flow が DiscoveryResult を返すようにモック
-        from app.models.result_models import DiscoveryResult
-        mock_run_pdp_flow.return_value = DiscoveryResult(
-            ok=True,
-            site="example",
-            query="test",
-            message="Success",
-        )
-        
-        # PlpDriver をモック
-        mock_plp_driver = AsyncMock()
+
+    with patch("app.agents.browser_orchestrator.PlpDriver") as mock_plp_cls,          patch("app.agents.browser_orchestrator.NavigationDriver"),          patch("app.agents.browser_orchestrator.NavigationContext"):
+        mock_plp_driver = MagicMock()
         mock_plp_driver.navigate_to_pdp = AsyncMock(return_value=nav_result)
-        mock_plp_driver.page = mock_page
-        mock_plp_driver_class.return_value = mock_plp_driver
-        # Orchestrator 用のモックも同じインスタンスを使用
-        mock_orchestrator_plp_driver_class.return_value = mock_plp_driver
-        
-        # NavigationDriver をモック
-        mock_nav_driver = AsyncMock()
-        mock_nav_driver.run_plp_flow = AsyncMock(return_value=mock_nav_outcome)
-        mock_nav_driver.collect_pdp_links = AsyncMock(return_value=[])
-        mock_nav_driver_class.return_value = mock_nav_driver
-        # Orchestrator 用のモックも同じインスタンスを使用
-        mock_orchestrator_nav_driver_class.return_value = mock_nav_driver
-        mock_nav_ctx_class.return_value = MagicMock()
-        
-        # _run_plp_flow を実行
-        import time
-        result = await browser_use_agent._run_plp_flow(
+        mock_plp_cls.return_value = mock_plp_driver
+
+        orchestrator = BrowserOrchestrator()
+        start_t = time.time()
+        result = await orchestrator.run_plp_to_pdp(
             page=mock_page,
             context=mock_context,
             site="example",
@@ -602,34 +482,29 @@ async def test_run_plp_flow_saves_plp_navigation_result(
             settings=settings,
             run_context=run_context,
             target_url="https://example.com/category",
-            start_t=time.time(),
+            start_t=start_t,
             budget_ms=60000,
+            nav_outcome=nav_outcome,
         )
-        
-        # PlpDriver.navigate_to_pdp が新シグネチャで呼ばれたことを確認
-        mock_plp_driver.navigate_to_pdp.assert_called_once()
-        call_kwargs = mock_plp_driver.navigate_to_pdp.call_args.kwargs
-        assert "target_url" in call_kwargs
-        assert "timeout_ms" in call_kwargs
-        assert call_kwargs["target_url"] == "https://example.com/category"
-        assert isinstance(call_kwargs["timeout_ms"], int)
-        
-        # RunContext.save_json が呼ばれたことを確認
-        assert len(saved_data) > 0, "plp_navigation_result.json が保存されていません"
-        
-        # 新フィールドが保存されていることを確認
-        assert saved_data.get("pdp_url") == "https://example.com/product/123"
-        assert saved_data.get("plp_url") == "https://example.com/category"
-        assert saved_data.get("tiles_seen") == 7
-        assert saved_data.get("overlays_handled") == ["cookie"]
-        assert saved_data.get("navigation_method") == "same_tab"
-        
-        # 既存フィールドも確認
-        assert saved_data.get("trap_detected") is False
-        assert saved_data.get("recovery_attempted") is False
-        assert saved_data.get("recovery_successful") is False
-        assert saved_data.get("errors") == []
 
+    # navigate_to_pdp が正しいキーワード引数で呼ばれたことを確認
+    mock_plp_driver.navigate_to_pdp.assert_awaited_once()
+    call_kwargs = mock_plp_driver.navigate_to_pdp.call_args.kwargs
+    assert "target_url" in call_kwargs, "target_url が navigate_to_pdp に渡されていない"
+    assert "timeout_ms" in call_kwargs, "timeout_ms が navigate_to_pdp に渡されていない"
+    assert call_kwargs["target_url"] == "https://example.com/category"
+    assert isinstance(call_kwargs["timeout_ms"], int)
+
+    # 戻り値が PlpNavigationResult で正しいフィールドを持つことを確認
+    assert isinstance(result, PlpNavigationResult)
+    assert result.pdp_url == "https://example.com/product/123"
+    assert result.plp_url == "https://example.com/category"
+    assert result.tiles_seen == 7
+    assert result.overlays_handled == ["cookie"]
+    assert result.navigation_method == "same_tab"
+    assert result.trap_detected is False
+    assert result.recovery_attempted is False
+    assert result.errors == []
 
 @pytest.mark.asyncio
 async def test_browser_use_agent_saves_plp_navigation_result_to_run_context(
