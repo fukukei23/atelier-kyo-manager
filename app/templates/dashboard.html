@@ -1,0 +1,107 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-8 space-y-8">
+
+  <header>
+    <h1 class="text-2xl font-bold text-gray-900">Analytics Dashboard</h1>
+    <p class="text-sm text-gray-500 mt-1">商品・パイプライン・在庫の統合分析</p>
+  </header>
+
+  <!-- KPIカード -->
+  <section class="grid grid-cols-1 md:grid-cols-3 gap-5">
+    <div class="bg-white rounded-lg shadow-md p-4 border border-gray-100">
+      <p class="text-xs font-medium text-gray-500 uppercase">総商品数</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1">{{ kpi.total_products | int }}</p>
+    </div>
+    <div class="bg-white rounded-lg shadow-md p-4 border border-gray-100">
+      <p class="text-xs font-medium text-gray-500 uppercase">平均利益率</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1">{{ "%.1f" | format(kpi.avg_profit_rate) }}%</p>
+    </div>
+    <div class="bg-white rounded-lg shadow-md p-4 border border-gray-100">
+      <p class="text-xs font-medium text-gray-500 uppercase">総予想利益</p>
+      <p class="text-2xl font-bold text-gray-900 mt-1">&yen;{{ "{:,}".format(kpi.total_profit | int) }}</p>
+    </div>
+  </section>
+
+  <!-- パイプライン進捗 -->
+  <section class="bg-white rounded-lg shadow-md p-5 border border-gray-100">
+    <h2 class="text-sm font-semibold text-gray-800 mb-4">パイプライン進捗サマリー</h2>
+    <div class="flex flex-col md:flex-row items-center gap-6">
+      <div class="w-56 h-56">
+        <canvas id="pipelineChart"></canvas>
+      </div>
+      <ul class="space-y-3 text-sm w-full md:w-1/2">
+        {% for label, key, color in [("待機中","pending","#F59E0B"),("実行中","running","#3B82F6"),("成功","success","#10B981"),("部分成功","partial","#F97316"),("失敗","failed","#EF4444")] %}
+        <li class="flex items-center justify-between px-3 py-2 rounded-md bg-gray-50">
+          <span class="flex items-center gap-2">
+            <span class="inline-block h-3 w-3 rounded-full" style="background:{{ color }}"></span>
+            {{ label }}
+          </span>
+          <span class="font-semibold text-gray-900">{{ pipeline_summary[key] | int }}</span>
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+
+  <!-- 在庫・出品ステータス -->
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-5">
+    <div class="bg-white rounded-lg shadow-md p-5 border border-gray-100">
+      <h2 class="text-sm font-semibold text-gray-800 mb-4">在庫ステータス</h2>
+      <div style="height:180px"><canvas id="stockChart"></canvas></div>
+    </div>
+    <div class="bg-white rounded-lg shadow-md p-5 border border-gray-100">
+      <h2 class="text-sm font-semibold text-gray-800 mb-4">出品ステータス</h2>
+      <div style="height:180px"><canvas id="listingChart"></canvas></div>
+    </div>
+  </section>
+
+  <!-- ブランド階層別利益率 -->
+  <section class="bg-white rounded-lg shadow-md p-5 border border-gray-100">
+    <h2 class="text-sm font-semibold text-gray-800 mb-4">ブランド階層別利益率</h2>
+    <div style="max-height:300px"><canvas id="tierChart"></canvas></div>
+  </section>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+Chart.defaults.font.size = 12;
+Chart.defaults.color = '#4B5563';
+
+// パイプライン Doughnut
+new Chart(document.getElementById('pipelineChart'), {
+  type: 'doughnut',
+  data: {
+    labels: ['待機中','実行中','成功','部分成功','失敗'],
+    datasets: [{data: [
+      {{ pipeline_summary.pending }}, {{ pipeline_summary.running }},
+      {{ pipeline_summary.success }}, {{ pipeline_summary.partial }}, {{ pipeline_summary.failed }}
+    ], backgroundColor: ['#F59E0B','#3B82F6','#10B981','#F97316','#EF4444'], borderWidth: 0}]
+  },
+  options: {responsive:true, maintainAspectRatio:true, cutout:'62%', plugins:{legend:{display:false}}}
+});
+
+// 在庫 横棒
+new Chart(document.getElementById('stockChart'), {
+  type: 'bar',
+  data: {labels:['在庫あり','在庫切れ'], datasets:[{data:[{{ stock_summary.in_stock }}, {{ stock_summary.out_of_stock }}], backgroundColor:['#10B981','#EF4444'], borderWidth:0, borderRadius:4}]},
+  options: {indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true, ticks:{precision:0}}, y:{grid:{display:false}}}}
+});
+
+// 出品 横棒
+new Chart(document.getElementById('listingChart'), {
+  type: 'bar',
+  data: {labels:['下書き','出品中','売切','アーカイブ'], datasets:[{data:[{{ listing_summary.draft }}, {{ listing_summary.listed }}, {{ listing_summary.sold }}, {{ listing_summary.archived }}], backgroundColor:['#F59E0B','#3B82F6','#10B981','#6B7280'], borderWidth:0, borderRadius:4}]},
+  options: {indexAxis:'y', responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{x:{beginAtZero:true, ticks:{precision:0}}, y:{grid:{display:false}}}}
+});
+
+// ブランド階層 棒
+new Chart(document.getElementById('tierChart'), {
+  type: 'bar',
+  data: {labels:{{ tier_labels | tojson }}, datasets:[{label:'平均利益率(%)', data:{{ tier_rates | tojson }}, backgroundColor:['#14B8A6','#3B82F6','#8B5CF6'], borderWidth:0, borderRadius:6}]},
+  options: {responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{y:{beginAtZero:true, ticks:{callback:function(v){return v+'%'}}}, x:{grid:{display:false}}}}
+});
+</script>
+{% endblock %}

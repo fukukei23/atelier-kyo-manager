@@ -96,8 +96,7 @@ class TestAuthenticatedPages:
 class TestCompatRedirects:
     def test_dashboard_redirect(self, auth_client):
         r = auth_client.get("/dashboard", follow_redirects=False)
-        assert r.status_code == 302
-        assert "/cashflow" in r.headers["Location"]
+        assert r.status_code == 200
 
     def test_listing_templates_redirect(self, auth_client):
         r = auth_client.get("/listing-templates", follow_redirects=False)
