@@ -1,0 +1,79 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4 text-gray-800">自動発注管理</h1>
+
+{% if orders %}
+<div class="bg-white rounded-lg shadow-md overflow-hidden">
+  <table class="min-w-full divide-y divide-gray-200">
+    <thead class="bg-gray-50">
+      <tr>
+        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700">注文番号</th>
+        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700">商品名</th>
+        <th class="px-4 py-3 text-left text-xs font-bold text-gray-700">仕入先</th>
+        <th class="px-4 py-3 text-center text-xs font-bold text-gray-700">ステータス</th>
+        <th class="px-4 py-3 text-center text-xs font-bold text-gray-700">操作</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      {% for o in orders %}
+      <tr class="hover:bg-gray-50">
+        <td class="px-4 py-3 text-sm font-mono">{{ o.order_number }}</td>
+        <td class="px-4 py-3 text-sm">{{ o.product_name }}</td>
+        <td class="px-4 py-3 text-sm">{{ o.source_type or '-' }}</td>
+        <td class="px-4 py-3 text-center">
+          {% set status = o.status or 'pending' %}
+          {% if status == 'pending' %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-700 rounded-full">未処理</span>
+          {% elif status == 'sourcing' %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700 rounded-full">仕入中</span>
+          {% elif status == 'cart_added' %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium bg-indigo-100 text-indigo-700 rounded-full">カート投入</span>
+          {% elif status == 'checkout' %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium bg-purple-100 text-purple-700 rounded-full">決済中</span>
+          {% elif status == 'payment_done' %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium bg-cyan-100 text-cyan-700 rounded-full">決済完了</span>
+          {% elif status == 'shipped' %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700 rounded-full">発送済み</span>
+          {% elif status == 'completed' %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium bg-teal-100 text-teal-700 rounded-full">完了</span>
+          {% elif status == 'error' %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded-full">エラー</span>
+          {% else %}
+          <span class="inline-block px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded-full">{{ status }}</span>
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 text-center space-x-2">
+          {% if status == 'pending' %}
+          <form method="POST" action="{{ url_for('main.start_auto_order', oid=o.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="text-blue-600 hover:underline text-sm">自動発注開始</button>
+          </form>
+          {% endif %}
+          {% if status in ('sourcing', 'cart_added', 'checkout', 'payment_done', 'shipped') %}
+          <form method="POST" action="{{ url_for('main.execute_auto_order_step', oid=o.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="text-green-600 hover:underline text-sm">次ステップ実行</button>
+          </form>
+          <form method="POST" action="{{ url_for('main.report_auto_order_error', oid=o.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="text-red-600 hover:underline text-sm" onclick="return confirm('エラー報告しますか？')">エラー報告</button>
+          </form>
+          {% endif %}
+          {% if status == 'error' %}
+          <form method="POST" action="{{ url_for('main.start_auto_order', oid=o.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="text-orange-600 hover:underline text-sm">リトライ</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="bg-white rounded-lg shadow-md p-8 text-center text-gray-500">
+  注文がありません。注文管理から追加してください。
+</div>
+{% endif %}
+{% endblock %}
