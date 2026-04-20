@@ -233,6 +233,70 @@ def brand_analytics():
     return render_template("brand_analytics.html", tier_data=tier_data, products=products)
 
 
+# ---- FR-018: Analyticsダッシュボード -------------------------------------
+@bp.get("/dashboard")
+@login_required
+def dashboard():
+    """Analyticsダッシュボード: KPI + パイプライン + 在庫 + ブランド階層"""
+    # KPI
+    total_products = Product.query.count()
+    products = Product.query.all()
+    rates = [p.profit_rate() for p in products]
+    profits = [p.calculate_profit() for p in products]
+    kpi = {
+        "total_products": total_products,
+        "avg_profit_rate": sum(rates) / len(rates) if rates else 0,
+        "total_profit": sum(profits),
+    }
+
+    # パイプライン進捗
+    pipeline_rows = db.session.query(
+        Product.pipeline_status, func.count(Product.id)
+    ).group_by(Product.pipeline_status).all()
+    pipeline_summary = {"pending": 0, "running": 0, "success": 0, "partial": 0, "failed": 0}
+    for status, cnt in pipeline_rows:
+        key = status or "pending"
+        if key in pipeline_summary:
+            pipeline_summary[key] = cnt
+
+    # 在庫ステータス
+    in_stock = Product.query.filter(Product.stock_status == True).count()
+    stock_summary = {"in_stock": in_stock, "out_of_stock": total_products - in_stock}
+
+    # 出品ステータス
+    listing_rows = db.session.query(
+        Product.listing_status, func.count(Product.id)
+    ).group_by(Product.listing_status).all()
+    listing_summary = {"draft": 0, "listed": 0, "sold": 0, "archived": 0}
+    for status, cnt in listing_rows:
+        key = status or "draft"
+        if key in listing_summary:
+            listing_summary[key] = cnt
+
+    # ブランド階層別利益率
+    tier_labels = []
+    tier_rates = []
+    for tier in ("high", "medium", "low"):
+        tier_prods = [p for p in products if (p.brand_tier or "low") == tier]
+        if tier_prods:
+            avg = sum(p.profit_rate() for p in tier_prods) / len(tier_prods)
+        else:
+            avg = 0
+        label_map = {"high": "ハイブランド", "medium": "ミドル", "low": "ロー"}
+        tier_labels.append(label_map[tier])
+        tier_rates.append(round(avg, 1))
+
+    return render_template(
+        "dashboard.html",
+        kpi=kpi,
+        pipeline_summary=pipeline_summary,
+        stock_summary=stock_summary,
+        listing_summary=listing_summary,
+        tier_labels=tier_labels,
+        tier_rates=tier_rates,
+    )
+
+
 # ---- F10: 在庫＆価格チェック ---------------------------------------------
 @bp.get("/stock-check")
 @login_required
