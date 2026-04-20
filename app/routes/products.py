@@ -367,6 +367,17 @@ def run_pipeline(product_id: int):
     site_key = request.form.get("site_key", "")
     result = svc.run(product_id=product_id, site_key=site_key)
 
+    # Slack通知
+    from flask import current_app
+    from app.services.notification_service import NotificationService
+    ns = NotificationService(current_app._get_current_object())
+    ns.send_pipeline_result(
+        product_name=product.name,
+        status=result.status,
+        elapsed_sec=result.elapsed_sec,
+        errors="; ".join(result.errors) if result.errors else None,
+    )
+
     if result.status == "failed":
         flash(f"パイプライン実行に失敗しました: {'; '.join(result.errors)}", "error")
     elif result.status == "partial":
