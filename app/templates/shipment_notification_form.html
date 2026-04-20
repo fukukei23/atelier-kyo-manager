@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-6 text-gray-800">発送通知 手動登録</h1>
+
+<form method="POST" class="max-w-2xl space-y-6">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+  <div>
+    <label for="order_id" class="block text-sm font-medium text-gray-700 mb-1">注文 <span class="text-red-500">*</span></label>
+    <select id="order_id" name="order_id"
+            class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+      <option value="">-- 注文を選択 --</option>
+      {% for o in orders %}
+      <option value="{{ o.id }}">{{ o.order_number }} - {{ o.product_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div>
+    <label for="tracking_number" class="block text-sm font-medium text-gray-700 mb-1">追跡番号</label>
+    <input type="text" id="tracking_number" name="tracking_number"
+           class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none font-mono">
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div>
+      <label for="warehouse" class="block text-sm font-medium text-gray-700 mb-1">転送倉庫</label>
+      <select id="warehouse" name="warehouse"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+        <option value="">-- 選択 --</option>
+        <option value="stackry">Stackry</option>
+        <option value="shipito">Shipito</option>
+        <option value="buyandship">Buyandship</option>
+      </select>
+    </div>
+    <div>
+      <label for="carrier" class="block text-sm font-medium text-gray-700 mb-1">配送業者</label>
+      <select id="carrier" name="carrier"
+              class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+        <option value="">-- 選択 --</option>
+        <option value="fedex">FedEx</option>
+        <option value="dhl">DHL</option>
+        <option value="ups">UPS</option>
+        <option value="usps">USPS</option>
+        <option value="ems">EMS</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="flex items-center gap-4">
+    <button type="submit"
+            class="px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700">登録</button>
+    <a href="{{ url_for('main.shipment_notifications') }}"
+       class="text-sm text-gray-500 hover:text-gray-700 underline">戻る</a>
+  </div>
+</form>
+{% endblock %}
