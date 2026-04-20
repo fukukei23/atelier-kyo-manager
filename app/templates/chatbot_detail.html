@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}問い合わせ詳細{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8 max-w-4xl">
+  <div class="mb-6">
+    <a href="{{ url_for('main.chatbot_dashboard') }}" class="text-blue-600 hover:underline">&larr; ダッシュボードに戻る</a>
+  </div>
+
+  <div class="bg-white shadow-md rounded-lg p-6 mb-6">
+    <div class="flex justify-between items-start mb-4">
+      <h2 class="text-2xl font-bold text-gray-800">{{ inquiry.subject }}</h2>
+      <span class="px-3 py-1 font-semibold text-sm rounded-full
+        {% if inquiry.status == 'pending' %}text-yellow-900 bg-yellow-200
+        {% elif inquiry.status == 'matched' %}text-blue-900 bg-blue-200
+        {% elif inquiry.status == 'approved' %}text-green-900 bg-green-200
+        {% elif inquiry.status == 'rejected' %}text-red-900 bg-red-200
+        {% endif %}">
+        {{ inquiry.status }}
+      </span>
+    </div>
+
+    <div class="grid grid-cols-2 gap-4 text-sm text-gray-600 mb-6 border-b pb-4">
+      <div><span class="font-medium text-gray-800">顧客名:</span> {{ inquiry.customer_name or '-' }}</div>
+      <div><span class="font-medium text-gray-800">メール:</span> {{ inquiry.customer_email or '-' }}</div>
+      <div><span class="font-medium text-gray-800">作成日:</span> {{ inquiry.created_at.strftime('%Y-%m-%d %H:%M:%S') if inquiry.created_at else '' }}</div>
+      <div><span class="font-medium text-gray-800">FAQ ID:</span> {{ inquiry.faq_template_id or 'N/A' }}</div>
+    </div>
+
+    <div class="mb-6">
+      <h3 class="text-lg font-semibold text-gray-700 mb-2">問い合わせ内容</h3>
+      <div class="bg-gray-50 p-4 rounded border border-gray-200 text-gray-800 whitespace-pre-wrap">{{ inquiry.message }}</div>
+    </div>
+
+    {% if inquiry.response_text %}
+    <div class="mb-6">
+      <h3 class="text-lg font-semibold text-gray-700 mb-2">AI生成返答</h3>
+      <div class="bg-blue-50 p-4 rounded border border-blue-200 text-gray-800 whitespace-pre-wrap">{{ inquiry.response_text }}</div>
+    </div>
+    {% endif %}
+
+    {% if inquiry.escalation_reason %}
+    <div class="mb-6">
+      <h3 class="text-lg font-semibold text-gray-700 mb-2">エスカレーション理由</h3>
+      <div class="bg-yellow-50 p-4 rounded border border-yellow-200 text-yellow-800 whitespace-pre-wrap">{{ inquiry.escalation_reason }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if inquiry.can_approve() %}
+  <div class="flex space-x-4">
+    <form action="{{ url_for('main.chatbot_approve', inquiry_id=inquiry.id) }}" method="POST">
+      <button type="submit"
+              class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-6 rounded">
+        承認して送信
+      </button>
+    </form>
+    <form action="{{ url_for('main.chatbot_reject', inquiry_id=inquiry.id) }}" method="POST"
+          class="flex items-center">
+      <input type="text" name="reason" placeholder="却下理由（任意）"
+             class="shadow border rounded py-2 px-3 text-gray-700 mr-2">
+      <button type="submit"
+              class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-6 rounded">
+        却下
+      </button>
+    </form>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
