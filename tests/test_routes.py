@@ -345,3 +345,96 @@ class TestNotificationService:
         ns = NotificationService()
         ns.init_app(app)
         assert ns.webhook_url == ""  # test config has no SLACK_WEBHOOK_URL
+
+
+# ---- FaqTemplate (FR-010基盤) ----
+class TestFaqTemplateModel:
+    def test_match_single_keyword(self):
+        from app.models.faq_template import FaqTemplate
+        faq = FaqTemplate(question_pattern="送料", answer_template="送料無料です")
+        assert faq.match("送料はいくらですか") is True
+        assert faq.match("返品したい") is False
+
+    def test_match_multiple_keywords(self):
+        from app.models.faq_template import FaqTemplate
+        faq = FaqTemplate(question_pattern="送料, 配送, 届かない", answer_template="確認します")
+        assert faq.match("配送方法は？") is True
+        assert faq.match("商品が届かない") is True
+        assert faq.match("サイズ") is False
+
+    def test_match_empty_text(self):
+        from app.models.faq_template import FaqTemplate
+        faq = FaqTemplate(question_pattern="送料", answer_template="送料無料")
+        assert faq.match("") is False
+        assert faq.match(None) is False
+
+    def test_render_template(self):
+        from app.models.faq_template import FaqTemplate
+        faq = FaqTemplate(question_pattern="送料", answer_template="{product_name}は送料無料です")
+        result = faq.render(product_name="テスト商品")
+        assert "テスト商品" in result
+        assert "送料無料" in result
+
+
+class TestFaqTemplateRoutes:
+    def test_faq_templates_page_200(self, auth_client):
+        r = auth_client.get("/faq-templates")
+        assert r.status_code == 200
+
+    def test_create_faq_template_form_200(self, auth_client):
+        r = auth_client.get("/faq-templates/new")
+        assert r.status_code == 200
+
+    def test_create_faq_template_submit(self, auth_client, app):
+        r = auth_client.post("/faq-templates/new", data={
+            "category": "shipping",
+            "question_pattern": "送料,配送",
+            "answer_template": "{product_name}は送料無料です",
+        }, follow_redirects=True)
+        assert r.status_code == 200
+        with app.app_context():
+            from app.models.faq_template import FaqTemplate
+            faq = FaqTemplate.query.first()
+            assert faq is not None
+            assert faq.category == "shipping"
+            assert faq.match("送料は？")
+
+    def test_create_faq_template_missing_fields(self, auth_client):
+        r = auth_client.post("/faq-templates/new", data={
+            "category": "general",
+            "question_pattern": "",
+            "answer_template": "",
+        })
+        assert r.status_code == 200  # re-renders form
+
+    def test_delete_faq_template(self, auth_client, app):
+        with app.app_context():
+            from app.models.faq_template import FaqTemplate
+            faq = FaqTemplate(category="test", question_pattern="test", answer_template="test")
+            db.session.add(faq)
+            db.session.commit()
+            fid = faq.id
+        r = auth_client.post(f"/faq-templates/{fid}/delete", follow_redirects=True)
+        assert r.status_code == 200
+        with app.app_context():
+            assert FaqTemplate.query.get(fid) is None
+
+    def test_faq_match_api(self, auth_client, app):
+        with app.app_context():
+            from app.models.faq_template import FaqTemplate
+            faq = FaqTemplate(category="shipping", question_pattern="送料,配送", answer_template="送料無料です", is_active=True)
+            db.session.add(faq)
+            db.session.commit()
+        r = auth_client.post("/api/faq-match",
+                             json={"text": "送料はいくらですか"},
+                             content_type="application/json")
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["success"] is True
+        assert len(data["matches"]) >= 1
+
+    def test_faq_match_api_no_text(self, auth_client):
+        r = auth_client.post("/api/faq-match",
+                             json={},
+                             content_type="application/json")
+        assert r.status_code == 400
