@@ -348,10 +348,11 @@ def generate_buyma_csv():
     """BUYMA用CSV一括生成"""
     from app.services.template_service import generate_buyma_csv as _gen_csv
     products = Product.query.filter(Product.listing_status.in_(["draft", "listed"])).all()
-    csv_text = _gen_csv(products)
+    csv_text, skipped = _gen_csv(products)
     resp = make_response(csv_text)
-    resp.headers["Content-Type"] = "text/csv; charset=utf-8"
+    resp.headers["Content-Type"] = "text/csv; charset=utf-8-sig"
     resp.headers["Content-Disposition"] = "attachment; filename=buyma_listing.csv"
+    flash(f"CSV生成完了: {len(products) - skipped}件出力, {skipped}件スキップ（説明文なし）", "info")
     return resp
 
 
