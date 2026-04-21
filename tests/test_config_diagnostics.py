@@ -156,7 +156,7 @@ class TestMakeDiagnosticBundle:
         ctx.logger = MagicMock()
         return ctx
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_creates_manifest_and_readme(self, tmp_path):
         ctx = self._make_mock_context(tmp_path)
 
@@ -171,7 +171,7 @@ class TestMakeDiagnosticBundle:
         assert manifest["run_id"] == "test-run-001"
         assert "files" in manifest
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_creates_zip_output(self, tmp_path):
         ctx = self._make_mock_context(tmp_path)
 
@@ -182,7 +182,7 @@ class TestMakeDiagnosticBundle:
         assert Path(result).exists()
         assert zipfile.is_zipfile(result)
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_collects_matching_files(self, tmp_path):
         ctx = self._make_mock_context(tmp_path)
         run_dir = tmp_path / "run_test"
@@ -199,7 +199,7 @@ class TestMakeDiagnosticBundle:
         assert "ai_forensic_report.json" in manifest["files"]
         assert "fail_snapshot.md" in manifest["files"]
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_trace_zip_calls_make_trace_report(self, tmp_path):
         ctx = self._make_mock_context(tmp_path)
         run_dir = tmp_path / "run_test"
@@ -210,7 +210,7 @@ class TestMakeDiagnosticBundle:
             await make_diagnostic_bundle(ctx, include_trace_report=True)
             mock_trace.assert_called_once()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_no_trace_report_when_disabled(self, tmp_path):
         ctx = self._make_mock_context(tmp_path)
         run_dir = tmp_path / "run_test"
@@ -221,7 +221,7 @@ class TestMakeDiagnosticBundle:
             await make_diagnostic_bundle(ctx, include_trace_report=False)
             mock_trace.assert_not_called()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_trace_report_exception_continues(self, tmp_path):
         ctx = self._make_mock_context(tmp_path)
         run_dir = tmp_path / "run_test"
@@ -235,7 +235,7 @@ class TestMakeDiagnosticBundle:
         assert result.endswith(".zip")
         ctx.logger.warning.assert_called_once()
 
-    @pytest.mark.asyncio
+    @pytest.mark.anyio
     async def test_overwrites_existing_zip(self, tmp_path):
         ctx = self._make_mock_context(tmp_path)
         run_dir = tmp_path / "run_test"
