@@ -17,14 +17,14 @@ router = Blueprint("warehouse_webhook", __name__)
 @router.post("/api/warehouse/events")
 def forward2me_events():
     cfg = _load_forward2me_config()
-    secret_env = cfg.get("webhook_secret_env")
-    secret = os.getenv(secret_env, "")
+    secret_env = cfg.get("webhook_secret_env", "")
+    secret = os.getenv(secret_env, "") if secret_env else ""
     body = request.get_data(cache=False)
     signature = request.headers.get("X-Webhook-Signature", "")
     if secret and not _verify_signature(body, signature, secret):
         abort(401, description="Invalid signature")
 
-    payload = request.get_json(force=True, silent=False) or {}
+    payload = request.get_json(force=True, silent=True) or {}
     handle_forward2me_event(payload)
     return jsonify({"status": "ok"})
 
