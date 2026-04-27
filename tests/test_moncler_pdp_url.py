@@ -9,6 +9,7 @@ CR-ATELIER-002 Step 3-4: Moncler PDP URL バリデーションのテスト
 """
 
 import pytest
+pytest.importorskip("playwright")
 from unittest.mock import Mock, AsyncMock, patch
 from urllib.parse import urlparse
 

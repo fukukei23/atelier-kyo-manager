@@ -3,6 +3,7 @@
 ProductExtractor ユニットテスト
 """
 import pytest
+pytest.importorskip("playwright")
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.agents.browser.product_extractor import ProductExtractor, ProductInfo
 from app.core.run_context import RunContext

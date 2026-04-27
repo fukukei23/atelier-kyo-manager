@@ -8,6 +8,7 @@ CR-ATELIER-002 Step 6: Moncler Selector Discovery Agent のテスト
 """
 
 import pytest
+pytest.importorskip("playwright")
 from unittest.mock import AsyncMock, MagicMock, patch
 from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
 

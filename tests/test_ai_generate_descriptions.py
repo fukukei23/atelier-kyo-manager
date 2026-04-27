@@ -2,6 +2,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+pytest.importorskip("opentelemetry")
 
 from app.utils.ai_generate_descriptions import DescriptionGenerator
 

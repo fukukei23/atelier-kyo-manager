@@ -1,3 +1,5 @@
+import pytest
+pytest.importorskip("selenium")
 # ================================================================
 #  フォルダ名: tests/
 #  ファイル名: test_crawler_service.py

@@ -7,6 +7,7 @@ failure_analysis が DiscoveryResult.evidence に含まれることを確認す�
 """
 
 import pytest
+pytest.importorskip("playwright")
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from typing import Dict, Any
 

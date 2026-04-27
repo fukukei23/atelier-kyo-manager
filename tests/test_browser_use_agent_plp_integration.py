@@ -10,6 +10,7 @@ Test ID Prefix: INT
 """
 
 import pytest
+pytest.importorskip("playwright")
 import asyncio
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from typing import Dict, Any

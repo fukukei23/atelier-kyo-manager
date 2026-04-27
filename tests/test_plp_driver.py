@@ -13,6 +13,7 @@ Test ID Prefix: PLP
 """
 
 import pytest
+pytest.importorskip("playwright")
 import time
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from typing import Dict, Any, List

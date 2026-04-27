@@ -6,6 +6,7 @@
 import os
 import sys
 import pytest
+pytest.importorskip("opentelemetry")
 from dotenv import load_dotenv
 
 # --- ↓↓ ここが最重要修正点 ↓↓ ---

@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import pytest
+pytest.importorskip("playwright")
 
 from app.agents.browser.session_manager import SessionManager
 from app.core.run_context import RunContext

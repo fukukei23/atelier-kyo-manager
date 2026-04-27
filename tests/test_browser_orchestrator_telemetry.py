@@ -7,6 +7,7 @@ run_plp_to_pdp / run_pdp 実行時に指定メソッドが呼ばれることだ�
 """
 
 import pytest
+pytest.importorskip("playwright")
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from typing import Dict, Any
 

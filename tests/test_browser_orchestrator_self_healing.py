@@ -6,6 +6,7 @@ Self-Healing Loop v1 の動作をテストする。
 """
 
 import pytest
+pytest.importorskip("playwright")
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
 from typing import Dict, Any
 
