@@ -59,7 +59,7 @@ Flask App Factory (create_app)
 | スクレイピング | Playwright / Selenium |
 | 画像処理 | Pillow / OpenCV / rembg |
 | LLM | OpenAI API / Gemini API / Local LLM |
-| テスト | pytest (588 passed, カバレッジ29%) |
+| テスト | pytest (647 tests) |
 
 ---
 
@@ -162,4 +162,4 @@ migrations/                # DBマイグレーション
 
 ## ライセンス
 
-Private Repository
+MIT License — 詳細は [LICENSE](LICENSE) を参照。
