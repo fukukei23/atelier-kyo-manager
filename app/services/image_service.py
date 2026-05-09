@@ -10,8 +10,6 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-import cv2
-import numpy as np
 import requests
 from PIL import Image
 from rembg import remove

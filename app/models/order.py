@@ -11,18 +11,9 @@ from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean
 from app.extensions import db
 from app.core.pricing import calculate_pricing, PricingInput
 from app.config.constants import (
-    DOMESTIC_COMMISSION_RATE,
-    OVERSEAS_COMMISSION_RATE,
-    TRANSFER_FEE,
     PAYMENT_METHOD_EXTENSION_DAYS,
     EXPECTED_PAYMENT_DAYS,
 )
-
-# 後方互換: 旧名前で外部参照される可能性あり
-COMMISSION_RATES: dict[str, float] = {
-    "domestic": DOMESTIC_COMMISSION_RATE,
-    "overseas": OVERSEAS_COMMISSION_RATE,
-}
 
 
 class Order(db.Model):
