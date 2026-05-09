@@ -3,11 +3,14 @@
 # ======================================================================
 from __future__ import annotations
 
+from datetime import datetime, timedelta
+
 from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 from sqlalchemy import desc, func
 
 from app.extensions import db
+from app.models.order import Order, EXPECTED_PAYMENT_DAYS, PAYMENT_METHOD_EXTENSION_DAYS
 from app.utils.decorators import handle_db_error
 
 from . import bp
@@ -18,7 +21,6 @@ from . import bp
 @login_required
 def order_list():
     """注文一覧（18日ルール対応）"""
-    from app.models.order import Order
     orders = Order.query.order_by(desc(Order.order_date)).all()
     return render_template("orders.html", orders=orders)
 
@@ -28,11 +30,9 @@ def order_list():
 @handle_db_error()
 def create_order():
     """注文新規登録"""
-    from app.models.order import Order, PAYMENT_METHOD_EXTENSION_DAYS
     if request.method == "POST":
-        from datetime import datetime as _dt
         order_date_str = request.form.get("order_date", "")
-        order_date = _dt.strptime(order_date_str, "%Y-%m-%d") if order_date_str else _dt.utcnow()
+        order_date = datetime.strptime(order_date_str, "%Y-%m-%d") if order_date_str else datetime.utcnow()
 
         selling_price = float(request.form.get("selling_price", 0) or 0)
         purchase_cost = float(request.form.get("purchase_cost", 0) or 0)
@@ -71,13 +71,11 @@ def create_order():
 @handle_db_error()
 def edit_order(oid: int):
     """注文編集"""
-    from app.models.order import Order, PAYMENT_METHOD_EXTENSION_DAYS
     order = Order.query.get_or_404(oid)
     if request.method == "POST":
-        from datetime import datetime as _dt
         order_date_str = request.form.get("order_date", "")
         if order_date_str:
-            order.order_date = _dt.strptime(order_date_str, "%Y-%m-%d")
+            order.order_date = datetime.strptime(order_date_str, "%Y-%m-%d")
         order.order_number = request.form.get("order_number", order.order_number)
         order.product_name = request.form.get("product_name", order.product_name)
         order.customer_name = request.form.get("customer_name", order.customer_name)
@@ -107,7 +105,6 @@ def edit_order(oid: int):
 @handle_db_error("main.order_list")
 def delete_order(oid: int):
     """注文削除"""
-    from app.models.order import Order
     order = Order.query.get_or_404(oid)
     db.session.delete(order)
     db.session.commit()
@@ -119,9 +116,7 @@ def delete_order(oid: int):
 @login_required
 def api_order_dashboard():
     """18日ルールダッシュボードAPI"""
-    from app.models.order import Order
-    from datetime import datetime as _dt, timedelta
-    now = _dt.utcnow()
+    now = datetime.utcnow()
     orders = Order.query.filter(Order.status.in_(["pending", "shipped"])).all()
     result = []
     for o in orders:
@@ -149,7 +144,6 @@ def api_order_dashboard():
 @handle_db_error("main.order_list")
 def extend_order(oid: int):
     """延長申請"""
-    from app.models.order import Order
     order = Order.query.get_or_404(oid)
     if order.extension_requested:
         flash("この注文は既に延長申請済みです。", "warning")
@@ -167,10 +161,7 @@ def extend_order(oid: int):
 @login_required
 def cashflow_dashboard():
     """キャッシュフロー予測ダッシュボード"""
-    from app.models.order import Order, EXPECTED_PAYMENT_DAYS
-    from datetime import datetime as _dt, timedelta
-
-    now = _dt.utcnow()
+    now = datetime.utcnow()
     pending_orders = Order.query.filter(Order.status.in_(["pending", "shipped"])).all()
 
     forecast_days = int(request.args.get("days", 30))
