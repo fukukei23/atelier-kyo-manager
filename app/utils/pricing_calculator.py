@@ -3,9 +3,11 @@ import logging
 import math
 import requests
 
+from app.config.constants import DEFAULT_EXCHANGE_RATE_USDJPY
+
 logger = logging.getLogger(__name__)
 
-DEFAULT_EXCHANGE_RATE = 150.0
+DEFAULT_EXCHANGE_RATE = DEFAULT_EXCHANGE_RATE_USDJPY
 BUYMA_COMMISSION_RATE = 0.073
 BUYMA_SYSTEM_FEE = 200
 

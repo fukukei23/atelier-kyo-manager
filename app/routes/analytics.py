@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 
 from app.extensions import db, csrf
 from app.models import Product
+from app.utils.decorators import handle_db_error
 
 from . import bp
 
@@ -70,17 +71,14 @@ def edit_listing_template(tid: int | None = None):
 
 @bp.post("/templates/<int:tid>/delete")
 @login_required
+@handle_db_error("main.listing_templates")
 def delete_listing_template(tid: int):
     """テンプレート削除"""
     from app.models.listing_template import ListingTemplate
     tpl = ListingTemplate.query.get_or_404(tid)
-    try:
-        db.session.delete(tpl)
-        db.session.commit()
-        flash("テンプレートを削除しました。", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"削除に失敗しました: {e}", "error")
+    db.session.delete(tpl)
+    db.session.commit()
+    flash("テンプレートを削除しました。", "success")
     return redirect(url_for("main.listing_templates"))
 
 
@@ -124,17 +122,14 @@ def create_faq_template():
 
 @bp.post("/faq-templates/<int:fid>/delete")
 @login_required
+@handle_db_error("main.faq_templates")
 def delete_faq_template(fid: int):
     """FAQテンプレート削除"""
     from app.models.faq_template import FaqTemplate
     faq = FaqTemplate.query.get_or_404(fid)
-    try:
-        db.session.delete(faq)
-        db.session.commit()
-        flash("FAQテンプレートを削除しました。", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"削除に失敗しました: {e}", "error")
+    db.session.delete(faq)
+    db.session.commit()
+    flash("FAQテンプレートを削除しました。", "success")
     return redirect(url_for("main.faq_templates"))
 
 
@@ -264,17 +259,14 @@ def create_listing_progress():
 
 @bp.post("/listing-progress/<int:rid>/delete")
 @login_required
+@handle_db_error("main.listing_progress_view")
 def delete_listing_progress(rid: int):
     """進捗記録削除"""
     from app.models.listing_progress import ListingProgress
     r = ListingProgress.query.get_or_404(rid)
-    try:
-        db.session.delete(r)
-        db.session.commit()
-        flash("進捗記録を削除しました。", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"削除に失敗しました: {e}", "error")
+    db.session.delete(r)
+    db.session.commit()
+    flash("進捗記録を削除しました。", "success")
     return redirect(url_for("main.listing_progress_view"))
 
 
@@ -480,17 +472,14 @@ def mark_shipment_notified(sid: int):
 
 @bp.post("/shipment-notifications/<int:sid>/delete")
 @login_required
+@handle_db_error("main.shipment_notifications")
 def delete_shipment_notification(sid: int):
     """発送通知削除"""
     from app.models.shipment_notification import ShipmentNotification
     sn = ShipmentNotification.query.get_or_404(sid)
-    try:
-        db.session.delete(sn)
-        db.session.commit()
-        flash("発送通知を削除しました。", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"削除に失敗しました: {e}", "error")
+    db.session.delete(sn)
+    db.session.commit()
+    flash("発送通知を削除しました。", "success")
     return redirect(url_for("main.shipment_notifications"))
 
 
@@ -547,17 +536,14 @@ def create_stock_check():
 
 @bp.post("/stock-check/<int:sid>/delete")
 @login_required
+@handle_db_error("main.stock_check_list")
 def delete_stock_check(sid: int):
     """在庫チェック削除"""
     from app.models.stock_check import StockCheck
     sc = StockCheck.query.get_or_404(sid)
-    try:
-        db.session.delete(sc)
-        db.session.commit()
-        flash("チェック記録を削除しました。", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"削除に失敗しました: {e}", "error")
+    db.session.delete(sc)
+    db.session.commit()
+    flash("チェック記録を削除しました。", "success")
     return redirect(url_for("main.stock_check_list"))
 
 
@@ -780,17 +766,14 @@ def create_popularity():
 
 @bp.post("/popularity/<int:tid>/delete")
 @login_required
+@handle_db_error("main.popularity_list")
 def delete_popularity(tid: int):
     """人気度記録削除"""
     from app.models.popularity_tracker import PopularityTracker
     pt = PopularityTracker.query.get_or_404(tid)
-    try:
-        db.session.delete(pt)
-        db.session.commit()
-        flash("記録を削除しました。", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"削除に失敗しました: {e}", "error")
+    db.session.delete(pt)
+    db.session.commit()
+    flash("記録を削除しました。", "success")
     return redirect(url_for("main.popularity_list"))
 
 
@@ -842,17 +825,14 @@ def create_region():
 
 @bp.post("/regions/<int:rid>/delete")
 @login_required
+@handle_db_error("main.region_list")
 def delete_region(rid: int):
     """地域削除"""
     from app.models.region_recommendation import RegionRecommendation
     rr = RegionRecommendation.query.get_or_404(rid)
-    try:
-        db.session.delete(rr)
-        db.session.commit()
-        flash("地域を削除しました。", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"削除に失敗しました: {e}", "error")
+    db.session.delete(rr)
+    db.session.commit()
+    flash("地域を削除しました。", "success")
     return redirect(url_for("main.region_list"))
 
 

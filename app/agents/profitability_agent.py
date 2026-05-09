@@ -68,8 +68,9 @@ except ImportError:
 try:
     from app.utils.fx_utils import get_fx_table_jpy
 except ImportError:
+     from app.config.constants import DEFAULT_EXCHANGE_RATE_USDJPY as _FALLBACK_FX
      logging.warning("fx_utils not found. Using dummy exchange rates.")
-     def get_fx_table_jpy(**kwargs) -> tuple[dict, dict]: return {"USD": 150.0}, {}
+     def get_fx_table_jpy(**kwargs) -> tuple[dict, dict]: return {"USD": _FALLBACK_FX}, {}
 
 # --- Pydanticによる入出力スキーマ定義 ---
 
@@ -112,8 +113,9 @@ class ProfitabilityAgent:
             self.logger.info(f"Fetched exchange rate for {currency}: {rate}")
             return float(rate)
         except Exception as e:
-            self.logger.error(f"FX fetch/lookup failed for {currency} ({e}); using fallback 150.0")
-            return 150.0
+            from app.config.constants import DEFAULT_EXCHANGE_RATE_USDJPY
+            self.logger.error(f"FX fetch/lookup failed for {currency} ({e}); using fallback {DEFAULT_EXCHANGE_RATE_USDJPY}")
+            return DEFAULT_EXCHANGE_RATE_USDJPY
 
     def _resolve_customs_rate(self, category: Optional[str], material: Optional[str]) -> float:
         """商品情報に基づき、関税率を決定する。rules.py の一元化ロジックを使用。"""
@@ -178,7 +180,8 @@ class ProfitabilityAgent:
         cost_before_customs = source_price_jpy + shipping_cost_jpy
         customs_duty = cost_before_customs * customs_rate
         total_cost_jpy = cost_before_customs + customs_duty
-        platform_fee_rate = 0.077
+        from app.config.constants import PLATFORM_FEE_RATE
+        platform_fee_rate = PLATFORM_FEE_RATE
         buyma_commission = market.buyma_price * platform_fee_rate
         net_revenue = market.buyma_price - buyma_commission
         profit_estimate = net_revenue - total_cost_jpy

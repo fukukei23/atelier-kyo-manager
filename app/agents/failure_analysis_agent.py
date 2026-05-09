@@ -51,7 +51,7 @@ class FKB:
     """Failure Knowledge Base - 失敗パターンのデータベース"""
 
     def __init__(self, fkb_path: Optional[Path] = None):
-        self.fkb_path = fkb_path or APP_ROOT / "fkb_local.json"
+        self.fkb_path = fkb_path or APP_ROOT / "config" / "fkb" / "fkb_local.json"
         self.entries: List[Dict[str, Any]] = []
         self._load()
 

@@ -11,6 +11,11 @@ from datetime import datetime
 
 from sqlalchemy import Integer, String, Float, Boolean, DateTime, Text
 from app.extensions import db
+from app.config.constants import (
+    DOMESTIC_COMMISSION_RATE,
+    OVERSEAS_COMMISSION_RATE,
+    TRANSFER_FEE,
+)
 
 
 # ブランド階層判定キーワード
@@ -97,18 +102,18 @@ class Product(db.Model):
 
     # --- BUYMA手数料計算 ---
     def commission_rate(self) -> float:
-        """成約手数料率: 国内7.7%, 海外5.5%"""
+        """成約手数料率"""
         if self.source_type == "overseas":
-            return 0.055
-        return 0.077
+            return OVERSEAS_COMMISSION_RATE
+        return DOMESTIC_COMMISSION_RATE
 
     def commission_fee(self) -> float:
         """成約手数料額"""
         return float((self.selling_price or 0) * self.commission_rate())
 
     def transfer_fee(self) -> float:
-        """振込手数料（楽天銀行想定: 220円）"""
-        return 220.0
+        """振込手数料"""
+        return TRANSFER_FEE
 
     def calculate_profit(self) -> float:
         """利益計算 — calculator.py に委譲（Thin Wrapper）"""
