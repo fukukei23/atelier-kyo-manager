@@ -18,9 +18,7 @@ from . import bp
 @login_required
 def shipment_notifications():
     """発送通知一覧"""
-    notifications = ShipmentNotification.query.order_by(
-        ShipmentNotification.created_at.desc()
-    ).all()
+    notifications = ShipmentNotification.query.order_by(ShipmentNotification.created_at.desc()).all()
     return render_template("shipment_notifications.html", notifications=notifications)
 
 

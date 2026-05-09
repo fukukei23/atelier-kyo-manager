@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """
 End-to-End Integration Test for Atelier Kyo Manager
 
@@ -12,27 +11,28 @@ End-to-End Integration Test for Atelier Kyo Manager
 """
 
 import argparse
+import json
 import subprocess
 import sys
-import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 
 class Colors:
     """ターミナル出力の色付け"""
-    GREEN = '\033[92m'
-    RED = '\033[91m'
-    YELLOW = '\033[93m'
-    BLUE = '\033[94m'
-    RESET = '\033[0m'
+
+    GREEN = "\033[92m"
+    RED = "\033[91m"
+    YELLOW = "\033[93m"
+    BLUE = "\033[94m"
+    RESET = "\033[0m"
 
 
 def print_test(name: str):
     """テスト開始を表示"""
-    print(f"\n{Colors.BLUE}{'='*60}{Colors.RESET}")
+    print(f"\n{Colors.BLUE}{'=' * 60}{Colors.RESET}")
     print(f"{Colors.BLUE}TEST: {name}{Colors.RESET}")
-    print(f"{Colors.BLUE}{'='*60}{Colors.RESET}")
+    print(f"{Colors.BLUE}{'=' * 60}{Colors.RESET}")
 
 
 def print_success(message: str):
@@ -59,12 +59,7 @@ def run_command(cmd: list, timeout: int = 300) -> tuple[int, str, str]:
     """
     try:
         result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-            encoding='utf-8',
-            errors='replace'
+            cmd, capture_output=True, text=True, timeout=timeout, encoding="utf-8", errors="replace"
         )
         return result.returncode, result.stdout, result.stderr
     except subprocess.TimeoutExpired:
@@ -80,8 +75,10 @@ def test_basic_execution(headful: bool = False) -> bool:
     cmd = [
         ".venv\\Scripts\\python.exe",
         "run_orchestrator.py",
-        "--site", "MONCLER_OFFICIAL",
-        "--query", "down jacket",
+        "--site",
+        "MONCLER_OFFICIAL",
+        "--query",
+        "down jacket",
     ]
 
     if headful:
@@ -104,9 +101,9 @@ def test_basic_execution(headful: bool = False) -> bool:
                 # run.json の確認
                 run_json = latest_run / "run.json"
                 if run_json.exists():
-                    data = json.loads(run_json.read_text(encoding='utf-8'))
+                    data = json.loads(run_json.read_text(encoding="utf-8"))
                     print_success(f"run.json 生成: status={data.get('status')}")
-                    return data.get('status') == 'success'
+                    return data.get("status") == "success"
                 else:
                     print_warning("run.json が見つかりません")
 
@@ -133,8 +130,10 @@ def test_proxy_execution(headful: bool = False) -> bool:
     cmd = [
         ".venv\\Scripts\\python.exe",
         "run_orchestrator.py",
-        "--site", "MONCLER_OFFICIAL",
-        "--query", "down jacket",
+        "--site",
+        "MONCLER_OFFICIAL",
+        "--query",
+        "down jacket",
         "--use-proxy",
     ]
 
@@ -167,8 +166,10 @@ def test_auto_heal(headful: bool = False) -> bool:
     cmd = [
         ".venv\\Scripts\\python.exe",
         "run_orchestrator.py",
-        "--site", "MONCLER_OFFICIAL",
-        "--query", "down jacket",
+        "--site",
+        "MONCLER_OFFICIAL",
+        "--query",
+        "down jacket",
         "--auto-heal",
     ]
 
@@ -188,7 +189,7 @@ def test_auto_heal(headful: bool = False) -> bool:
 
             if auto_heal_log.exists():
                 print_success("auto_heal_log.json が生成されました")
-                data = json.loads(auto_heal_log.read_text(encoding='utf-8'))
+                data = json.loads(auto_heal_log.read_text(encoding="utf-8"))
 
                 if "llm_proposal" in data:
                     print_success("LLM提案が生成されました")
@@ -212,8 +213,10 @@ def test_video_recording(headful: bool = False) -> bool:
     cmd = [
         ".venv\\Scripts\\python.exe",
         "run_orchestrator.py",
-        "--site", "MONCLER_OFFICIAL",
-        "--query", "down jacket",
+        "--site",
+        "MONCLER_OFFICIAL",
+        "--query",
+        "down jacket",
         "--enable-video",
     ]
 
@@ -250,10 +253,10 @@ def main():
     parser.add_argument("--quick", action="store_true", help="Run only basic test")
     args = parser.parse_args()
 
-    print(f"\n{Colors.BLUE}{'='*60}{Colors.RESET}")
+    print(f"\n{Colors.BLUE}{'=' * 60}{Colors.RESET}")
     print(f"{Colors.BLUE}Atelier Kyo Manager - E2E Integration Test{Colors.RESET}")
     print(f"{Colors.BLUE}Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{Colors.RESET}")
-    print(f"{Colors.BLUE}{'='*60}{Colors.RESET}")
+    print(f"{Colors.BLUE}{'=' * 60}{Colors.RESET}")
 
     results = {}
 
@@ -271,9 +274,9 @@ def main():
         results["video"] = test_video_recording(headful=args.headful)
 
     # 結果サマリー
-    print(f"\n{Colors.BLUE}{'='*60}{Colors.RESET}")
+    print(f"\n{Colors.BLUE}{'=' * 60}{Colors.RESET}")
     print(f"{Colors.BLUE}TEST SUMMARY{Colors.RESET}")
-    print(f"{Colors.BLUE}{'='*60}{Colors.RESET}")
+    print(f"{Colors.BLUE}{'=' * 60}{Colors.RESET}")
 
     passed = sum(1 for v in results.values() if v)
     total = len(results)
@@ -285,14 +288,14 @@ def main():
     print(f"\n{Colors.BLUE}Total: {passed}/{total} tests passed{Colors.RESET}")
 
     if passed == total:
-        print(f"\n{Colors.GREEN}{'='*60}{Colors.RESET}")
+        print(f"\n{Colors.GREEN}{'=' * 60}{Colors.RESET}")
         print(f"{Colors.GREEN}ALL TESTS PASSED ✓{Colors.RESET}")
-        print(f"{Colors.GREEN}{'='*60}{Colors.RESET}")
+        print(f"{Colors.GREEN}{'=' * 60}{Colors.RESET}")
         sys.exit(0)
     else:
-        print(f"\n{Colors.RED}{'='*60}{Colors.RESET}")
+        print(f"\n{Colors.RED}{'=' * 60}{Colors.RESET}")
         print(f"{Colors.RED}SOME TESTS FAILED ✗{Colors.RESET}")
-        print(f"{Colors.RED}{'='*60}{Colors.RESET}")
+        print(f"{Colors.RED}{'=' * 60}{Colors.RESET}")
         sys.exit(1)
 
 

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import asyncio
@@ -6,17 +5,18 @@ import json
 import logging
 import re
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any, Optional
 
 from playwright.async_api import BrowserContext, Page
 
-from app.core.run_context import RunContext
-from app.models.result_models import DiscoveryResult
-from app.extractors.product_info_extractor import extract_title_price
-from app.extractors.moncler_extractor import MonclerPDPExtractor
+from app.agents.browser.product_extractor import ProductExtractor
 from app.agents.browser.session_manager import EXTERNAL_BLOCKLIST_HOSTS
-from app.agents.browser.product_extractor import ProductExtractor, ProductInfo
+from app.core.run_context import RunContext
+from app.extractors.moncler_extractor import MonclerPDPExtractor
+from app.extractors.product_info_extractor import extract_title_price
+from app.models.result_models import DiscoveryResult
 from app.utils.observability import save_dom
 
 logger = logging.getLogger(__name__)
@@ -34,15 +34,12 @@ PRODUCT_URL_ALLOW_PATTERNS = re.compile(
 #   - 詳細は docs/spec/CR-ATELIER-002_MONCLER_PLP_PDP_EXTRACTION_FIX.md を参照
 # ==============================================================================
 
-from urllib.parse import urlparse, urljoin
-from typing import Optional, Dict, List, Any
+import contextlib
+from urllib.parse import urljoin, urlparse
+
 from app.agents.plugins.moncler_plp_v1 import (
     MONCLER_PLP_CONTAINER_SELECTORS,
-    MONCLER_PLP_TILE_SELECTORS,
-    MONCLER_PLP_PDP_LINK_SELECTORS,
     MONCLER_PLP_PDP_LINK_SELECTORS_PRIMARY,
-    MONCLER_PLP_PDP_LINK_SELECTORS_SECONDARY,
-    MONCLER_PLP_PDP_LINK_SELECTORS_TERTIARY,
 )
 
 logger_extractor = logging.getLogger(__name__)
@@ -53,27 +50,27 @@ async def extract_moncler_pdp_links(
     ctx: Any,
     *,
     max_links: int = 50,
-) -> List[str]:
+) -> list[str]:
     """
     CR-ATELIER-002 Step 3:
     MONCLER_OFFICIAL 専用の PLP→PDP 抽出ヘルパー。
-    
+
     - DOM 構造は CR-ATELIER-002 Step3 の Spec / moncler_plp_v1.py のコメントに基づく。
     - PLP コンテナを特定し、コンテナ内の tile を query して、tile 内の <a href> から '/products/' を含む URL を収集
     - URL を正規化 / 重複排除 / バリデーション
     - CR-ATELIER-002 Step 3-3: raw_hrefs を収集し、reject_reason を集計、accepted==0 の場合 Telemetry に保存
-    
+
     Args:
         page: Playwright Page オブジェクト
         ctx: NavigationContext または RunContext を含むコンテキスト
         max_links: 最大抽出リンク数
-    
+
     Returns:
         List[str]: 有効な PDP URL のリスト
     """
-    urls: List[str] = []
+    urls: list[str] = []
     target_url = page.url
-    
+
     # site_config を取得（NavigationContext または dict から）
     site_config = {}
     run_context = None
@@ -83,12 +80,12 @@ async def extract_moncler_pdp_links(
     elif isinstance(ctx, dict):
         site_config = ctx.get("site_config", {})
         run_context = ctx.get("run_context")
-    
+
     logger_extractor.info(f"[PLP→PDP][Moncler] Starting extraction from URL: {target_url}")
-    
+
     # CR-ATELIER-002 Step 3-3: raw_hrefs を収集
-    raw_hrefs: List[str] = []
-    rejection_stats: Dict[str, int] = {
+    raw_hrefs: list[str] = []
+    rejection_stats: dict[str, int] = {
         "no_href": 0,
         "url_normalization_failed": 0,
         "external_domain": 0,
@@ -99,35 +96,31 @@ async def extract_moncler_pdp_links(
         "trap_pattern": 0,
         "other": 0,
     }
-    
+
     # 1) PLP コンテナを特定（オプション、ログ用）
-    container_found = False
     for container_sel in MONCLER_PLP_CONTAINER_SELECTORS:
         try:
             container = await page.query_selector(container_sel)
             if container:
-                container_found = True
                 logger_extractor.debug(f"[PLP→PDP][Moncler] Found container: {container_sel}")
                 break
         except Exception:
             continue
-    
+
     # CR-ATELIER-002 Step 5-2: セレクタ戦略のレイヤリング実装
     # Primary → Secondary → Tertiary の順で抽出を試みる
     # 各レイヤで何件ヒットしたかを Telemetry に記録
-    
+
     # Primary Layer（site_config準拠）を優先的に使用
     plp_selectors = (site_config.get("selectors", {}) or {}).get("plp", {}) or {}
     primary_selectors = plp_selectors.get("pdp_link_selectors", []) or MONCLER_PLP_PDP_LINK_SELECTORS_PRIMARY
-    
+
     # Secondary Layer（DOM構造ベース）
-    secondary_selectors = MONCLER_PLP_PDP_LINK_SELECTORS_SECONDARY
-    
+
     # Tertiary Layer（汎用フォールバック）
-    tertiary_selectors = MONCLER_PLP_PDP_LINK_SELECTORS_TERTIARY
-    
+
     # レイヤごとのヒット数を記録
-    layer_stats: Dict[str, int] = {
+    layer_stats: dict[str, int] = {
         "primary_raw": 0,
         "primary_accepted": 0,
         "secondary_raw": 0,
@@ -135,39 +128,38 @@ async def extract_moncler_pdp_links(
         "tertiary_raw": 0,
         "tertiary_accepted": 0,
     }
-    
+
     # 2) Primary Layer で抽出を試みる
     raw_elements_count = 0
-    current_layer = "primary"
     current_selectors = primary_selectors
-    
+
     for link_sel in current_selectors:
         try:
             nodes = await page.query_selector_all(link_sel)
             if not nodes:
                 continue
-            
+
             raw_elements_count += len(nodes)
             matched_count = 0
             rejected_count = 0
-            
+
             for node in nodes:
                 # href を取得
                 href = (
-                    await node.get_attribute("href") or
-                    await node.get_attribute("data-href") or
-                    await node.get_attribute("data-product-url") or
-                    await node.get_attribute("data-url")
+                    await node.get_attribute("href")
+                    or await node.get_attribute("data-href")
+                    or await node.get_attribute("data-product-url")
+                    or await node.get_attribute("data-url")
                 )
-                
+
                 if not href:
                     rejection_stats["no_href"] += 1
                     rejected_count += 1
                     continue
-                
+
                 # raw_hrefs に追加
                 raw_hrefs.append(href)
-                
+
                 # 相対 URL は page.url から絶対 URL に変換
                 try:
                     norm_url = urljoin(target_url, href)
@@ -175,51 +167,48 @@ async def extract_moncler_pdp_links(
                     rejection_stats["url_normalization_failed"] += 1
                     rejected_count += 1
                     continue
-                
+
                 # URL のフィルタリングとreject理由の集計
                 reject_reason = _get_moncler_rejection_reason(norm_url, target_url)
                 if reject_reason:
                     rejection_stats[reject_reason] = rejection_stats.get(reject_reason, 0) + 1
                     rejected_count += 1
                     continue
-                
+
                 urls.append(norm_url)
                 matched_count += 1
-            
+
             if matched_count > 0:
                 logger_extractor.info(
-                    f"[PLP→PDP][Moncler] selector='{link_sel}' added {matched_count} links "
-                    f"(rejected {rejected_count})"
+                    f"[PLP→PDP][Moncler] selector='{link_sel}' added {matched_count} links (rejected {rejected_count})"
                 )
         except Exception as e:
             logger_extractor.debug(f"[PLP→PDP][Moncler] selector='{link_sel}' failed: {e}")
-    
+
     # 3) 重複排除
     urls = list(dict.fromkeys(urls))
-    
+
     # 4) max_links までに制限
     if len(urls) > max_links:
         urls = urls[:max_links]
-    
+
     # CR-ATELIER-002 Step 4-3: Telemetry/ログの実データに合わせた具体化
     # PDP候補hrefのraw一覧を、最大10件までdebugログに出力
     if raw_hrefs:
         sample_hrefs = raw_hrefs[:10]
-        logger_extractor.debug(
-            f"[PLP→PDP][Moncler] Raw hrefs (first 10): {sample_hrefs}"
-        )
-    
+        logger_extractor.debug(f"[PLP→PDP][Moncler] Raw hrefs (first 10): {sample_hrefs}")
+
     # 各hrefがrejectされた理由をカウントし、reject_statsとしてログにまとめる
-    origin_rejected = rejection_stats.get('external_domain', 0) + rejection_stats.get('blocked_domain', 0)
-    locale_rejected = rejection_stats.get('no_en_int_path', 0)
-    path_rejected = rejection_stats.get('no_products_path', 0)
-    trap_rejected = rejection_stats.get('trap_pattern', 0)
+    origin_rejected = rejection_stats.get("external_domain", 0) + rejection_stats.get("blocked_domain", 0)
+    locale_rejected = rejection_stats.get("no_en_int_path", 0)
+    path_rejected = rejection_stats.get("no_products_path", 0)
+    trap_rejected = rejection_stats.get("trap_pattern", 0)
     other_rejected = (
-        rejection_stats.get('no_href', 0) +
-        rejection_stats.get('url_normalization_failed', 0) +
-        rejection_stats.get('other', 0)
+        rejection_stats.get("no_href", 0)
+        + rejection_stats.get("url_normalization_failed", 0)
+        + rejection_stats.get("other", 0)
     )
-    
+
     # CR-ATELIER-002 Step 5-2: レイヤごとの統計情報をログに出力
     logger_extractor.info(
         f"[PLP→PDP][Moncler] Extraction summary: raw={len(raw_hrefs)}, "
@@ -231,24 +220,25 @@ async def extract_moncler_pdp_links(
         f"accepted={len(urls)}, "
         f"layer_stats={layer_stats}"
     )
-    
+
     # accepted==0 の場合、Telemetry に保存
     if not urls and run_context:
         try:
-            from app.agents.browser.telemetry import TelemetryContext, TelemetryClient
+            from app.agents.browser.telemetry import TelemetryContext
+
             # TelemetryClient を取得（ctx から、または新規作成）
             telemetry = None
             if hasattr(ctx, "telemetry"):
                 telemetry = ctx.telemetry
             elif hasattr(ctx, "run_context") and hasattr(ctx.run_context, "telemetry"):
                 telemetry = ctx.run_context.telemetry
-            
+
             if telemetry:
                 tctx = TelemetryContext(
                     site=site_config.get("site_code") or site_config.get("site") or "MONCLER_OFFICIAL",
                     query=getattr(ctx, "query", None) or "",
                     run_id=getattr(run_context, "run_id", None),
-                    stage="plp"
+                    stage="plp",
                 )
                 # CR-ATELIER-002 Step 4-3: Telemetry保存の仕様を明確化
                 # moncler_pdp_links_debug.json のようなファイル名で保存
@@ -277,22 +267,21 @@ async def extract_moncler_pdp_links(
                 )
         except Exception as e:
             logger_extractor.debug(f"[PLP→PDP][Moncler] Failed to save Telemetry: {e}")
-    
+
     logger_extractor.info(
-        f"[PLP→PDP][Moncler] Collected {len(urls)} PDP links "
-        f"(from {raw_elements_count} raw elements)"
+        f"[PLP→PDP][Moncler] Collected {len(urls)} PDP links (from {raw_elements_count} raw elements)"
     )
-    
+
     # CR-ATELIER-002 Step 6-2: outcome 情報を生成
     # 使用されたレイヤを判定
-    layers_used: List[str] = []
+    layers_used: list[str] = []
     if layer_stats.get("primary_raw", 0) > 0 or layer_stats.get("primary_accepted", 0) > 0:
         layers_used.append("primary")
     if layer_stats.get("secondary_raw", 0) > 0 or layer_stats.get("secondary_accepted", 0) > 0:
         layers_used.append("secondary")
     if layer_stats.get("tertiary_raw", 0) > 0 or layer_stats.get("tertiary_accepted", 0) > 0:
         layers_used.append("tertiary")
-    
+
     # outcome 情報を構築（NavigationDriver 側で Telemetry 保存用に使用）
     # ctx に格納できる場合は格納（後方互換性のため）
     outcome_info = {
@@ -304,41 +293,41 @@ async def extract_moncler_pdp_links(
         "rejection_stats": rejection_stats,
         "current_url": target_url,
     }
-    
+
     # ctx が dict-like の場合、outcome_info を格納
     if isinstance(ctx, dict):
         ctx["moncler_outcome"] = outcome_info
     elif hasattr(ctx, "__dict__"):
         # NavigationContext などのオブジェクトの場合、動的に属性を追加
         try:
-            setattr(ctx, "moncler_outcome", outcome_info)
+            ctx.moncler_outcome = outcome_info
         except Exception:
             pass  # 読み取り専用属性の場合は無視
-    
+
     return urls
 
 
-def _get_moncler_rejection_reason(url: str, base_url: str) -> Optional[str]:
+def _get_moncler_rejection_reason(url: str, base_url: str) -> str | None:
     """
     CR-ATELIER-002 Step 3-3: Moncler URLバリデーションでrejectされた理由を取得
-    
+
     Args:
         url: 検証対象のURL
         base_url: ベースURL
-        
+
     Returns:
         Optional[str]: reject理由（有効な場合はNone）
     """
     try:
         parsed = urlparse(url)
-        
+
         # スキームチェック
         if parsed.scheme not in ("http", "https"):
             return "other"
-        
+
         # ホストチェック（Moncler本体のドメインのみ）
         host = parsed.netloc.lower()
-        
+
         # CR-ATELIER-002 Step 4-2: 外部ドメインの明示的な除外を先にチェック
         # （blocked_domains のチェックを host.endswith より前に実行）
         blocked_domains = [
@@ -352,27 +341,27 @@ def _get_moncler_rejection_reason(url: str, base_url: str) -> Optional[str]:
         for blocked in blocked_domains:
             if blocked in host:
                 return "blocked_domain"
-        
+
         if not host.endswith("moncler.com"):
             return "external_domain"
-        
+
         # パスチェック
         path = parsed.path or ""
-        
+
         # CR-ATELIER-002 Step 4-2: 二重ロケールパターンの検出とreject
         # /en-lt/en-int/ や /en-de/en-int/ のような二重ロケールを含むパスはreject
         double_locale_pattern = re.compile(r"/en-[a-z]{2}/en-int/", re.I)
         if double_locale_pattern.search(path):
             return "double_locale_path"
-        
+
         # ロケールパスが /en-int/ で始まること（/en-lt/, /en-de/, /en-jp/ は除外）
         if not path.startswith("/en-int/"):
             return "no_en_int_path"
-        
+
         # path に /products/ を含むこと
         if "/products/" not in path and "/product/" not in path:
             return "no_products_path"
-        
+
         # CR-ATELIER-002 Step 4-2: trapページパターンの除外を強化
         # /search, /client-service, /404 等を含むパスはreject
         trap_patterns = [
@@ -390,11 +379,11 @@ def _get_moncler_rejection_reason(url: str, base_url: str) -> Optional[str]:
         for trap_pattern in trap_patterns:
             if trap_pattern in path.lower():
                 return "trap_pattern"
-        
+
         # クエリパラメータのチェック（shipToCountry=GB が推奨されるが、必須ではない）
         # URLバリデーションの範囲外として、ここではチェックしない
         # （_ensure_expected_locale が現在のページ自体を /en-int/...&shipToCountry=GB に揃える役割）
-        
+
         return None  # 有効なURL
     except Exception:
         return "other"
@@ -403,40 +392,40 @@ def _get_moncler_rejection_reason(url: str, base_url: str) -> Optional[str]:
 def _is_valid_moncler_pdp_url(url: str, base_url: str) -> bool:
     """
     CR-ATELIER-002 Step 4-2: Moncler専用のURLバリデーション
-    
+
     Accept 条件（Moncler用）:
     - origin: https://www.moncler.com
     - path: /en-int/.../products/... を含む
     - query: shipToCountry=GB（推奨されるが、URLバリデーションでは必須ではない）
-    
+
     Reject 条件:
     - origin != moncler.com
     - path に /search, /client-service, /404 等を含む（trapページパターン）
     - パス内に /en-[a-z]{2}/en-int/ のような二重ロケールを含む
-    
+
     注意:
     - ロケール制御（_ensure_expected_locale）は「現在のページ自体」を /en-int/...&shipToCountry=GB に揃える役割
     - URLバリデーションは「PDP候補リンク」をフィルタする役割に限定
-    
+
     Args:
         url: 検証対象のURL
         base_url: ベースURL（同一オリジン判定用）
-    
+
     Returns:
         bool: 有効なMoncler PDP URLの場合True
     """
     try:
         parsed = urlparse(url)
-        
+
         # スキームチェック
         if parsed.scheme not in ("http", "https"):
             return False
-        
+
         # ホストチェック（Moncler本体のドメインのみ）
         host = parsed.netloc.lower()
         if not host.endswith("moncler.com"):
             return False
-        
+
         # 外部ドメインの明示的な除外
         blocked_domains = [
             "onetrust.com",
@@ -449,24 +438,24 @@ def _is_valid_moncler_pdp_url(url: str, base_url: str) -> bool:
         for blocked in blocked_domains:
             if blocked in host:
                 return False
-        
+
         # パスチェック
         path = parsed.path or ""
-        
+
         # CR-ATELIER-002 Step 4-2: 二重ロケールパターンの検出とreject
         # /en-lt/en-int/ や /en-de/en-int/ のような二重ロケールを含むパスはreject
         double_locale_pattern = re.compile(r"/en-[a-z]{2}/en-int/", re.I)
         if double_locale_pattern.search(path):
             return False
-        
+
         # ロケールパスが /en-int/ で始まること（/en-lt/, /en-de/, /en-jp/ は除外）
         if not path.startswith("/en-int/"):
             return False
-        
+
         # path に /products/ を含むこと
         if "/products/" not in path and "/product/" not in path:
             return False
-        
+
         # CR-ATELIER-002 Step 4-2: trapページパターンの除外を強化
         # /search, /client-service, /404 等を含むパスはreject
         trap_patterns = [
@@ -481,17 +470,10 @@ def _is_valid_moncler_pdp_url(url: str, base_url: str) -> bool:
             "/cart",
             "/wishlist",
         ]
-        for trap_pattern in trap_patterns:
-            if trap_pattern in path.lower():
-                return False
-        
-        # クエリパラメータのチェック（shipToCountry=GB が推奨されるが、必須ではない）
-        # URLバリデーションの範囲外として、ここではチェックしない
-        # （_ensure_expected_locale が現在のページ自体を /en-int/...&shipToCountry=GB に揃える役割）
-        
-        return True
+        return all(trap_pattern not in path.lower() for trap_pattern in trap_patterns)
     except Exception:
         return False
+
 
 # ==============================================================================
 
@@ -526,7 +508,7 @@ PreparePageCallable = Optional[Callable[[Page], Awaitable[None]]]
 @dataclass
 class PDPSizeSelectPolicy:
     mode: str = "off"
-    prefer_labels: List[str] = field(default_factory=list)
+    prefer_labels: list[str] = field(default_factory=list)
 
 
 def _is_blocked_host(host: str) -> bool:
@@ -556,7 +538,7 @@ def looks_like_product_url(url: str) -> bool:
 
 
 class BrowserExtractionService:
-    def __init__(self, logger: logging.Logger, runtime_kwargs: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, logger: logging.Logger, runtime_kwargs: dict[str, Any] | None = None) -> None:
         self.logger = logger
         self.runtime_kwargs = runtime_kwargs or {}
         self.moncler_extractor = MonclerPDPExtractor(logger)
@@ -565,12 +547,12 @@ class BrowserExtractionService:
         self,
         *,
         page: Page,
-        context: Optional[BrowserContext],
+        context: BrowserContext | None,
         site: str,
         query: str,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
         run_context: RunContext,
-        site_config: Dict[str, Any],
+        site_config: dict[str, Any],
         target_url: str,
         prepare_page: PreparePageCallable = None,
     ) -> DiscoveryResult:
@@ -608,9 +590,9 @@ class BrowserExtractionService:
         context: BrowserContext,
         site: str,
         query: str,
-        pdp_links: List[str],
-        site_config: Dict[str, Any],
-        settings: Dict[str, Any],
+        pdp_links: list[str],
+        site_config: dict[str, Any],
+        settings: dict[str, Any],
         run_context: RunContext,
         start_t: float,
         budget_ms: int,
@@ -626,7 +608,7 @@ class BrowserExtractionService:
         default_worker_cap_ms = min(90000, max(15000, left_ms))
 
         async def worker(u: str):
-            worker_page: Optional[Page] = None
+            worker_page: Page | None = None
             try:
                 left_ms_worker = self._time_left_ms(start_t, budget_ms)
                 if left_ms_worker <= 2000:
@@ -651,10 +633,8 @@ class BrowserExtractionService:
                 return None
             finally:
                 if worker_page and not worker_page.is_closed():
-                    try:
+                    with contextlib.suppress(Exception):
                         await worker_page.close()
-                    except Exception:
-                        pass
 
         items = await asyncio.gather(*(worker(u) for u in limited_urls), return_exceptions=False)
         valid_items = [it for it in items if isinstance(it, dict) and it]
@@ -675,14 +655,14 @@ class BrowserExtractionService:
         *,
         page: Page,
         url: str,
-        context: Optional[BrowserContext],
+        context: BrowserContext | None,
         site: str,
-        settings: Dict[str, Any],
-        site_config: Dict[str, Any],
-        timeout_override: Optional[int] = None,
+        settings: dict[str, Any],
+        site_config: dict[str, Any],
+        timeout_override: int | None = None,
         prepare_page: PreparePageCallable = None,
-        run_context: Optional[RunContext] = None,
-    ) -> Optional[Dict[str, Any]]:
+        run_context: RunContext | None = None,
+    ) -> dict[str, Any] | None:
         """
         Task D: ProductExtractor を使用して PDP から商品情報を抽出する。
         既存の Moncler 専用抽出やフォールバックロジックも維持。
@@ -703,7 +683,7 @@ class BrowserExtractionService:
                 context=context,
                 prepare_page=prepare_page,
             )
-            
+
             # Stage 5: ProductInfo を Dict に変換（すべてのフィールドを含む、price が None でも返す）
             data = {
                 "title": product_info.title,
@@ -752,7 +732,9 @@ class BrowserExtractionService:
 
         return None
 
-    async def _extract_price_with_size_option(self, page: Page, settings: Dict[str, Any], site_config: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    async def _extract_price_with_size_option(
+        self, page: Page, settings: dict[str, Any], site_config: dict[str, Any] | None = None
+    ) -> str | None:
         price = await self._read_price_or_none(page, site_config)
         if price:
             return price
@@ -770,15 +752,15 @@ class BrowserExtractionService:
             self.logger.debug("Price NOT found even after size selection.")
         return None
 
-    async def _read_price_or_none(self, page: Page, site_config: Optional[Dict[str, Any]] = None) -> Optional[str]:
+    async def _read_price_or_none(self, page: Page, site_config: dict[str, Any] | None = None) -> str | None:
         # Stage 3A-2-5: site_config["selectors"]["pdp"]["price"] から取得
         pdp_selectors = (site_config or {}).get("selectors", {}).get("pdp", {}) or {}
         price_selectors = pdp_selectors.get("price", [])
-        
+
         # フォールバック: 空の場合はデフォルトセレクタを使用
         if not price_selectors:
             price_selectors = PRICE_SELECTORS
-        
+
         for selector in price_selectors:
             try:
                 locator = page.locator(selector).first
@@ -799,17 +781,17 @@ class BrowserExtractionService:
         self,
         page: Page,
         policy: PDPSizeSelectPolicy,
-        settings: Dict[str, Any],
-        site_config: Optional[Dict[str, Any]] = None,
+        settings: dict[str, Any],
+        site_config: dict[str, Any] | None = None,
     ) -> bool:
         # Stage 3A-2-5: site_config["selectors"]["pdp"]["size_button"] から取得
         pdp_selectors = (site_config or {}).get("selectors", {}).get("pdp", {}) or {}
         size_button_selectors = pdp_selectors.get("size_button", [])
-        
+
         # フォールバック: 空の場合はデフォルトセレクタを使用
         if not size_button_selectors:
             size_button_selectors = SIZE_BUTTON_SELECTORS
-        
+
         try:
             buttons = page.locator(", ".join(size_button_selectors))
             count = await buttons.count()
@@ -880,7 +862,7 @@ class BrowserExtractionService:
             await page.wait_for_timeout(500)
         return clicked
 
-    async def _extract_ld_json_price(self, page: Page) -> Optional[Dict[str, Any]]:
+    async def _extract_ld_json_price(self, page: Page) -> dict[str, Any] | None:
         try:
             scripts = await page.query_selector_all("script[type='application/ld+json']")
         except Exception:
@@ -900,7 +882,7 @@ class BrowserExtractionService:
                         return {"price": str(price), "currency": currency, "url": page.url}
         return None
 
-    async def _extract_meta_price(self, page: Page) -> Optional[Dict[str, Any]]:
+    async def _extract_meta_price(self, page: Page) -> dict[str, Any] | None:
         for selector in ("meta[property='og:price:amount']", "meta[name='twitter:data1']"):
             try:
                 node = page.locator(selector).first
@@ -921,4 +903,3 @@ class BrowserExtractionService:
     @staticmethod
     def _slice_timeout_ms(left_ms: int, cap_ms: int) -> int:
         return max(500, min(left_ms, cap_ms))
-

@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 from datetime import datetime
+
 from app.extensions import db
 
 
 class RegionRecommendation(db.Model):
     """F12: 買付先地域最適化レコメンド"""
+
     __tablename__ = "region_recommendation"
 
     id = db.Column(db.Integer, primary_key=True)

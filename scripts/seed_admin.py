@@ -5,6 +5,7 @@
 使い方:
     python scripts/seed_admin.py [--username USER] [--password PASS]
 """
+
 import sys
 from pathlib import Path
 
@@ -18,6 +19,7 @@ from app.models.user import User
 
 def main():
     import argparse
+
     parser = argparse.ArgumentParser(description="Seed initial admin user")
     parser.add_argument("--username", default="admin", help="管理者ユーザー名")
     parser.add_argument("--password", default="changeme", help="管理者パスワード")

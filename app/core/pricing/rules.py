@@ -1,29 +1,28 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
-import json
-from typing import Any, Dict
+from typing import Any
 
 from app.config.constants import (
     DOMESTIC_COMMISSION_RATE,
+    EFFECTIVE_FEE_RATE,
     OVERSEAS_COMMISSION_RATE,
     PLATFORM_FEE_RATE,
-    EFFECTIVE_FEE_RATE,
     TRANSFER_FEE,
 )
 
-
 # 品目別関税率テーブル
 CUSTOMS_RATE_TABLE: dict[str, float] = {
-    "leather": 0.12,        # 革製品: 12%
-    "bag": 0.11,            # バッグ: 11%
-    "shoes": 0.11,          # 靴: 11%
-    "wallet": 0.12,         # 財布(革): 12%
-    "watch": 0.10,          # 腕時計: 10%
-    "accessory": 0.10,      # アクセサリー: 10%
-    "clothing": 0.10,       # 衣類: 10%
-    "default": 0.10,        # デフォルト: 10%
+    "leather": 0.12,  # 革製品: 12%
+    "bag": 0.11,  # バッグ: 11%
+    "shoes": 0.11,  # 靴: 11%
+    "wallet": 0.12,  # 財布(革): 12%
+    "watch": 0.10,  # 腕時計: 10%
+    "accessory": 0.10,  # アクセサリー: 10%
+    "clothing": 0.10,  # 衣類: 10%
+    "default": 0.10,  # デフォルト: 10%
 }
 
 
@@ -66,6 +65,7 @@ class PricingConfig:
     - overseas_commission_rate: 海外仕入れ時の成約手数料率
     - transfer_fee: 振込手数料（固定）
     """
+
     buyma_platform_fee_rate: float = PLATFORM_FEE_RATE
     buyma_effective_fee_rate: float = EFFECTIVE_FEE_RATE
     additional_fee_rate: float = 0.0
@@ -93,31 +93,24 @@ def load_pricing_config(config_path: str | None = None) -> PricingConfig:
         return _DEFAULT_CONFIG
 
     try:
-        data: Dict[str, Any] = json.loads(p.read_text(encoding="utf-8"))
+        data: dict[str, Any] = json.loads(p.read_text(encoding="utf-8"))
 
         # 後方互換性: buyma_fee_rate -> buyma_effective_fee_rate
         effective_rate = data.get(
-            "buyma_effective_fee_rate",
-            data.get("buyma_fee_rate", _DEFAULT_CONFIG.buyma_effective_fee_rate)
+            "buyma_effective_fee_rate", data.get("buyma_fee_rate", _DEFAULT_CONFIG.buyma_effective_fee_rate)
         )
 
         return PricingConfig(
-            buyma_platform_fee_rate=float(
-                data.get("buyma_platform_fee_rate", _DEFAULT_CONFIG.buyma_platform_fee_rate)
-            ),
+            buyma_platform_fee_rate=float(data.get("buyma_platform_fee_rate", _DEFAULT_CONFIG.buyma_platform_fee_rate)),
             buyma_effective_fee_rate=float(effective_rate),
-            additional_fee_rate=float(
-                data.get("additional_fee_rate", _DEFAULT_CONFIG.additional_fee_rate)
-            ),
+            additional_fee_rate=float(data.get("additional_fee_rate", _DEFAULT_CONFIG.additional_fee_rate)),
             domestic_commission_rate=float(
                 data.get("domestic_commission_rate", _DEFAULT_CONFIG.domestic_commission_rate)
             ),
             overseas_commission_rate=float(
                 data.get("overseas_commission_rate", _DEFAULT_CONFIG.overseas_commission_rate)
             ),
-            transfer_fee=float(
-                data.get("transfer_fee", _DEFAULT_CONFIG.transfer_fee)
-            ),
+            transfer_fee=float(data.get("transfer_fee", _DEFAULT_CONFIG.transfer_fee)),
         )
     except Exception:
         # 壊れた設定ファイルは無視してデフォルトへフォールバック

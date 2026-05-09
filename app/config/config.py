@@ -17,7 +17,7 @@ import os
 import sys
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, TypedDict
+from typing import Any, Literal, TypedDict
 
 
 class SiteSelectors(TypedDict, total=False):
@@ -40,7 +40,7 @@ def _sqlite_uri(db_path: Path) -> str:
     return f"sqlite:///{db_path.resolve().as_posix()}"
 
 
-def _load_layered_site_config(config_dir: Path) -> Dict[str, Any]:
+def _load_layered_site_config(config_dir: Path) -> dict[str, Any]:
     """サイト設定を読み込む（base.jsonから）"""
     base_path = config_dir / "sites" / "base.json"
     if not base_path.exists():
@@ -61,6 +61,7 @@ class AppConfig:
 
     機密情報は .env ファイルから os.environ 経由で取得。
     """
+
     # ---- ディレクトリパス ----
     ROOT_DIR: Path = Path(__file__).resolve().parents[2]
     APP_DIR: Path = ROOT_DIR / "app"
@@ -87,7 +88,7 @@ class AppConfig:
     STAGE: Literal["test", "staging", "prod"] = os.getenv("AK_STAGE", "test")
 
     # ---- サイト設定 ----
-    SITES: Dict[str, Any] = _load_layered_site_config(CONFIG_DIR)
+    SITES: dict[str, Any] = _load_layered_site_config(CONFIG_DIR)
 
     # ---- データベース設定 ----
     @staticmethod
@@ -99,7 +100,7 @@ class AppConfig:
         return _sqlite_uri(AppConfig.DATA_DIR / "app.db")
 
     @classmethod
-    def get_flask_config(cls) -> Dict[str, Any]:
+    def get_flask_config(cls) -> dict[str, Any]:
         """Flask app.config に渡す設定dictを返す"""
         return {
             "SECRET_KEY": cls.SECRET_KEY,

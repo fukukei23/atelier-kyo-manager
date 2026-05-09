@@ -17,6 +17,7 @@ def handle_db_error(fallback_endpoint: str | None = None):
         fallback_endpoint: エラー時のリダイレクト先エンドポイント名。
             Noneの場合はリファラまたは main.index にフォールバック。
     """
+
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -27,12 +28,12 @@ def handle_db_error(fallback_endpoint: str | None = None):
                 logger.warning("DB operation failed in %s: %s", func.__name__, e)
                 flash(f"操作に失敗しました: {e}", "error")
                 redirect_url = (
-                    url_for(fallback_endpoint)
-                    if fallback_endpoint
-                    else request.referrer or url_for("main.index")
+                    url_for(fallback_endpoint) if fallback_endpoint else request.referrer or url_for("main.index")
                 )
                 return redirect(redirect_url)
+
         return wrapper
+
     return decorator
 
 
@@ -43,6 +44,7 @@ def handle_api_error(error_key: str = "error", status_code: int = 500):
         error_key: JSONレスポンスのエラーキー名。デフォルト "error"。
         status_code: エラー時のHTTPステータスコード。デフォルト 500。
     """
+
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
@@ -52,5 +54,7 @@ def handle_api_error(error_key: str = "error", status_code: int = 500):
                 db.session.rollback()
                 logger.warning("API operation failed in %s: %s", func.__name__, e)
                 return jsonify({"success": False, error_key: str(e)}), status_code
+
         return wrapper
+
     return decorator

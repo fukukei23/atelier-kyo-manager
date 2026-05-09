@@ -1,12 +1,12 @@
-# -*- coding: utf-8 -*-
 """BrowserOrchestrator Mix-in: 設定ロード + メトリクス記録"""
+
 from __future__ import annotations
 
 import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -16,33 +16,27 @@ class ConfigAndMetricsMixin:
 
     # --- Config helpers ---
 
-    def _load_overrides_json(self) -> Dict[str, Any]:
+    def _load_overrides_json(self) -> dict[str, Any]:
         if not self._overrides_path.exists():
             self.log.warning(
-                f"[Orchestrator] overrides.local.json not found at {self._overrides_path}. "
-                "Returning empty dict."
+                f"[Orchestrator] overrides.local.json not found at {self._overrides_path}. Returning empty dict."
             )
             return {}
         try:
-            with open(self._overrides_path, "r", encoding="utf-8") as f:
+            with open(self._overrides_path, encoding="utf-8") as f:
                 return json.load(f)
         except Exception as e:
-            self.log.error(
-                f"[Orchestrator] Failed to load overrides.local.json: {e}",
-                exc_info=True
-            )
+            self.log.error(f"[Orchestrator] Failed to load overrides.local.json: {e}", exc_info=True)
             return {}
 
-    def _load_site_config_from_overrides(self, site: str) -> Optional[Dict[str, Any]]:
+    def _load_site_config_from_overrides(self, site: str) -> dict[str, Any] | None:
         overrides_json = self._load_overrides_json()
         if not overrides_json:
             return None
         sites = overrides_json.get("sites", {})
         site_config = sites.get(site)
         if not site_config:
-            self.log.warning(
-                f"[Orchestrator] Site '{site}' not found in overrides.local.json"
-            )
+            self.log.warning(f"[Orchestrator] Site '{site}' not found in overrides.local.json")
             return None
         return site_config
 
@@ -52,17 +46,14 @@ class ConfigAndMetricsMixin:
         self,
         *,
         site: str,
-        patch_candidate: Dict[str, Any],
+        patch_candidate: dict[str, Any],
         success: bool,
         result: Any,
     ) -> None:
         if not self.sandbox:
             return
         changes = patch_candidate.get("changes", [])
-        selector_patches = [
-            change for change in changes
-            if change.get("action") == "selector_patch"
-        ]
+        selector_patches = [change for change in changes if change.get("action") == "selector_patch"]
         if not selector_patches:
             return
         for change in selector_patches:
@@ -101,11 +92,11 @@ class ConfigAndMetricsMixin:
         site: str,
         self_healing_attempts: int,
         auto_patches_applied: int,
-        patch_backups: List[str],
+        patch_backups: list[str],
         final_status: str,
-        run_context: Optional[Any] = None,
+        run_context: Any | None = None,
     ) -> None:
-        metrics: Dict[str, Any] = {
+        metrics: dict[str, Any] = {
             "run_id": run_id,
             "site": site,
             "self_healing_attempts": self_healing_attempts,
@@ -133,11 +124,6 @@ class ConfigAndMetricsMixin:
             metrics_path.parent.mkdir(parents=True, exist_ok=True)
             with open(metrics_path, "a", encoding="utf-8") as f:
                 f.write(json.dumps(metrics, ensure_ascii=False) + "\n")
-            self.log.info(
-                f"[Orchestrator][SelfHealingLoop] Metrics saved to {metrics_path}"
-            )
+            self.log.info(f"[Orchestrator][SelfHealingLoop] Metrics saved to {metrics_path}")
         except Exception as e:
-            self.log.error(
-                f"[Orchestrator][SelfHealingLoop] Failed to save metrics: {e}",
-                exc_info=True
-            )
+            self.log.error(f"[Orchestrator][SelfHealingLoop] Failed to save metrics: {e}", exc_info=True)

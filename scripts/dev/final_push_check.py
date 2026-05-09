@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """最終的なプッシュ状態確認"""
+
 import subprocess
 from datetime import datetime
 
+
 def run_cmd(cmd):
-    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd='/home/yn441611/atelier-kyo-manager')
+    result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd="/home/yn441611/atelier-kyo-manager")
     return result.stdout.strip(), result.stderr.strip(), result.returncode
+
 
 output_lines = []
 output_lines.append(f"確認日時: {datetime.now()}")
@@ -44,6 +47,5 @@ result = "\n".join(output_lines)
 print(result)
 
 # ファイルにも保存
-with open('final_push_check_result.txt', 'w', encoding='utf-8') as f:
+with open("final_push_check_result.txt", "w", encoding="utf-8") as f:
     f.write(result)
-

@@ -1,13 +1,14 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import random
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Optional
 from urllib.parse import urlparse
 
 from playwright.async_api import (
@@ -23,7 +24,7 @@ from app.core.run_context import RunContext
 
 # Stealth モジュールをインポート
 try:
-    from scraping.stealth import build_stealth_params_from_site_config, apply_stealth_to_context
+    from scraping.stealth import apply_stealth_to_context, build_stealth_params_from_site_config
 except ImportError:
     # scraping/stealth.py が存在しない場合のフォールバック
     build_stealth_params_from_site_config = None
@@ -71,9 +72,9 @@ UrlNormalizer = Optional[Callable[[str], str]]
 class ProxyEntry:
     label: str
     server: str
-    username: Optional[str] = None
-    password: Optional[str] = None
-    country: Optional[str] = None
+    username: str | None = None
+    password: str | None = None
+    country: str | None = None
     active: bool = True
 
 
@@ -95,14 +96,14 @@ class SessionManager:
         self,
         *,
         site: str,
-        site_config: Dict[str, Any],
+        site_config: dict[str, Any],
         run_context: RunContext,
-        settings: Dict[str, Any],
+        settings: dict[str, Any],
         target_url: str,
         timeout_ms: int,
         likely_plp: bool = False,
-        runtime_kwargs: Optional[Dict[str, Any]] = None,
-        logger: Optional[logging.Logger] = None,
+        runtime_kwargs: dict[str, Any] | None = None,
+        logger: logging.Logger | None = None,
         url_normalizer: UrlNormalizer = None,
     ) -> None:
         self.site = site
@@ -116,31 +117,31 @@ class SessionManager:
         self.logger = logger or logging.getLogger(__name__)
         self._url_normalizer = url_normalizer
 
-        self._playwright: Optional[Playwright] = None
-        self._browser: Optional[Browser] = None
-        self._context: Optional[BrowserContext] = None
-        self._page: Optional[Page] = None
-        self._handles: Optional[_SessionHandles] = None
+        self._playwright: Playwright | None = None
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
+        self._page: Page | None = None
+        self._handles: _SessionHandles | None = None
 
-        self._proxy_pool: Dict[str, List[ProxyEntry]] = self._load_proxy_pool()
-        self._proxy_index: Dict[str, int] = {}
+        self._proxy_pool: dict[str, list[ProxyEntry]] = self._load_proxy_pool()
+        self._proxy_index: dict[str, int] = {}
 
     @property
-    def context(self) -> Optional[BrowserContext]:
+    def context(self) -> BrowserContext | None:
         return self._handles.context if self._handles else None
 
     @property
-    def page(self) -> Optional[Page]:
+    def page(self) -> Page | None:
         return self._handles.page if self._handles else None
 
-    async def __aenter__(self) -> "SessionManager":
+    async def __aenter__(self) -> SessionManager:
         await self._ensure_open()
         return self
 
     async def __aexit__(self, exc_type, exc, tb) -> None:
         await self.close()
 
-    async def open(self) -> "SessionManager":
+    async def open(self) -> SessionManager:
         await self.__aenter__()
         return self
 
@@ -202,9 +203,9 @@ class SessionManager:
 
         # 三値（None/True/False）でproxy判定を行う
         # 優先順位: runtime_kwargs > site_config > discovery_settings > default
-        use_proxy_value: Optional[bool] = None
+        use_proxy_value: bool | None = None
         source: str = "default"
-        
+
         # 1. runtime_kwargsをチェック（keyが存在するかで判定、Falseも有効）
         if "use_proxy" in self.runtime_kwargs:
             use_proxy_value = bool(self.runtime_kwargs["use_proxy"])
@@ -225,9 +226,9 @@ class SessionManager:
             else:
                 use_proxy_value = False
                 source = "default (no proxies)"
-        
+
         use_proxy_flag = use_proxy_value
-        
+
         # ログ出力（use_proxy_flagとsourceを明示）
         self.logger.info(
             "[SessionManager] use_proxy=%s (source=%s, site=%s)",
@@ -235,7 +236,7 @@ class SessionManager:
             source,
             self.site,
         )
-        
+
         # proxyが有効だがproxy_poolにproxyが無い場合の警告
         if use_proxy_flag and not self._get_proxy_list_for_site(self.site):
             self.logger.warning(
@@ -245,13 +246,13 @@ class SessionManager:
             use_proxy_flag = False
 
         max_attempts = MAX_PROXY_RETRIES_PER_RUN if use_proxy_flag else 1
-        last_error: Optional[Exception] = None
-        browser: Optional[Browser] = None
-        context: Optional[BrowserContext] = None
+        last_error: Exception | None = None
+        browser: Browser | None = None
+        context: BrowserContext | None = None
 
         for attempt in range(1, max_attempts + 1):
             proxy_arg = None
-            proxy_entry: Optional[ProxyEntry] = None
+            proxy_entry: ProxyEntry | None = None
             if use_proxy_flag:
                 proxy_entry = self._get_proxy_for_site(self.site, self.site_config)
                 if proxy_entry:
@@ -274,12 +275,12 @@ class SessionManager:
                 )
                 if browser is None:
                     raise RuntimeError("Failed to launch browser")
-                
+
                 context_opts = self._build_context_options()
                 context = await browser.new_context(**context_opts)
                 if context is None:
                     raise RuntimeError("Failed to create browser context")
-                
+
                 # Stealth を適用（context 作成後）
                 if apply_stealth_to_context is not None and build_stealth_params_from_site_config is not None:
                     stealth_params = build_stealth_params_from_site_config(
@@ -304,7 +305,7 @@ class SessionManager:
                 else:
                     # フォールバック: 既存の _setup_init_scripts を使用
                     await self._setup_init_scripts(context)
-                
+
                 self._browser = browser
                 self._context = context
                 break
@@ -360,14 +361,14 @@ class SessionManager:
         )
         return page
 
-    def _build_context_options(self) -> Dict[str, Any]:
+    def _build_context_options(self) -> dict[str, Any]:
         """
         BrowserContext 作成時のオプションを構築する。
         Stealth パラメータは build_stealth_params_from_site_config() から取得し、
         context 作成後に apply_stealth_to_context() で適用する。
         """
-        ctx_opts: Dict[str, Any] = {}
-        
+        ctx_opts: dict[str, Any] = {}
+
         # Stealth パラメータを取得（context 作成時の基本設定として使用）
         if build_stealth_params_from_site_config is not None:
             stealth_params = build_stealth_params_from_site_config(
@@ -385,7 +386,7 @@ class SessionManager:
                 ctx_opts["timezone_id"] = stealth_params["timezone_id"]
             if stealth_params.get("user_agent"):
                 ctx_opts["user_agent"] = stealth_params["user_agent"]
-            
+
             # Accept-Language ヘッダー
             headers = (self.settings.get("extra_http_headers") or {}).copy()
             headers["Accept-Language"] = stealth_params.get("accept_language") or "en-GB,en;q=0.8"
@@ -440,7 +441,9 @@ class SessionManager:
                 extra_globs.append(x)
             else:
                 extra_hosts.append(x.lstrip("."))
-        block_hosts = tuple(h.lower().lstrip(".") for h in EXTERNAL_BLOCKLIST_HOSTS) + tuple(h.lower() for h in extra_hosts)
+        block_hosts = tuple(h.lower().lstrip(".") for h in EXTERNAL_BLOCKLIST_HOSTS) + tuple(
+            h.lower() for h in extra_hosts
+        )
 
         async def _abort(route: Route) -> None:
             await route.abort()
@@ -481,10 +484,8 @@ class SessionManager:
                     await route.continue_()
             except Exception as e:
                 self.logger.warning(f"[SessionManager] route handler error: {e}")
-                try:
+                with contextlib.suppress(Exception):
                     await route.continue_()
-                except Exception:
-                    pass
 
         await context.route("**/*", _locale_rewrite)
         for pat in base_routes + extra_globs:
@@ -597,10 +598,10 @@ class SessionManager:
         """
         )
 
-    def _get_proxy_list_for_site(self, site: str) -> List[ProxyEntry]:
+    def _get_proxy_list_for_site(self, site: str) -> list[ProxyEntry]:
         if not site:
             return []
-        candidates: List[str] = [site, site.upper(), site.lower()]
+        candidates: list[str] = [site, site.upper(), site.lower()]
         base = site
         for suffix in ["_OFFICIAL", "-OFFICIAL", "_official", "-official"]:
             if base.endswith(suffix):
@@ -609,7 +610,7 @@ class SessionManager:
         if base and base != site:
             candidates.extend([base, base.upper(), base.lower()])
         seen: set[str] = set()
-        ordered_candidates: List[str] = []
+        ordered_candidates: list[str] = []
         for cand in candidates:
             if cand not in seen:
                 seen.add(cand)
@@ -620,7 +621,7 @@ class SessionManager:
                 return self._proxy_pool[key_norm]
         return self._proxy_pool.get("DEFAULT", [])
 
-    def _choose_proxy_for_site(self, site: str) -> Optional[ProxyEntry]:
+    def _choose_proxy_for_site(self, site: str) -> ProxyEntry | None:
         proxies = self._get_proxy_list_for_site(site)
         if not proxies:
             return None
@@ -634,25 +635,25 @@ class SessionManager:
                 return entry
         return None
 
-    def _get_proxy_for_site(self, site: str, site_config: Dict[str, Any]) -> Optional[ProxyEntry]:
+    def _get_proxy_for_site(self, site: str, site_config: dict[str, Any]) -> ProxyEntry | None:
         if not self._proxy_pool:
             return None
         site_key = site or site_config.get("id") or self.runtime_kwargs.get("site_name")
-        proxies = self._get_proxy_list_for_site(site_key or "")
+        self._get_proxy_list_for_site(site_key or "")
         chosen = self._choose_proxy_for_site(site_key or "")
         if chosen:
             self.logger.info("[SessionManager] chosen proxy for site=%s → %s", site_key, chosen.server)
         return chosen
 
-    def _build_playwright_proxy_arg(self, entry: ProxyEntry) -> Dict[str, str]:
-        proxy: Dict[str, str] = {"server": entry.server}
+    def _build_playwright_proxy_arg(self, entry: ProxyEntry) -> dict[str, str]:
+        proxy: dict[str, str] = {"server": entry.server}
         if entry.username:
             proxy["username"] = entry.username
         if entry.password:
             proxy["password"] = entry.password
         return proxy
 
-    def _load_proxy_pool(self) -> Dict[str, List[ProxyEntry]]:
+    def _load_proxy_pool(self) -> dict[str, list[ProxyEntry]]:
         if not PROXY_POOL_PATH.exists():
             return {}
         try:
@@ -660,9 +661,9 @@ class SessionManager:
         except Exception as e:
             self.logger.warning(f"[SessionManager] failed to load proxy pool: {e}")
             return {}
-        pool: Dict[str, List[ProxyEntry]] = {}
+        pool: dict[str, list[ProxyEntry]] = {}
         for key, cfg in (raw or {}).items():
-            entries: List[ProxyEntry] = []
+            entries: list[ProxyEntry] = []
             for p in (cfg or {}).get("proxies") or []:
                 try:
                     entries.append(
@@ -727,5 +728,3 @@ class SessionManager:
                 )
             except Exception as e:
                 self.logger.warning(f"[SessionManager] localStorage restore failed: {e}")
-
-

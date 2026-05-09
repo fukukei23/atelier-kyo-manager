@@ -20,9 +20,11 @@ from . import bp
 def listing_progress_view():
     """品出し進捗一覧"""
     today = _date.today()
-    records = ListingProgress.query.filter(
-        ListingProgress.record_date >= today.replace(day=1)
-    ).order_by(ListingProgress.record_date.desc()).all()
+    records = (
+        ListingProgress.query.filter(ListingProgress.record_date >= today.replace(day=1))
+        .order_by(ListingProgress.record_date.desc())
+        .all()
+    )
     summary = ListingProgress.get_monthly_summary(today.year, today.month)
     return render_template("listing_progress.html", records=records, summary=summary)
 

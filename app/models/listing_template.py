@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 from datetime import datetime
 
 from app.extensions import db
@@ -13,9 +14,7 @@ class ListingTemplate(db.Model):
     category = db.Column(db.String(50), default="general")
     is_default = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(
-        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def render(self, product) -> str:
         mapping = {

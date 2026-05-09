@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 from datetime import datetime
+
 from app.extensions import db
 
 
 class StockCheck(db.Model):
     """F10: 在庫＆価格チェック"""
+
     __tablename__ = "stock_check"
 
     id = db.Column(db.Integer, primary_key=True)

@@ -8,7 +8,6 @@ from __future__ import annotations
 import io
 import logging
 from pathlib import Path
-from typing import Optional
 
 import requests
 from PIL import Image
@@ -49,9 +48,7 @@ class ImageService:
                 logger.warning("DL error for %s: %s", url, e)
         return saved
 
-    def _fetch_image(
-        self, url: str, timeout: int = 20, max_bytes: int = 5_000_000
-    ) -> Optional[Image.Image]:
+    def _fetch_image(self, url: str, timeout: int = 20, max_bytes: int = 5_000_000) -> Image.Image | None:
         """URLから画像を取得（UA偽装・サイズ制限付き）"""
         headers = {
             "User-Agent": (
@@ -68,9 +65,7 @@ class ImageService:
     # ------------------------------------------------------------------
     # 背景除去
     # ------------------------------------------------------------------
-    def remove_backgrounds(
-        self, input_paths: list[Path], product_id: int
-    ) -> list[Path]:
+    def remove_backgrounds(self, input_paths: list[Path], product_id: int) -> list[Path]:
         """rembg で背景除去。出力先: data/catalog_images/{product_id}/processed/"""
         proc_dir = self.base_dir / str(product_id) / "processed"
         proc_dir.mkdir(parents=True, exist_ok=True)

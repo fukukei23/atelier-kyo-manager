@@ -6,7 +6,6 @@ from __future__ import annotations
 import csv
 import io
 import json as _json
-from typing import List
 
 from flask import current_app, flash, make_response, redirect, render_template, request, url_for
 from flask_login import login_required
@@ -207,16 +206,37 @@ def import_csv():
 @login_required
 def export_csv():
     """CSV エクスポート"""
-    products: List[Product] = Product.query.order_by(Product.id.asc()).all()
+    products: list[Product] = Product.query.order_by(Product.id.asc()).all()
     headers = [
-        "id", "name", "brand", "purchase_price", "selling_price",
-        "transaction_fee", "shipping_cost", "customs_duty", "procurement_fee",
-        "supplier_url", "image_url", "stock_status", "brand_tier",
-        "source_type", "source_region", "color", "size", "material",
-        "description", "retail_price", "target_profit_rate",
-        "listing_status", "created_at", "updated_at",
+        "id",
+        "name",
+        "brand",
+        "purchase_price",
+        "selling_price",
+        "transaction_fee",
+        "shipping_cost",
+        "customs_duty",
+        "procurement_fee",
+        "supplier_url",
+        "image_url",
+        "stock_status",
+        "brand_tier",
+        "source_type",
+        "source_region",
+        "color",
+        "size",
+        "material",
+        "description",
+        "retail_price",
+        "target_profit_rate",
+        "listing_status",
+        "created_at",
+        "updated_at",
         # --- FR-005 実ベース利益計算 ---
-        "warehouse_shipping_cost", "original_currency", "exchange_rate", "item_category",
+        "warehouse_shipping_cost",
+        "original_currency",
+        "exchange_rate",
+        "item_category",
     ]
 
     buf = io.StringIO()
@@ -224,37 +244,39 @@ def export_csv():
     writer.writeheader()
 
     for p in products:
-        writer.writerow({
-            "id": p.id,
-            "name": p.name,
-            "brand": p.brand,
-            "purchase_price": p.purchase_price,
-            "selling_price": p.selling_price,
-            "transaction_fee": p.transaction_fee,
-            "shipping_cost": p.shipping_cost,
-            "customs_duty": p.customs_duty,
-            "procurement_fee": p.procurement_fee,
-            "supplier_url": p.supplier_url,
-            "image_url": p.image_url,
-            "stock_status": int(bool(p.stock_status)),
-            "brand_tier": p.brand_tier or "",
-            "source_type": p.source_type or "",
-            "source_region": p.source_region or "",
-            "color": p.color or "",
-            "size": p.size or "",
-            "material": p.material or "",
-            "description": p.description or "",
-            "retail_price": p.retail_price or "",
-            "target_profit_rate": round((p.target_profit_rate or 0) * 100, 1),
-            "listing_status": p.listing_status or "draft",
-            "created_at": (p.created_at.isoformat(sep=" ", timespec="seconds") if p.created_at else ""),
-            "updated_at": (p.updated_at.isoformat(sep=" ", timespec="seconds") if p.updated_at else ""),
-            # --- FR-005 実ベース利益計算 ---
-            "warehouse_shipping_cost": p.warehouse_shipping_cost or 0,
-            "original_currency": p.original_currency or "JPY",
-            "exchange_rate": p.exchange_rate or 1.0,
-            "item_category": p.item_category or "",
-        })
+        writer.writerow(
+            {
+                "id": p.id,
+                "name": p.name,
+                "brand": p.brand,
+                "purchase_price": p.purchase_price,
+                "selling_price": p.selling_price,
+                "transaction_fee": p.transaction_fee,
+                "shipping_cost": p.shipping_cost,
+                "customs_duty": p.customs_duty,
+                "procurement_fee": p.procurement_fee,
+                "supplier_url": p.supplier_url,
+                "image_url": p.image_url,
+                "stock_status": int(bool(p.stock_status)),
+                "brand_tier": p.brand_tier or "",
+                "source_type": p.source_type or "",
+                "source_region": p.source_region or "",
+                "color": p.color or "",
+                "size": p.size or "",
+                "material": p.material or "",
+                "description": p.description or "",
+                "retail_price": p.retail_price or "",
+                "target_profit_rate": round((p.target_profit_rate or 0) * 100, 1),
+                "listing_status": p.listing_status or "draft",
+                "created_at": (p.created_at.isoformat(sep=" ", timespec="seconds") if p.created_at else ""),
+                "updated_at": (p.updated_at.isoformat(sep=" ", timespec="seconds") if p.updated_at else ""),
+                # --- FR-005 実ベース利益計算 ---
+                "warehouse_shipping_cost": p.warehouse_shipping_cost or 0,
+                "original_currency": p.original_currency or "JPY",
+                "exchange_rate": p.exchange_rate or 1.0,
+                "item_category": p.item_category or "",
+            }
+        )
 
     resp = make_response(buf.getvalue())
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
@@ -288,30 +310,42 @@ def export_listing_candidates():
     candidates = Product.listing_candidates(min_profit_rate=min_rate)
 
     headers = [
-        "id", "name", "brand", "brand_tier", "purchase_price", "selling_price",
-        "profit", "profit_rate", "stock_status", "listing_status",
-        "target_profit_rate", "source_type", "item_category",
+        "id",
+        "name",
+        "brand",
+        "brand_tier",
+        "purchase_price",
+        "selling_price",
+        "profit",
+        "profit_rate",
+        "stock_status",
+        "listing_status",
+        "target_profit_rate",
+        "source_type",
+        "item_category",
     ]
     buf = io.StringIO()
     writer = csv.DictWriter(buf, fieldnames=headers)
     writer.writeheader()
 
     for p in candidates:
-        writer.writerow({
-            "id": p.id,
-            "name": p.name,
-            "brand": p.brand or "",
-            "brand_tier": p.brand_tier or "",
-            "purchase_price": p.purchase_price,
-            "selling_price": p.selling_price,
-            "profit": round(p.calculate_profit(), 0),
-            "profit_rate": round(p.profit_rate(), 1),
-            "stock_status": int(bool(p.stock_status)),
-            "listing_status": p.listing_status or "draft",
-            "target_profit_rate": round((p.target_profit_rate or 0) * 100, 1),
-            "source_type": p.source_type or "",
-            "item_category": p.item_category or "",
-        })
+        writer.writerow(
+            {
+                "id": p.id,
+                "name": p.name,
+                "brand": p.brand or "",
+                "brand_tier": p.brand_tier or "",
+                "purchase_price": p.purchase_price,
+                "selling_price": p.selling_price,
+                "profit": round(p.calculate_profit(), 0),
+                "profit_rate": round(p.profit_rate(), 1),
+                "stock_status": int(bool(p.stock_status)),
+                "listing_status": p.listing_status or "draft",
+                "target_profit_rate": round((p.target_profit_rate or 0) * 100, 1),
+                "source_type": p.source_type or "",
+                "item_category": p.item_category or "",
+            }
+        )
 
     resp = make_response(buf.getvalue())
     resp.headers["Content-Type"] = "text/csv; charset=utf-8"
@@ -424,7 +458,7 @@ def pipeline_result(product_id: int):
 @login_required
 def upload_images(product_id: int):
     """手動画像アップロード（スクレイピングブロック時フォールバック）"""
-    product = Product.query.get_or_404(product_id)
+    Product.query.get_or_404(product_id)
     files = request.files.getlist("images")
     if not files or all(f.filename == "" for f in files):
         flash("画像ファイルが選択されていません。", "error")

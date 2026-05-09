@@ -1,4 +1,5 @@
 """pricing_calculator のテスト — 外部APIはmock"""
+
 from unittest.mock import patch
 
 from app.utils.pricing_calculator import calculate_profit, get_exchange_rate
@@ -16,6 +17,7 @@ class TestGetExchangeRate:
     @patch("app.utils.pricing_calculator.requests.get")
     def test_api_failure_returns_default(self, mock_get):
         import requests as req
+
         mock_get.side_effect = req.exceptions.RequestException("timeout")
         rate = get_exchange_rate("USD", "JPY")
         assert rate == 150.0

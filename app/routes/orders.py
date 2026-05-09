@@ -10,7 +10,7 @@ from flask_login import login_required
 from sqlalchemy import desc, func
 
 from app.extensions import db
-from app.models.order import Order, EXPECTED_PAYMENT_DAYS, PAYMENT_METHOD_EXTENSION_DAYS
+from app.models.order import PAYMENT_METHOD_EXTENSION_DAYS, Order
 from app.utils.decorators import handle_db_error
 
 from . import bp
@@ -39,8 +39,9 @@ def create_order():
         customs_duty = float(request.form.get("customs_duty", 0) or 0)
         if selling_price < 0 or purchase_cost < 0 or customs_duty < 0:
             flash("金額に負の値は入力できません。", "error")
-            return render_template("order_form.html", order=None,
-                                   payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys()))
+            return render_template(
+                "order_form.html", order=None, payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys())
+            )
 
         order = Order(
             order_number=request.form.get("order_number", ""),
@@ -62,8 +63,7 @@ def create_order():
         flash("注文を登録しました。", "success")
         return redirect(url_for("main.order_list"))
 
-    return render_template("order_form.html", order=None,
-                           payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys()))
+    return render_template("order_form.html", order=None, payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys()))
 
 
 @bp.route("/orders/<int:oid>/edit", methods=["GET", "POST"])
@@ -84,8 +84,9 @@ def edit_order(oid: int):
         order.customs_duty = float(request.form.get("customs_duty", 0) or 0)
         if order.selling_price < 0 or order.purchase_cost < 0 or order.customs_duty < 0:
             flash("金額に負の値は入力できません。", "error")
-            return render_template("order_form.html", order=order,
-                                   payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys()))
+            return render_template(
+                "order_form.html", order=order, payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys())
+            )
         order.payment_method = request.form.get("payment_method", order.payment_method)
         order.source_type = request.form.get("source_type", "domestic")
         order.status = request.form.get("status", order.status)
@@ -96,8 +97,7 @@ def edit_order(oid: int):
         flash("注文を更新しました。", "success")
         return redirect(url_for("main.order_list"))
 
-    return render_template("order_form.html", order=order,
-                           payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys()))
+    return render_template("order_form.html", order=order, payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys()))
 
 
 @bp.post("/orders/<int:oid>/delete")
@@ -116,26 +116,28 @@ def delete_order(oid: int):
 @login_required
 def api_order_dashboard():
     """18日ルールダッシュボードAPI"""
-    now = datetime.utcnow()
+    datetime.utcnow()
     orders = Order.query.filter(Order.status.in_(["pending", "shipped"])).all()
     result = []
     for o in orders:
         remaining = o.remaining_days()
-        result.append({
-            "id": o.id,
-            "order_number": o.order_number,
-            "product_name": o.product_name,
-            "order_date": o.order_date.isoformat() if o.order_date else None,
-            "deadline_18": o.deadline_18.isoformat() if o.deadline_18 else None,
-            "extension_deadline": o.extension_deadline.isoformat() if o.extension_deadline else None,
-            "remaining_days": remaining,
-            "color": o.deadline_color(),
-            "message": o.deadline_message(),
-            "extension_requested": o.extension_requested or False,
-            "profit": o.profit,
-            "status": o.status,
-            "payment_method": o.payment_method,
-        })
+        result.append(
+            {
+                "id": o.id,
+                "order_number": o.order_number,
+                "product_name": o.product_name,
+                "order_date": o.order_date.isoformat() if o.order_date else None,
+                "deadline_18": o.deadline_18.isoformat() if o.deadline_18 else None,
+                "extension_deadline": o.extension_deadline.isoformat() if o.extension_deadline else None,
+                "remaining_days": remaining,
+                "color": o.deadline_color(),
+                "message": o.deadline_message(),
+                "extension_requested": o.extension_requested or False,
+                "profit": o.profit,
+                "status": o.status,
+                "payment_method": o.payment_method,
+            }
+        )
     return jsonify(result)
 
 
@@ -168,10 +170,15 @@ def cashflow_dashboard():
     daily_forecast: list[dict] = []
     running_balance = 0.0
 
-    past_profit = db.session.query(func.coalesce(func.sum(Order.profit), 0)).filter(
-        Order.status == "completed",
-        Order.completed_date >= now - timedelta(days=30),
-    ).scalar() or 0
+    past_profit = (
+        db.session.query(func.coalesce(func.sum(Order.profit), 0))
+        .filter(
+            Order.status == "completed",
+            Order.completed_date >= now - timedelta(days=30),
+        )
+        .scalar()
+        or 0
+    )
 
     for i in range(forecast_days):
         target_date = (now + timedelta(days=i)).date()
@@ -180,14 +187,18 @@ def cashflow_dashboard():
             if o.expected_payment_date and o.expected_payment_date.date() == target_date:
                 inflow += float(o.profit or 0)
         running_balance += inflow
-        daily_forecast.append({
-            "date": target_date.isoformat(),
-            "inflow": inflow,
-            "balance": running_balance,
-        })
+        daily_forecast.append(
+            {
+                "date": target_date.isoformat(),
+                "inflow": inflow,
+                "balance": running_balance,
+            }
+        )
 
-    return render_template("cashflow.html",
-                           daily_forecast=daily_forecast,
-                           pending_count=len(pending_orders),
-                           past_profit=past_profit,
-                           forecast_days=forecast_days)
+    return render_template(
+        "cashflow.html",
+        daily_forecast=daily_forecast,
+        pending_count=len(pending_orders),
+        past_profit=past_profit,
+        forecast_days=forecast_days,
+    )

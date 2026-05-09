@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ==============================================================================
 # File Name : app/utils/observability.py
 # Version   : 3.2.2J (Logger Fallback + Maybe-Await, aligned with RunContext 1.6)
@@ -17,25 +16,30 @@
 #   多様な `RunContext` の実装に対して、安定した観測機能を提供します。
 # ==============================================================================
 from __future__ import annotations
-import time
+
+import inspect
 import json
 import logging
-import inspect
-from typing import Any, Dict, List, Optional, TYPE_CHECKING
+import time
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from playwright.async_api import Page
+
     from app.core.run_context import RunContext
 
-def _log(rc: "RunContext"):
+
+def _log(rc: RunContext):
     """run_context.logger が無ければモジュールロガーにフォールバック"""
     return getattr(rc, "logger", logging.getLogger("observability"))
+
 
 async def _maybe_await(x):
     """引数が Awaitable であれば await し、そうでなければそのまま返す"""
     return (await x) if inspect.isawaitable(x) else x
 
-async def save_dom(run_context: "RunContext", page: "Page", name: str):
+
+async def save_dom(run_context: RunContext, page: Page, name: str):
     """Saves the current DOM of the page as an HTML file."""
     if not page or page.is_closed():
         return
@@ -45,18 +49,20 @@ async def save_dom(run_context: "RunContext", page: "Page", name: str):
     except Exception as e:
         _log(run_context).warning(f"Failed to save DOM for '{name}': {e}")
 
-async def save_json(run_context: "RunContext", data: Any, name: str):
+
+async def save_json(run_context: RunContext, data: Any, name: str):
     """Saves any data as a JSON file."""
     try:
         await _maybe_await(run_context.save_json(f"{name}.json", data))
     except Exception as e:
         _log(run_context).warning(f"Failed to save JSON for '{name}': {e}")
 
-async def count_selectors(run_context: "RunContext", page: "Page", selectors: List[str], *, name: str = "selector_counts"):
+
+async def count_selectors(run_context: RunContext, page: Page, selectors: list[str], *, name: str = "selector_counts"):
     """Counts elements for a list of selectors and saves the result as JSON."""
     if not page or page.is_closed():
         return
-    counts: Dict[str, int] = {}
+    counts: dict[str, int] = {}
     for s in selectors or []:
         try:
             counts[s] = await page.locator(s).count()
@@ -64,7 +70,8 @@ async def count_selectors(run_context: "RunContext", page: "Page", selectors: Li
             counts[s] = -1
     await save_json(run_context, {"selector_counts": counts}, name)
 
-async def save_raw_hrefs(run_context: "RunContext", hrefs: List[str], *, name: str = "raw_hrefs", limit: int = 200):
+
+async def save_raw_hrefs(run_context: RunContext, hrefs: list[str], *, name: str = "raw_hrefs", limit: int = 200):
     """Saves a list of URLs as a JSON file."""
     try:
         data = {"count": len(hrefs or []), "raw_hrefs": list(hrefs or [])[:limit]}
@@ -72,11 +79,14 @@ async def save_raw_hrefs(run_context: "RunContext", hrefs: List[str], *, name: s
     except Exception as e:
         _log(run_context).warning(f"Failed to save raw hrefs '{name}': {e}")
 
-async def write_fail_snapshot(run_context: "RunContext", page: Optional["Page"], final_url: Optional[str], error: Exception, site_config: Dict):
+
+async def write_fail_snapshot(
+    run_context: RunContext, page: Page | None, final_url: str | None, error: Exception, site_config: dict
+):
     """Saves a snapshot of failure information (DOM, screenshot, etc.)."""
-    visible_counts: Dict[str, int] = {}
+    visible_counts: dict[str, int] = {}
     note = f"Final URL: {final_url}\nError: {error}"
-    screenshot_path: Optional[str] = None
+    screenshot_path: str | None = None
 
     if page and not page.is_closed():
         await save_dom(run_context, page, "failure_dom")
@@ -88,7 +98,9 @@ async def write_fail_snapshot(run_context: "RunContext", page: Optional["Page"],
 
         try:
             pdp_cfg = (site_config.get("selectors") or {}).get("pdp", {}) or {}
-            markers = list(dict.fromkeys((pdp_cfg.get("title_selectors") or []) + (pdp_cfg.get("price_selectors") or [])))
+            markers = list(
+                dict.fromkeys((pdp_cfg.get("title_selectors") or []) + (pdp_cfg.get("price_selectors") or []))
+            )
             for s in markers:
                 try:
                     visible_counts[s] = await page.locator(s).count()
@@ -99,8 +111,8 @@ async def write_fail_snapshot(run_context: "RunContext", page: Optional["Page"],
 
     md_report = f"""# Failure Snapshot
 
-- **Run ID:** `{getattr(run_context, 'run_id', 'unknown')}`
-- **Timestamp:** `{time.strftime('%Y-%m-%d %H:%M:%S Z', time.gmtime())}`
+- **Run ID:** `{getattr(run_context, "run_id", "unknown")}`
+- **Timestamp:** `{time.strftime("%Y-%m-%d %H:%M:%S Z", time.gmtime())}`
 - **Note:** `{note}`
 
 ## Key Selector Counts at Failure
@@ -110,7 +122,7 @@ async def write_fail_snapshot(run_context: "RunContext", page: Optional["Page"],
 
 ## Available Artifacts
 - `failure_dom.html` (if page was available)
-- `{screenshot_path or '99_failure.png (if captured)'}`
+- `{screenshot_path or "99_failure.png (if captured)"}`
 - `plp_dom_initial_materialized.html`
 - `plp_dom_search_fallback.html`
 - `selector_counts_plp_initial.json`

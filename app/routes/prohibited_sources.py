@@ -26,8 +26,12 @@ def api_check_source():
 @login_required
 def api_list_prohibited_sources():
     items = ProhibitedSource.query.order_by(ProhibitedSource.id.asc()).all()
-    return jsonify([{"id": s.id, "domain": s.domain, "reason": s.reason,
-                     "severity": s.severity, "source_type": s.source_type} for s in items])
+    return jsonify(
+        [
+            {"id": s.id, "domain": s.domain, "reason": s.reason, "severity": s.severity, "source_type": s.source_type}
+            for s in items
+        ]
+    )
 
 
 @bp.post("/api/prohibited-sources")

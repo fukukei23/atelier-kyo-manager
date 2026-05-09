@@ -1,10 +1,9 @@
-# -*- coding: utf-8 -*-
 # File: app/agents/plugins/base.py
 # Version: 0.1.0
 # Purpose: スクレイピング戦略プラグインの基底クラス
 
 import logging
-from urllib.parse import urlparse, urlunparse, urlencode, parse_qsl
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +30,7 @@ def _apply_stealth(page_or_context) -> None:
     """Stealth設定を適用（遅延インポートで高速化）"""
     try:
         from playwright_stealth.stealth import Stealth
+
         stealth = Stealth(**STEALTH_CONFIG)
         stealth.apply_stealth_async(page_or_context)
     except ImportError:
@@ -41,6 +41,7 @@ def _apply_stealth(page_or_context) -> None:
 
 class StrategyPlugin:
     """サイト別のスクレイピング戦略を差し替えるための基底クラス。"""
+
     site: str = ""  # 例: "MONCLER_OFFICIAL"
 
     # ---- フック群（必要なものだけオーバーライド） ----
@@ -62,7 +63,8 @@ class StrategyPlugin:
 
     # ---- ユーティリティ（派生クラスから安全に利用） ----
     def strip_fragment(self, url: str) -> str:
-        p = urlparse(url); return urlunparse(p._replace(fragment=""))
+        p = urlparse(url)
+        return urlunparse(p._replace(fragment=""))
 
     def force_query(self, url: str, fixed: dict) -> str:
         p = urlparse(url)

@@ -6,21 +6,23 @@ import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models.order import Order, PAYMENT_METHOD_EXTENSION_DAYS
-from app.models.partner import Partner
 from app.models.listing_template import ListingTemplate
+from app.models.order import Order
+from app.models.partner import Partner
 from app.models.product import Product
 
 
 @pytest.fixture(scope="function")
 def app():
     app = create_app()
-    app.config.update({
-        "TESTING": True,
-        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-        "WTF_CSRF_ENABLED": False,
-        "SECRET_KEY": "test-secret",
-    })
+    app.config.update(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "WTF_CSRF_ENABLED": False,
+            "SECRET_KEY": "test-secret",
+        }
+    )
     with app.app_context():
         db.create_all()
         yield app
@@ -77,7 +79,8 @@ class TestOrderModel:
     def test_deadline_color_green(self, app):
         with app.app_context():
             order = Order(
-                order_number="B-004", product_name="Test",
+                order_number="B-004",
+                product_name="Test",
                 order_date=datetime.utcnow() - timedelta(days=5),
             )
             order.calc_deadlines()
@@ -86,7 +89,8 @@ class TestOrderModel:
     def test_deadline_color_black(self, app):
         with app.app_context():
             order = Order(
-                order_number="B-005", product_name="Test",
+                order_number="B-005",
+                product_name="Test",
                 order_date=datetime.utcnow() - timedelta(days=30),
             )
             order.calc_deadlines()
@@ -100,7 +104,8 @@ class TestOrderModel:
     def test_deadline_message_expired(self, app):
         with app.app_context():
             order = Order(
-                order_number="B-007", product_name="Test",
+                order_number="B-007",
+                product_name="Test",
                 order_date=datetime.utcnow() - timedelta(days=30),
             )
             order.calc_deadlines()
@@ -187,5 +192,5 @@ class TestListingTemplateModel:
                 template_text="{{brand}} {{color}}",
             )
             product = Product(name="Test")
-            result = template.render(product)
-            assert "Test" not in result or True  # brand is empty
+            template.render(product)
+            assert True  # brand is empty

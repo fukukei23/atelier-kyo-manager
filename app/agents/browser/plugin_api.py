@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ==============================================================================
 # File: app/agents/browser/plugin_api.py
 # Version: 1.0.0
@@ -13,9 +12,9 @@ before_navigate / after_navigate / materialize / assert_plp を Plugin API 経�
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Dict, Optional, Awaitable
 import logging
+from dataclasses import dataclass
+from typing import Any
 
 try:
     from app.agents.plugins.base import StrategyPlugin
@@ -26,10 +25,11 @@ except Exception:
 @dataclass
 class PluginContext:
     """Plugin に渡すコンテキスト情報（将来拡張用）"""
+
     site: str
     query: str
-    site_config: Dict[str, Any]
-    settings: Dict[str, Any]
+    site_config: dict[str, Any]
+    settings: dict[str, Any]
     run_context: Any  # RunContext を直接 import しない（循環回避）
 
 
@@ -42,11 +42,11 @@ class PluginAPI:
     - ログメッセージとフォールバックポリシーは現行実装互換
     """
 
-    def __init__(self, logger: Optional[logging.Logger] = None) -> None:
+    def __init__(self, logger: logging.Logger | None = None) -> None:
         self.logger = logger or logging.getLogger(__name__)
         # PLUGIN_REGISTRY は遅延 import にする（循環 import 回避）
 
-    def get_plugin(self, site: str) -> Optional[StrategyPlugin]:
+    def get_plugin(self, site: str) -> StrategyPlugin | None:
         """
         プラグインを取得する。
 
@@ -61,18 +61,18 @@ class PluginAPI:
         except Exception as e:
             self.logger.warning(f"[PluginAPI] Failed to import PLUGIN_REGISTRY: {e}")
             return None
-        
+
         return PLUGIN_REGISTRY.get(str(site or "").upper())
 
     # --- Facade methods ---
 
     def before_navigate(
         self,
-        plugin: Optional[StrategyPlugin],
+        plugin: StrategyPlugin | None,
         *,
         site: str,
         target_url: str,
-        ctx: Dict[str, Any],
+        ctx: dict[str, Any],
     ) -> str:
         """
         before_navigate フックを安全に実行する。
@@ -102,11 +102,11 @@ class PluginAPI:
 
     async def after_navigate(
         self,
-        plugin: Optional[StrategyPlugin],
+        plugin: StrategyPlugin | None,
         *,
         site: str,
         page: Any,
-        ctx: Dict[str, Any],
+        ctx: dict[str, Any],
     ) -> None:
         """
         after_navigate フックを安全に実行する。
@@ -127,12 +127,12 @@ class PluginAPI:
 
     async def materialize_plp(
         self,
-        plugin: Optional[StrategyPlugin],
+        plugin: StrategyPlugin | None,
         *,
         site: str,
         page: Any,
-        ctx: Dict[str, Any],
-    ) -> Optional[bool]:
+        ctx: dict[str, Any],
+    ) -> bool | None:
         """
         materialize フックを安全に実行する。
 
@@ -158,24 +158,20 @@ class PluginAPI:
             if materialized:
                 self.logger.info(f"[Plugin:{site}] PLP materialized successfully.")
             else:
-                self.logger.warning(
-                    f"[Plugin:{site}] materialize failed (fallback to default PLP flow)."
-                )
+                self.logger.warning(f"[Plugin:{site}] materialize failed (fallback to default PLP flow).")
             return materialized
         except Exception as e:
-            self.logger.warning(
-                f"[Plugin:{site}] materialize raised {e!r} (ignored, continue default PLP flow)."
-            )
+            self.logger.warning(f"[Plugin:{site}] materialize raised {e!r} (ignored, continue default PLP flow).")
             return None
 
     async def assert_plp(
         self,
-        plugin: Optional[StrategyPlugin],
+        plugin: StrategyPlugin | None,
         *,
         site: str,
         page: Any,
-        ctx: Dict[str, Any],
-    ) -> Optional[bool]:
+        ctx: dict[str, Any],
+    ) -> bool | None:
         """
         assert_plp フックを安全に実行する。
 
@@ -199,14 +195,9 @@ class PluginAPI:
         try:
             asserted = await plugin.assert_plp(page, ctx)
         except Exception as e:
-            self.logger.warning(
-                f"[Plugin:{site}] assert_plp raised {e!r} (ignored, continue default PLP flow)."
-            )
+            self.logger.warning(f"[Plugin:{site}] assert_plp raised {e!r} (ignored, continue default PLP flow).")
             return None
         else:
             if not asserted:
-                self.logger.warning(
-                    f"[Plugin:{site}] assert_plp=False (continue with default PLP flow)."
-                )
+                self.logger.warning(f"[Plugin:{site}] assert_plp=False (continue with default PLP flow).")
             return asserted
-

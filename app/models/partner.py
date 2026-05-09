@@ -4,9 +4,11 @@
 # ======================================================================
 
 from __future__ import annotations
+
 from datetime import datetime
 
-from sqlalchemy import Integer, String, Float, DateTime, Text
+from sqlalchemy import DateTime, Float, Integer, String, Text
+
 from app.extensions import db
 
 

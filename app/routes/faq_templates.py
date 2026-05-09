@@ -69,9 +69,11 @@ def api_faq_match():
     matches = []
     for faq in faqs:
         if faq.match(text):
-            matches.append({
-                "id": faq.id,
-                "category": faq.category,
-                "answer_template": faq.answer_template,
-            })
+            matches.append(
+                {
+                    "id": faq.id,
+                    "category": faq.category,
+                    "answer_template": faq.answer_template,
+                }
+            )
     return jsonify({"success": True, "matches": matches})

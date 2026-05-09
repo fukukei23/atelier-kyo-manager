@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 テスト実行スクリプト（エイリアス）
 run_pytest_direct.py へのショートカット
@@ -21,4 +20,3 @@ from run_pytest_direct import main
 
 if __name__ == "__main__":
     sys.exit(main())
-

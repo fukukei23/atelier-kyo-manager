@@ -6,10 +6,8 @@
 
 from __future__ import annotations
 
-from flask import Blueprint, redirect, render_template, request, url_for, flash
-from flask_login import login_user, logout_user, login_required, current_user
-
-from .extensions import db
+from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask_login import current_user, login_required, login_user, logout_user
 
 bp = Blueprint("auth", __name__)
 
@@ -28,6 +26,7 @@ def login():
             return render_template("auth/login.html"), 400
 
         from .models.user import User
+
         user = User.query.filter_by(username=username).first()
 
         if user is None or not user.check_password(password):

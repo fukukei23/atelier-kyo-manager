@@ -5,17 +5,20 @@
 #    AILlmControllerを通じて商品説明文を生成するエージェント。
 # ----------------------------------------------------------------
 
-from .ai_llm_controller import AILlmController
 import logging
+
+from .ai_llm_controller import AILlmController
 
 logger = logging.getLogger(__name__)
 
+
 class DescriptionGenerator:
     """商品説明文の生成を専門に行うエージェントクラス。"""
+
     def __init__(self):
         self.controller = AILlmController()
 
-    def generate(self, product_info: dict, model_name: str = 'gemini') -> str:
+    def generate(self, product_info: dict, model_name: str = "gemini") -> str:
         """
         商品情報から説明文を生成する。
         使用するモデルを 'glm' から選択できる。
@@ -28,10 +31,10 @@ class DescriptionGenerator:
 以下の商品情報に基づき、顧客の購買意欲を掻き立てる、魅力的で分かりやすい商品説明文を作成してください。
 
 # 商品情報
-- ブランド: {product_info.get('brand', '未設定')}
-- 商品名: {product_info.get('name', '未設定')}
-- カテゴリ: {product_info.get('category', '未設定')}
-- 特徴: {product_info.get('features', '特記事項なし')}
+- ブランド: {product_info.get("brand", "未設定")}
+- 商品名: {product_info.get("name", "未設定")}
+- カテゴリ: {product_info.get("category", "未設定")}
+- 特徴: {product_info.get("features", "特記事項なし")}
 
 # 作成ルール
 - 全体で200〜300文字程度にまとめてください。
@@ -47,7 +50,7 @@ class DescriptionGenerator:
         logging.info(f"Successfully generated description using {model_name}.")
         return description
 
-    def batch_process(self, products_info: list[dict], model_name: str = 'gemini') -> list[str]:
+    def batch_process(self, products_info: list[dict], model_name: str = "gemini") -> list[str]:
         """複数の商品情報を一括で処理する。"""
         descriptions = []
         for i, info in enumerate(products_info, 1):
@@ -56,8 +59,9 @@ class DescriptionGenerator:
             descriptions.append(desc)
         return descriptions
 
+
 # --- このファイルが直接実行された場合のテスト用コード ---
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s")
     # このテストを実行するには、Flaskアプリケーションのコンテキストが必要です。
     # 実際の使用時は、Flaskのルート（routes.pyなど）から呼び出してください。

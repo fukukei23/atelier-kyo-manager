@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ==============================================================================
 # ファイル名 (File Name): browser_use_moncler_patch.py
 # レジストリ (Registry): app/agents/browser_use_moncler_patch.py
@@ -36,33 +35,42 @@
 # ==============================================================================
 
 from __future__ import annotations
-from typing import Any, Dict, List, Optional, Set, Tuple
-from urllib.parse import urljoin, urlparse
-from pathlib import Path
 
 import asyncio
+import contextlib
 import re
 import time
+from pathlib import Path
+from typing import Any
+from urllib.parse import urljoin, urlparse
 
 from playwright.async_api import Page
 
 try:
     # ロガーはプロジェクト側のものがあれば使う（無いときは簡易版）
     import logging
+
     logger = logging.getLogger(__name__)
     if not logger.handlers:
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 except Exception:  # pragma: no cover
+
     class _Dummy:  # type: ignore
-        def info(self, *a, **k): pass
-        def warning(self, *a, **k): pass
-        def error(self, *a, **k): pass
+        def info(self, *a, **k):
+            pass
+
+        def warning(self, *a, **k):
+            pass
+
+        def error(self, *a, **k):
+            pass
+
     logger = _Dummy()
 
 
 # ---------------- ユーティリティ ----------------
 
-_CARD_SELECTORS: List[str] = [
+_CARD_SELECTORS: list[str] = [
     # Moncler のPLP/検索結果でよく見る構造を広めにマッチ
     "[data-testid*='product' i]",
     "[data-qa*='product' i]",
@@ -72,31 +80,40 @@ _CARD_SELECTORS: List[str] = [
     "article, li, div",
 ]
 
-_ANCHOR_HINTS: List[str] = [
+_ANCHOR_HINTS: list[str] = [
     "a[href*='/p/']",
     "a[href*='/product']",
     "a[href*='/products/']",
-    "a[href^='/en-']",   # ロケール付き相対
+    "a[href^='/en-']",  # ロケール付き相対
     "a[href^='/it-']",
     "a[href^='/fr-']",
     "a[href^='/de-']",
     "a[href^='/']",
 ]
 
-_DATA_URL_ATTRS: List[str] = [
-    "data-url", "data-href", "data-product-url", "data-plp-url", "data-link",
+_DATA_URL_ATTRS: list[str] = [
+    "data-url",
+    "data-href",
+    "data-product-url",
+    "data-plp-url",
+    "data-link",
 ]
 
-_TEXT_URL_ATTRS: List[str] = [
-    "onclick", "data-ga", "data-gtm", "data-analytics",
+_TEXT_URL_ATTRS: list[str] = [
+    "onclick",
+    "data-ga",
+    "data-gtm",
+    "data-analytics",
 ]
 
 _URL_RE = re.compile(r"https?://[^\s'\"<>]+|/(?:[^\s'\"<>]+)")
 
+
 async def _sleep(ms: int) -> None:
     await asyncio.sleep(ms / 1000.0)
 
-async def _collect_candidate_urls(page: Page) -> List[str]:
+
+async def _collect_candidate_urls(page: Page) -> list[str]:
     """
     画面内から PDP らしき URL 候補をできるだけ拾う。
     - a[href] はもちろん、data-* や onclick の中の URL 断片も抽出
@@ -165,12 +182,12 @@ async def _collect_candidate_urls(page: Page) -> List[str]:
     }
     """
     raw_args = [_CARD_SELECTORS, _ANCHOR_HINTS, _DATA_URL_ATTRS, _TEXT_URL_ATTRS]
-    raw: List[str] = await page.evaluate(js, raw_args)  # type: ignore
+    raw: list[str] = await page.evaluate(js, raw_args)  # type: ignore
 
     # 絶対URL化 & ノイズ除去
     origin = page.url
-    out: List[str] = []
-    seen: Set[str] = set()
+    out: list[str] = []
+    seen: set[str] = set()
     for u in raw:
         if u.startswith("javascript:") or "doubleclick.net" in u or "criteo.com" in u:
             continue
@@ -248,7 +265,7 @@ async def _try_router_click(page: Page) -> bool:
         await el.dispose()
 
 
-async def _goto_first_working(page: Page, urls: List[str]) -> bool:
+async def _goto_first_working(page: Page, urls: list[str]) -> bool:
     for u in urls:
         try:
             await page.goto(u, wait_until="domcontentloaded", timeout=15000)
@@ -271,11 +288,12 @@ async def _goto_first_working(page: Page, urls: List[str]) -> bool:
 
 # ---------------- ロケーションモーダル対応 ----------------
 
+
 async def _select_preferred_locale(page: Page) -> bool:
     """
     UK/EN のロケールリンク/ボタンを優先的にクリックする。
     """
-    selectors: List[str] = [
+    selectors: list[str] = [
         "[data-country-code='GB']",
         "[data-country='GB']",
         "button[data-value='GB']",
@@ -355,7 +373,8 @@ async def _handle_location_modal(page: Page) -> None:
 
 # ---------------- メイン: リカバリー ----------------
 
-async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]], query: Any = None) -> None:
+
+async def moncler_plp_recovery(page: Page, site_config: dict[str, Any] | None, query: Any = None) -> None:
     """
     1) ロケール強制(Cookie/localStorage)と同意バナー(OneTrust)クリック
     2) URL正規化 (page.goto) - en-de 等からの脱出
@@ -366,8 +385,8 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
     """
 
     # --- Config読み込み ---
-    cfg = (site_config or {})
-    ds  = (cfg.get("discovery_settings") or {})
+    cfg = site_config or {}
+    ds = cfg.get("discovery_settings") or {}
 
     # 設定からターゲットを取得 (デフォルトは GB / en-int)
     ship_to: str = cfg.get("shipToCountry") or ds.get("shipToCountry") or "GB"
@@ -385,8 +404,8 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
         cookies = [
             {"name": "moncler-shipping-country", "value": ship_to, "domain": ".moncler.com", "path": "/"},
             {"name": "moncler-shipping-language", "value": lang_code, "domain": ".moncler.com", "path": "/"},
-            {"name": "store-country-code", "value": ship_to, "domain": ".moncler.com", "path": "/"}, # 追加
-            {"name": "store-language-code", "value": lang_code, "domain": ".moncler.com", "path": "/"}, # 追加
+            {"name": "store-country-code", "value": ship_to, "domain": ".moncler.com", "path": "/"},  # 追加
+            {"name": "store-language-code", "value": lang_code, "domain": ".moncler.com", "path": "/"},  # 追加
         ]
         await page.context.add_cookies(cookies)
         logger.info("[MonclerPatch] Injected shipping cookies.")
@@ -400,11 +419,10 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
                 localStorage.setItem('akm.forceLocale', data.locale);
               } catch(e) {}
             }""",
-            {"country": ship_to, "lang": lang_code, "locale": force_locale}
+            {"country": ship_to, "lang": lang_code, "locale": force_locale},
         )
     except Exception as e:
         logger.warning(f"[MonclerPatch] Cookie/Storage injection failed: {e}")
-
 
     # --- 2. OneTrust等の同意バナーを潰す ---
     async def _try_click(sel: str) -> bool:
@@ -434,7 +452,6 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
     except Exception as e:
         logger.warning(f"[MonclerPatch] OneTrust click failed: {e}")
 
-
     # --- 3. ロケーションモーダル対応 ---
     try:
         await _handle_location_modal(page)
@@ -448,12 +465,9 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
             logger.warning(f"[MonclerPatch] Gate screenshot saved: {stuck_path}")
         except Exception:
             pass
-        try:
+        with contextlib.suppress(Exception):
             await page.context.close()
-        except Exception:
-            pass
         raise RuntimeError("Gate dismissal failed -> aborting session")
-
 
     # --- 4. URL正規化 & リダイレクト脱出 ---
     # 現在のURLがターゲットロケールと異なる場合、強制的に遷移する
@@ -479,8 +493,8 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
             # 1. 既存のロケール部分を force_locale に置換
             new_path = re.sub(r"/en-[a-z]{2}/", f"/{force_locale}/", current_path)
             if new_path == current_path and f"/{force_locale}/" not in new_path:
-                 # ロケールがない場合は挿入 (簡易的)
-                 new_path = f"/{force_locale}" + current_path
+                # ロケールがない場合は挿入 (簡易的)
+                new_path = f"/{force_locale}" + current_path
 
             base = urljoin(url, new_path).split("?")[0].rstrip("/") + "/"
             params = f"forceLocale={force_locale}&shipToCountry={ship_to}"
@@ -488,7 +502,7 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
 
             logger.info(f"[MonclerPatch] Forcing navigation to: {new_url}")
             await page.goto(new_url, wait_until="domcontentloaded", timeout=20000)
-            await _sleep(1000) # 遷移後の安定待ち
+            await _sleep(1000)  # 遷移後の安定待ち
 
             # 遷移後に再度Cookieをセット (リダイレクトで消されることがあるため)
             await page.context.add_cookies(cookies)
@@ -497,10 +511,8 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
         logger.warning(f"[MonclerPatch] URL normalization failed: {e}")
 
     # PLP のロード完了を待つ
-    try:
+    with contextlib.suppress(Exception):
         await page.wait_for_selector("img, [data-testid]", timeout=8000)
-    except Exception:
-        pass
 
     # --- 5. URL候補収集 ---
     urls = await _collect_candidate_urls(page)
@@ -511,15 +523,14 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
         logger.warning("[MonclerPatch] tiles=0 -> direct PDP hop attempts")
         # --- クリック強制 ---
         if await _try_router_click(page):
-            try:
+            with contextlib.suppress(Exception):
                 await page.wait_for_load_state("domcontentloaded", timeout=8000)
-            except Exception:
-                pass
             return
         # --- DOM 断片直叩き ---
         try:
             pattern = _URL_RE.pattern
-            fragment = await page.evaluate("""
+            fragment = await page.evaluate(
+                """
               (pat) => {
                 try {
                   const re = new RegExp(pat, 'g');
@@ -528,7 +539,9 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
                   return m ? m[0] : null;
                 } catch (e) { return null; }
               }
-            """, pattern)
+            """,
+                pattern,
+            )
             if fragment:
                 await page.goto(urljoin(page.url, fragment), wait_until="domcontentloaded", timeout=15000)
                 return
@@ -544,16 +557,15 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
 
     # --- 7. クリック強制 ---
     if await _try_router_click(page):
-        try:
+        with contextlib.suppress(Exception):
             await page.wait_for_load_state("domcontentloaded", timeout=8000)
-        except Exception:
-            pass
         return
 
     # --- 8. 最後の手段：DOM から URL 断片を直叩き ---
     try:
         pattern = _URL_RE.pattern
-        fragment = await page.evaluate("""
+        fragment = await page.evaluate(
+            """
           (pat) => {
             try {
               const re = new RegExp(pat, 'g');
@@ -562,7 +574,9 @@ async def moncler_plp_recovery(page: Page, site_config: Optional[Dict[str, Any]]
               return m ? m[0] : null;
             } catch (e) { return null; }
           }
-        """, pattern)
+        """,
+            pattern,
+        )
         if fragment:
             await page.goto(urljoin(page.url, fragment), wait_until="domcontentloaded", timeout=15000)
             return

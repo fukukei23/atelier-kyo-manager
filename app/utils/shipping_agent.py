@@ -43,19 +43,19 @@
 # ======================================================================
 from __future__ import annotations
 
-import os
 import asyncio
 import logging
+import os
 import re
-from typing import List, Dict, Optional
 
-from playwright.async_api import async_playwright, Page, BrowserContext
 from flask import current_app
+from playwright.async_api import BrowserContext, Page, async_playwright
 
 # --- 定数定義 ---
 WAREHOUSE_LIST_URL = "https://www.buyandship.co.jp/account/v2020/warehouse/"
 # 永続プロファイル（セッション情報）の保存先
 USER_DATA_DIR = os.path.abspath("instance/pw_profile")
+
 
 # --- 追加ヘルパ（UIテキスト優先で操作。候補セレクタ配列を順に試す） ---
 async def _click_first(page_or_frame, selectors: list[str], timeout_ms: int = 8000) -> bool:
@@ -70,6 +70,7 @@ async def _click_first(page_or_frame, selectors: list[str], timeout_ms: int = 80
             pass
     return False
 
+
 async def _fill_first(page_or_frame, selectors: list[str], text: str, timeout_ms: int = 8000) -> bool:
     """指定されたセレクタリストに一致する最初の可視要素にテキストを入力する"""
     for sel in selectors:
@@ -82,12 +83,13 @@ async def _fill_first(page_or_frame, selectors: list[str], text: str, timeout_ms
             pass
     return False
 
+
 class ShippingAgent:
     """転送倉庫の情報を取得するエージェント（Playwright, Async, 永続セッション対応, UIテキスト優先ログイン）"""
 
     def __init__(
         self,
-        headless: Optional[bool] = None,  # None の場合は環境変数 PLAYWRIGHT_HEADFUL で制御
+        headless: bool | None = None,  # None の場合は環境変数 PLAYWRIGHT_HEADFUL で制御
         state_path: str = "instance/playwright_state.json",  # デバッグ/互換用（現行は永続プロファイル優先）
         base_url: str = WAREHOUSE_LIST_URL,
         timeout_ms: int = 60_000,
@@ -102,8 +104,8 @@ class ShippingAgent:
         self.base_url = base_url
         self.timeout_ms = timeout_ms
         self.logger = logging.getLogger(__name__)
-        self.email: Optional[str] = None
-        self.password: Optional[str] = None
+        self.email: str | None = None
+        self.password: str | None = None
 
         # 保存先ディレクトリ作成
         os.makedirs(os.path.dirname(self.state_path) or ".", exist_ok=True)
@@ -112,7 +114,7 @@ class ShippingAgent:
     # ----------------------------
     # 資格情報の取得（環境変数優先）
     # ----------------------------
-    def _get_credentials(self) -> Dict[str, str]:
+    def _get_credentials(self) -> dict[str, str]:
         """
         優先度:
           1) env: BUYANDSHIP_EMAIL / BUYANDSHIP_PASSWORD
@@ -187,7 +189,7 @@ class ShippingAgent:
         まれに bring_to_front 直後に URL 未解決の空タブを掴むことがあるため再試行。
         """
         page = await self._pick_working_page(context)
-        for _ in range(2): # 最大2回試行
+        for _ in range(2):  # 最大2回試行
             try:
                 await page.goto(url, wait_until="load", timeout=self.timeout_ms)
                 if page.url and not page.url.startswith("about:blank"):
@@ -211,13 +213,17 @@ class ShippingAgent:
         """
         # 0) 既ログイン簡易チェック（見出し/ユーザーメニュー）
         try:
-            if await page.locator("text=Buyandship倉庫住所一覧, text=倉庫住所一覧, text=倉庫住所").first.is_visible(timeout=3000):
+            if await page.locator("text=Buyandship倉庫住所一覧, text=倉庫住所一覧, text=倉庫住所").first.is_visible(
+                timeout=3000
+            ):
                 self.logger.info("既にログイン済みと判断しました。")
                 return
         except Exception:
             pass
         try:
-            if await page.locator("button:has-text('マイアカウント'), a:has-text('マイアカウント')").first.is_visible(timeout=2000):
+            if await page.locator("button:has-text('マイアカウント'), a:has-text('マイアカウント')").first.is_visible(
+                timeout=2000
+            ):
                 self.logger.info("既にログイン済み（ユーザーメニュー検出）と判断しました。")
                 return
         except Exception:
@@ -226,10 +232,15 @@ class ShippingAgent:
         self.logger.info("ログインが必要です。UIテキスト優先のセレクタでログインを試みます。")
 
         # 1) Cookie 同意/ダイアログのクローズ
-        await _click_first(page, [
-            "button:has-text('同意')", "button:has-text('Accept')",
-            "button[aria-label='Close']", "button.bs-cookie-consent-accept",
-        ])
+        await _click_first(
+            page,
+            [
+                "button:has-text('同意')",
+                "button:has-text('Accept')",
+                "button[aria-label='Close']",
+                "button.bs-cookie-consent-accept",
+            ],
+        )
 
         # 2) ログインパネルの起動
         try:
@@ -237,40 +248,60 @@ class ShippingAgent:
         except Exception:
             login_panel_open = False
 
-        if not login_panel_open:
-            if await _click_first(page, [
-                "a:has-text('ログイン')", "a:has-text('登録 / ログイン')",
-                "button:has-text('ログイン')", "button:has-text('登録 / ログイン')",
-            ]):
-                await page.wait_for_timeout(500)
+        if not login_panel_open and await _click_first(
+            page,
+            [
+                "a:has-text('ログイン')",
+                "a:has-text('登録 / ログイン')",
+                "button:has-text('ログイン')",
+                "button:has-text('登録 / ログイン')",
+            ],
+        ):
+            await page.wait_for_timeout(500)
 
         # 3) メール入力
         creds = self._get_credentials()
         EMAIL_SELECTORS = [
-            "input[placeholder='メールアドレス']", "input[aria-label='メールアドレス']",
-            "input[type='email']", "input[name='email']", "#email, #user_email, input[id*='email']",
+            "input[placeholder='メールアドレス']",
+            "input[aria-label='メールアドレス']",
+            "input[type='email']",
+            "input[name='email']",
+            "#email, #user_email, input[id*='email']",
         ]
         await page.wait_for_timeout(300)
         if not await _fill_first(page, EMAIL_SELECTORS, creds["email"], timeout_ms=12000):
-            filled_in_frame = any(await _fill_first(frame, EMAIL_SELECTORS, creds["email"], timeout_ms=8000) for frame in page.frames)
+            filled_in_frame = any(
+                await _fill_first(frame, EMAIL_SELECTORS, creds["email"], timeout_ms=8000) for frame in page.frames
+            )
             if not filled_in_frame:
                 raise RuntimeError("メール入力欄が見つかりませんでした。UIが変わっている可能性があります。")
 
         # 4) 「次へ進む」
-        await _click_first(page, [
-            "button:has-text('次へ進む')", "button:has-text('次へ')",
-            "button:has-text('ログイン')", "button[type='submit']",
-        ])
+        await _click_first(
+            page,
+            [
+                "button:has-text('次へ進む')",
+                "button:has-text('次へ')",
+                "button:has-text('ログイン')",
+                "button[type='submit']",
+            ],
+        )
 
         # 5) パスワード入力
         PASS_SELECTORS = [
-            "input[placeholder*='パスワード']", "input[aria-label*='パスワード']",
-            "input[type='password']", "input[name='password']", "#password, input[id*='pass']",
+            "input[placeholder*='パスワード']",
+            "input[aria-label*='パスワード']",
+            "input[type='password']",
+            "input[name='password']",
+            "#password, input[id*='pass']",
         ]
         await page.wait_for_timeout(600)
         if not await _fill_first(page, PASS_SELECTORS, creds["password"], timeout_ms=15000):
             try:
-                filled_in_frame = any(await _fill_first(frame, PASS_SELECTORS, creds["password"], timeout_ms=8000) for frame in page.frames)
+                filled_in_frame = any(
+                    await _fill_first(frame, PASS_SELECTORS, creds["password"], timeout_ms=8000)
+                    for frame in page.frames
+                )
                 if not filled_in_frame:
                     raise RuntimeError("パスワード入力欄が見つかりませんでした。")
             except Exception:
@@ -302,9 +333,9 @@ class ShippingAgent:
     # ----------------------------
     # データ抽出
     # ----------------------------
-    async def _extract_warehouses(self, page: Page, country_code: str) -> List[Dict]:
+    async def _extract_warehouses(self, page: Page, country_code: str) -> list[dict]:
         """倉庫カード要素から情報を抽出する。"""
-        warehouses: List[Dict] = []
+        warehouses: list[dict] = []
         card_sel = "div.warehouse-card, article.warehouse, li.warehouse, div[class*='warehouse-item']"
         cards = page.locator(card_sel)
         count = await cards.count()
@@ -333,7 +364,7 @@ class ShippingAgent:
     # ----------------------------
     # メイン処理（非同期）- 永続セッション対応
     # ----------------------------
-    async def _get_warehouses_async(self, country_code: str = "US") -> List[Dict]:
+    async def _get_warehouses_async(self, country_code: str = "US") -> list[dict]:
         """永続コンテキストを使用してブラウザを起動し、倉庫情報を取得する。"""
         self.logger.info(f"{country_code} の倉庫情報取得を開始します (Headless: {self.headless})...")
         self.logger.info(f"ユーザープロファイル: {USER_DATA_DIR}")
@@ -345,7 +376,12 @@ class ShippingAgent:
                     headless=self.headless,
                     slow_mo=int(os.getenv("PLAYWRIGHT_SLOWMO", "0") or 0),
                     channel="chrome",
-                    args=["--restore-last-session", "--no-first-run", "--no-default-browser-check", "--disable-session-crashed-bubble"],
+                    args=[
+                        "--restore-last-session",
+                        "--no-first-run",
+                        "--no-default-browser-check",
+                        "--disable-session-crashed-bubble",
+                    ],
                 )
                 await self._close_blank_tabs(context)
                 page = await self._open_target_url(context, self.base_url)
@@ -371,13 +407,14 @@ class ShippingAgent:
     # ----------------------------
     # 同期ラッパー
     # ----------------------------
-    def get_warehouses_by_country(self, country_code: str = "US") -> List[Dict]:
+    def get_warehouses_by_country(self, country_code: str = "US") -> list[dict]:
         """Flaskなどから同期的に呼び出すためのラッパー関数"""
         return asyncio.run(self._get_warehouses_async(country_code))
 
-    def fetch_warehouses(self, country_code: str) -> List[Dict]:
+    def fetch_warehouses(self, country_code: str) -> list[dict]:
         """get_warehouses_by_country のエイリアス"""
         return self.get_warehouses_by_country(country_code)
+
 
 # --- 単体実行テスト ---
 if __name__ == "__main__":
@@ -386,6 +423,7 @@ if __name__ == "__main__":
 
     try:
         from dotenv import load_dotenv
+
         load_dotenv()
         logger.info(".envファイルを読み込みました。")
     except ImportError:

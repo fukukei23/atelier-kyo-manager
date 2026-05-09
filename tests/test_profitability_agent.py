@@ -1,11 +1,10 @@
-# -*- coding: utf-8 -*-
 """
 test_profitability_agent.py
 ======================================================================
 ProfitabilityAgent のユニットテスト（WSL版・LМ不使用）
 ======================================================================
 """
-import pytest
+
 from unittest.mock import patch
 
 
@@ -15,6 +14,7 @@ class TestCustomsRate:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     assert ag._resolve_customs_rate("バッグ", "レザー") == 0.12
 
@@ -23,6 +23,7 @@ class TestCustomsRate:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     assert ag._resolve_customs_rate("シューズ", None) == 0.11
 
@@ -32,6 +33,7 @@ class TestCustomsRate:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     # アパレル・時計 등은 WSL版ではデフォルト0.10
                     assert ag._resolve_customs_rate("アパレル", None) == 0.10
@@ -42,6 +44,7 @@ class TestCustomsRate:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     assert ag._resolve_customs_rate("バッグ", None) == 0.11
 
@@ -50,6 +53,7 @@ class TestCustomsRate:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     assert ag._resolve_customs_rate(None, None) == 0.10
 
@@ -60,6 +64,7 @@ class TestExchangeRate:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", return_value=({"USD": 155.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     rate = ag._get_exchange_rate_jpy("USD")
                     assert rate == 155.0
@@ -69,6 +74,7 @@ class TestExchangeRate:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", return_value=({"EUR": 162.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     rate = ag._get_exchange_rate_jpy("EUR")
                     assert rate == 162.0
@@ -78,6 +84,7 @@ class TestExchangeRate:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", side_effect=Exception("API Error")):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     rate = ag._get_exchange_rate_jpy("USD")
                     assert rate == 150.0  # DEFAULT_FX_RATES fallback
@@ -87,6 +94,7 @@ class TestExchangeRate:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", return_value=({}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     rate = ag._get_exchange_rate_jpy("XYZ")
                     assert rate == 150.0  # USD default
@@ -98,6 +106,7 @@ class TestAssess:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     market = {"buyma_price": 80000, "competitor_avg_price": 85000}
                     supplier = {"price": 100.0, "currency": "USD"}
@@ -114,6 +123,7 @@ class TestAssess:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     market = {"buyma_price": 20000, "competitor_avg_price": 50000}
                     supplier = {"price": 200.0, "currency": "USD"}
@@ -128,6 +138,7 @@ class TestAssess:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     result = ag.assess({}, {"price": 100.0, "currency": "USD"})
                     assert result["decision"] == "error"
@@ -137,6 +148,7 @@ class TestAssess:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
                     result = ag.assess({"buyma_price": 80000}, {})
                     assert result["decision"] == "error"
@@ -148,8 +160,15 @@ class TestGenerateAssessmentSummary:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
-                    calc = {"profit_estimate": 500, "profit_rate": 2.5, "total_cost_jpy": 19500, "exchange_rate_used": 150.0, "source_currency": "USD"}
+                    calc = {
+                        "profit_estimate": 500,
+                        "profit_rate": 2.5,
+                        "total_cost_jpy": 19500,
+                        "exchange_rate_used": 150.0,
+                        "source_currency": "USD",
+                    }
                     summary = ag._generate_assessment_summary(calc)
                     assert "推奨しません" in summary or "非推奨" in summary
 
@@ -158,7 +177,14 @@ class TestGenerateAssessmentSummary:
             with patch("app.agents.profitability_agent.SHIPPING_AGENT_AVAILABLE", False):
                 with patch("app.agents.profitability_agent.get_fx_table_jpy", lambda **k: ({"USD": 150.0}, {})):
                     from app.agents.profitability_agent import ProfitabilityAgent
+
                     ag = ProfitabilityAgent()
-                    calc = {"profit_estimate": 5000, "profit_rate": 10.0, "total_cost_jpy": 45000, "exchange_rate_used": 150.0, "source_currency": "USD"}
+                    calc = {
+                        "profit_estimate": 5000,
+                        "profit_rate": 10.0,
+                        "total_cost_jpy": 45000,
+                        "exchange_rate_used": 150.0,
+                        "source_currency": "USD",
+                    }
                     summary = ag._generate_assessment_summary(calc)
                     assert "推奨" in summary or "利益" in summary

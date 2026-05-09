@@ -9,7 +9,7 @@ from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 from sqlalchemy.orm import joinedload
 
-from app.extensions import db, csrf
+from app.extensions import csrf, db
 from app.models import Product
 from app.models.stock_check import StockCheck
 from app.services.price_scraper import PriceScraper
@@ -22,9 +22,7 @@ from . import bp
 @login_required
 def stock_check_list():
     """在庫＆価格チェック一覧"""
-    checks = StockCheck.query.options(
-        joinedload(StockCheck.product)
-    ).order_by(StockCheck.checked_at.desc()).all()
+    checks = StockCheck.query.options(joinedload(StockCheck.product)).order_by(StockCheck.checked_at.desc()).all()
     return render_template("stock_check.html", checks=checks)
 
 
@@ -176,8 +174,9 @@ def api_quick_add_check():
 def api_products_list():
     """商品一覧（クイック入力用ドロップダウン）"""
     prods = Product.query.order_by(Product.brand, Product.name).all()
-    return jsonify([{"id": p.id, "name": f"{p.brand or ''} {p.name}",
-                     "supplier_url": p.supplier_url or ""} for p in prods])
+    return jsonify(
+        [{"id": p.id, "name": f"{p.brand or ''} {p.name}", "supplier_url": p.supplier_url or ""} for p in prods]
+    )
 
 
 @bp.post("/api/stock-check/fetch-all")

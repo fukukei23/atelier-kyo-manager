@@ -12,7 +12,7 @@ import datetime
 import json
 import logging
 from pathlib import Path
-from typing import Optional, Union
+from typing import Union
 
 try:
     from playwright.async_api import Page as AsyncPage
@@ -25,8 +25,10 @@ except ImportError:
 
 PageObject = Union[AsyncPage, SyncPage]
 
+
 class RunContext:
     """AIエージェントの単一実行コンテキストを管理するクラス。"""
+
     def __init__(self, base_path: str = "instance/runs"):
         self.run_id = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")[:-3]
         self.run_path = Path(base_path) / self.run_id
@@ -38,7 +40,7 @@ class RunContext:
     def save_json(self, filename: str, data: dict):
         path = self.run_path / filename
         try:
-            with open(path, 'w', encoding='utf-8') as f:
+            with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             logging.debug(f"JSON saved: {path}")
         except Exception as e:
@@ -50,12 +52,12 @@ class RunContext:
     def append_log(self, filename: str, content: str):
         path = self.run_path / filename
         try:
-            with open(path, 'a', encoding='utf-8') as f:
-                f.write(content + '\n')
+            with open(path, "a", encoding="utf-8") as f:
+                f.write(content + "\n")
         except Exception as e:
             logging.error(f"Failed to append to log {path}: {e}")
 
-    async def take_screenshot(self, page: Optional[PageObject], name: str) -> Optional[str]:
+    async def take_screenshot(self, page: PageObject | None, name: str) -> str | None:
         """
         [ASYNC] 命名規約に沿った名前でスクリーンショットを撮影し、そのパスを返す。
         """
@@ -76,8 +78,8 @@ class RunContext:
 
     def setup_system_logger(self) -> logging.FileHandler:
         log_path = self.get_path("system.log")
-        handler = logging.FileHandler(log_path, encoding='utf-8')
-        formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        handler = logging.FileHandler(log_path, encoding="utf-8")
+        formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
         handler.setFormatter(formatter)
         return handler
 
@@ -88,7 +90,7 @@ class RunContext:
         """
         path = self.get_path(filename)
         try:
-            path.write_text(content, encoding='utf-8')
+            path.write_text(content, encoding="utf-8")
             logging.debug(f"Content saved: {path}")
         except Exception as e:
             logging.error(f"Failed to save content to {path}: {e}")

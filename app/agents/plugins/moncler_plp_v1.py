@@ -62,16 +62,15 @@ class MonclerPLPStrategy(StrategyPlugin):
     site = "MONCLER_OFFICIAL"
     _DEFAULT_LOCALE = "en-int"
     _DEFAULT_COUNTRY = "GB"
-    _HARD_PLP_URL = "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
+    _HARD_PLP_URL = (
+        "https://www.moncler.com/en-int/women/outerwear/all-down-jackets/?forceLocale=en-int&shipToCountry=GB"
+    )
     _PLP_TILE_SELECTORS = _MONCLER_PLP_TILE_TUPLE
 
     def before_navigate(self, url: str, ctx) -> str:
         url = self.strip_fragment(url)
         locale, country = self._preferred_locale(ctx)
-        url = self.force_query(url, {
-            "forceLocale": locale,
-            "shipToCountry": country
-        })
+        url = self.force_query(url, {"forceLocale": locale, "shipToCountry": country})
         host = self.hostname(url)
         if "monclergroup.com" in host:
             return self._HARD_PLP_URL
@@ -86,6 +85,7 @@ class MonclerPLPStrategy(StrategyPlugin):
     async def after_navigate(self, page, ctx):
         if isinstance(ctx, dict) and not ctx.get("_moncler_route_patched"):
             ctx["_moncler_route_patched"] = True
+
             async def _route_enforce(route, request):
                 try:
                     if request.resource_type == "document":
@@ -103,6 +103,7 @@ class MonclerPLPStrategy(StrategyPlugin):
                 except Exception:
                     logger.debug("[MonclerPLPStrategy] route enforce failed", exc_info=True)
                 await route.continue_()
+
             try:
                 await page.route("**/*", _route_enforce)
             except Exception:
@@ -165,16 +166,8 @@ class MonclerPLPStrategy(StrategyPlugin):
     def _preferred_locale(self, ctx):
         cfg = self._site_config(ctx)
         discovery = cfg.get("discovery_settings") or {}
-        locale = (
-            cfg.get("forceLocale")
-            or discovery.get("forceLocale")
-            or self._DEFAULT_LOCALE
-        )
-        country = (
-            cfg.get("shipToCountry")
-            or discovery.get("shipToCountry")
-            or self._DEFAULT_COUNTRY
-        )
+        locale = cfg.get("forceLocale") or discovery.get("forceLocale") or self._DEFAULT_LOCALE
+        country = cfg.get("shipToCountry") or discovery.get("shipToCountry") or self._DEFAULT_COUNTRY
         return locale, country
 
     def _is_locale_root(self, url: str) -> bool:
@@ -211,10 +204,7 @@ class MonclerPLPStrategy(StrategyPlugin):
             logger.debug("[MonclerPLPStrategy] evaluate locale pin failed", exc_info=True)
 
         current = page.url
-        desired = self.force_query(current, {
-            "forceLocale": locale,
-            "shipToCountry": country
-        })
+        desired = self.force_query(current, {"forceLocale": locale, "shipToCountry": country})
         if desired != current:
             try:
                 await page.goto(desired, wait_until="domcontentloaded")

@@ -1,8 +1,8 @@
-# -*- coding: utf-8 -*-
 """
 プロジェクトの標準パス定義
 今後のファイル生成はこのモジュールのパスを使用してください
 """
+
 from pathlib import Path
 
 # プロジェクトルート
@@ -20,6 +20,7 @@ INSTANCE_DIR = PROJECT_ROOT / "instance"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 EXPORTS_DIR = PROJECT_ROOT / "exports"
 
+
 def ensure_dirs():
     """必要なディレクトリを作成"""
     for dir_path in [
@@ -30,4 +31,3 @@ def ensure_dirs():
         DATA_GENERATED_DIR,
     ]:
         dir_path.mkdir(parents=True, exist_ok=True)
-

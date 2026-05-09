@@ -31,6 +31,7 @@ def image_crawler():
 # ---- API: 倉庫一覧（Buyandship） ---------------------------------------
 try:
     from app.utils.shipping_agent import ShippingAgent
+
     _shipping_agent_import_ok = True
 except Exception:
     ShippingAgent = None  # type: ignore

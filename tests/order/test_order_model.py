@@ -1,14 +1,15 @@
 """FR-006 18日ルール Order model テスト"""
+
 from datetime import datetime, timedelta
 
 from app.models.order import (
-    Order,
-    PAYMENT_METHOD_EXTENSION_DAYS,
     EXPECTED_PAYMENT_DAYS,
+    PAYMENT_METHOD_EXTENSION_DAYS,
+    Order,
 )
 
-
 # ---- 期限計算テスト ----
+
 
 def test_calc_deadlines_basic():
     """18日ルール期限の基本計算"""
@@ -55,6 +56,7 @@ def test_calc_deadlines_d_pay():
 
 
 # ---- アラート閾値テスト（仕様準拠4段階）----
+
 
 def test_deadline_color_green():
     """5日以上 → green"""
@@ -119,6 +121,7 @@ def test_deadline_color_gray_no_deadline():
 
 # ---- メッセージテスト ----
 
+
 def test_deadline_message_expired():
     """期限切れメッセージ"""
     order = Order(order_number="T020", product_name="テスト")
@@ -141,6 +144,7 @@ def test_deadline_message_safe():
 
 
 # ---- 利益計算テスト（calculator.py統合）----
+
 
 def test_calc_profit_basic():
     """基本的な利益計算（calculator.py委譲）"""
@@ -177,6 +181,7 @@ def test_calc_profit_overseas():
 
 # ---- 延長申請テスト ----
 
+
 def test_extension_defaults():
     """延長フィールドのデフォルト値"""
     order = Order(order_number="T040", product_name="テスト")
@@ -186,6 +191,7 @@ def test_extension_defaults():
 
 
 # ---- 決済方法マッピングテスト ----
+
 
 def test_payment_method_extension_days():
     """決済方法別延長日数の妥当性"""

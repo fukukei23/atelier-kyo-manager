@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ==============================================================================
 # File: app/agents/code_update_agent.py
 # Date (JST): 2025-11-05 13:02:00
@@ -10,17 +9,19 @@
 # - apply は proposal を受け取り、簡易監査ログ(selectors/overrides)を
 #   exports/patches に保存した後、既存の apply_overrides_patch を呼び出す。
 # ==============================================================================
-import json
-import subprocess
-import logging
-import os         # ★ NEW (diff で要求)
+import contextlib
 import difflib
+import json
+import logging
+import os  # ★ NEW (diff で要求)
+import subprocess
 import time
+from datetime import datetime  # ★ NEW (diff で要求)
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
-from datetime import datetime # ★ NEW (diff で要求)
+from typing import Any
 
 logger = logging.getLogger(__name__)
+
 
 class CodeUpdateAgent:
     """
@@ -35,7 +36,7 @@ class CodeUpdateAgent:
         self,
         overrides_path: str = "app/config/sites/overrides.local.json",
         patch_dir: str = "instance/patches",
-        enable_git_stage: bool = False
+        enable_git_stage: bool = False,
     ):
         self.overrides_path = Path(overrides_path)
         self.patch_dir = Path(patch_dir)
@@ -45,7 +46,7 @@ class CodeUpdateAgent:
     # ------------------------------------------------------------------
     # ★統合(v1.3.2): diff に基づく高レベルの apply メソッド
     # ------------------------------------------------------------------
-    def apply(self, proposal: Dict[str, Any], *, dry_run: bool = False) -> Dict[str, Any]:
+    def apply(self, proposal: dict[str, Any], *, dry_run: bool = False) -> dict[str, Any]:
         """
         AI提案(proposal)全体を受け取り、監査ログを保存し、
         適用可能なパッチ（現在はoverrides）を適用するオーケストレーター。
@@ -68,7 +69,7 @@ class CodeUpdateAgent:
             if sel_patch:
                 sel_path = os.path.join(patches_dir, f"{ts}_{site}_selectors.diff")
                 with open(sel_path, "w", encoding="utf-8") as f:
-                    f.write(f"--- a/selectors.json\n+++ b/selectors.json\n")
+                    f.write("--- a/selectors.json\n+++ b/selectors.json\n")
                     for k, v in sel_patch.items():
                         f.write(f"+ {k}: {v}\n")
                 out["notes"].append(f"Wrote selectors audit patch: {sel_path}")
@@ -76,7 +77,7 @@ class CodeUpdateAgent:
             if ovr_patch:
                 ovr_path = os.path.join(patches_dir, f"{ts}_{site}_overrides.diff")
                 with open(ovr_path, "w", encoding="utf-8") as f:
-                    f.write(f"--- a/overrides.local.json\n+++ b/overrides.local.json\n")
+                    f.write("--- a/overrides.local.json\n+++ b/overrides.local.json\n")
                     f.write("+ patch (merged keys):\n")
                     for k in sorted(ovr_patch.keys()):
                         f.write(f"+    {k}: {ovr_patch[k]}\n")
@@ -103,11 +104,11 @@ class CodeUpdateAgent:
                 applied_path = self.apply_overrides_patch(
                     site_key=site_key,
                     overrides_patch=ovr_patch,
-                    dry_run=dry_run # dry_run=False だが、念のため渡す
+                    dry_run=dry_run,  # dry_run=False だが、念のため渡す
                 )
                 if applied_path:
                     out["notes"].append(f"Overrides patch applied (see jsondiff): {applied_path}")
-                    out["applied"] = True # 実際に適用された場合のみ True
+                    out["applied"] = True  # 実際に適用された場合のみ True
                 else:
                     out["notes"].append("Overrides patch not applied (no changes detected).")
             except Exception as e:
@@ -125,12 +126,8 @@ class CodeUpdateAgent:
     # 既存の v1.3.1 メソッド
     # ------------------------------------------------------------------
     def apply_overrides_patch(
-        self,
-        site_key: str,
-        overrides_patch: Dict[str, Any],
-        *,
-        dry_run: bool = False
-    ) -> Optional[Path]:
+        self, site_key: str, overrides_patch: dict[str, Any], *, dry_run: bool = False
+    ) -> Path | None:
         """
         [v1.3.1] 堅牢な overrides.local.json 適用メソッド
         """
@@ -154,8 +151,7 @@ class CodeUpdateAgent:
         stamp = self._stamp()
         diff_path = self.patch_dir / f"overrides_patch_{site_key}_{stamp}.jsondiff"
         diff_path.write_text(
-            self._json({"before": before.get(site_key, {}), "after": merged.get(site_key, {})}),
-            encoding="utf-8"
+            self._json({"before": before.get(site_key, {}), "after": merged.get(site_key, {})}), encoding="utf-8"
         )
 
         if dry_run:
@@ -184,8 +180,9 @@ class CodeUpdateAgent:
         return path
 
     # --- ★追加(v1.3.1): unified diff をファイル出力 ---
-    def write_unified_diff(self, old_text: str, new_text: str, target_path: str,
-                             base_dir: Optional[str] = None) -> Optional[str]:
+    def write_unified_diff(
+        self, old_text: str, new_text: str, target_path: str, base_dir: str | None = None
+    ) -> str | None:
         """
         2つのテキストから unified diff を生成し、.diff ファイルとして保存する。
         （既存の self.patch_dir ではなく、diff提案のロジックに基づき
@@ -224,7 +221,7 @@ class CodeUpdateAgent:
             if self.enable_git_stage:
                 self._git_add(out_path)
 
-            return str(out_path) # Path を str にして返す
+            return str(out_path)  # Path を str にして返す
 
         except Exception as e:
             logger.warning(f"[CodeUpdateAgent] failed to write diff: {e}")
@@ -233,7 +230,7 @@ class CodeUpdateAgent:
     # ------------------------------------------------------------------
     # Helpers (v1.3.1)
     # ------------------------------------------------------------------
-    def _read_json(self, p: Path) -> Dict[str, Any]:
+    def _read_json(self, p: Path) -> dict[str, Any]:
         if not p.exists():
             return {}
         try:
@@ -242,11 +239,11 @@ class CodeUpdateAgent:
             logger.warning(f"[CodeUpdate] JSON read失敗: {p} - {e}")
             return {}
 
-    def _write_json(self, p: Path, data: Dict[str, Any]) -> None:
+    def _write_json(self, p: Path, data: dict[str, Any]) -> None:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(self._json(data), encoding="utf-8")
 
-    def _backup_json(self, p: Path) -> Optional[Path]:
+    def _backup_json(self, p: Path) -> Path | None:
         if not p.exists():
             return None
         bak = p.with_suffix(p.suffix + f".bak.{self._stamp()}")
@@ -254,7 +251,7 @@ class CodeUpdateAgent:
         logger.info(f"[CodeUpdate] backup: {bak}")
         return bak
 
-    def _deep_merge_site(self, all_data: Dict[str, Any], site_key: str, patch: Dict[str, Any]) -> Dict[str, Any]:
+    def _deep_merge_site(self, all_data: dict[str, Any], site_key: str, patch: dict[str, Any]) -> dict[str, Any]:
         data = dict(all_data)
         base = data.get(site_key, {})
         data[site_key] = self._deep_merge(base, patch)
@@ -268,7 +265,7 @@ class CodeUpdateAgent:
             return out
         return b
 
-    def _validate_merge(self, before: Dict[str, Any], after: Dict[str, Any]) -> Tuple[bool, str]:
+    def _validate_merge(self, before: dict[str, Any], after: dict[str, Any]) -> tuple[bool, str]:
         # 型崩れを検出（dict→list等）
         if not isinstance(before, dict) or not isinstance(after, dict):
             return False, "non-dict merge detected"
@@ -277,24 +274,27 @@ class CodeUpdateAgent:
             return False, "suspicious mass deletion"
         return True, "ok"
 
-    def _dump_conflict(self, site_key: str, before: Dict[str, Any], merged: Dict[str, Any], reason: str) -> Path:
+    def _dump_conflict(self, site_key: str, before: dict[str, Any], merged: dict[str, Any], reason: str) -> Path:
         path = self.patch_dir / f"overrides_conflict_{site_key}_{self._stamp()}.json"
-        path.write_text(self._json({
-            "reason": reason,
-            "before": before.get(site_key, {}),
-            "merged": merged.get(site_key, {}),
-        }), encoding="utf-8")
+        path.write_text(
+            self._json(
+                {
+                    "reason": reason,
+                    "before": before.get(site_key, {}),
+                    "merged": merged.get(site_key, {}),
+                }
+            ),
+            encoding="utf-8",
+        )
         logger.info(f"[CodeUpdate] 競合スナップショット: {path}")
         return path
 
-    def _json(self, data: Dict[str, Any]) -> str:
+    def _json(self, data: dict[str, Any]) -> str:
         return json.dumps(data, ensure_ascii=False, indent=2)
 
     def _stamp(self) -> str:
         return datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")[:-3]
 
     def _git_add(self, path: Path) -> None:
-        try:
+        with contextlib.suppress(Exception):
             subprocess.run(["git", "add", str(path)], check=False, capture_output=True)
-        except Exception:
-            pass

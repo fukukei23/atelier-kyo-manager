@@ -1,11 +1,11 @@
 """
 包括テスト: config/config_loader, utils/diagnostics
 """
+
 from __future__ import annotations
 
 import json
 import os
-import shutil
 import zipfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
@@ -161,7 +161,7 @@ class TestMakeDiagnosticBundle:
         ctx = self._make_mock_context(tmp_path)
 
         with patch("app.utils.diagnostics.make_trace_report"):
-            result = await make_diagnostic_bundle(ctx, include_trace_report=False)
+            await make_diagnostic_bundle(ctx, include_trace_report=False)
 
         run_dir = Path(ctx.run_path)
         assert (run_dir / "MANIFEST.json").exists()
@@ -193,7 +193,7 @@ class TestMakeDiagnosticBundle:
         (run_dir / "fail_snapshot.md").write_text("# fail")
 
         with patch("app.utils.diagnostics.make_trace_report"):
-            result = await make_diagnostic_bundle(ctx, include_trace_report=False)
+            await make_diagnostic_bundle(ctx, include_trace_report=False)
 
         manifest = json.loads((run_dir / "MANIFEST.json").read_text())
         assert "ai_forensic_report.json" in manifest["files"]

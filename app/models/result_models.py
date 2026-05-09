@@ -20,41 +20,46 @@
 # ==============================================================================
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, Literal, Optional
+
+from dataclasses import asdict, dataclass, field
+from typing import Any, Literal
+
 
 # LLM応答の共通結果
 @dataclass(kw_only=True, slots=True)
 class GenerateResult:
     """LLMからの生成結果を格納する標準データクラス。"""
+
     text: str
-    tokens: Dict[str, int] = field(default_factory=dict)
+    tokens: dict[str, int] = field(default_factory=dict)
     cost_usd: float = 0.0
     model_family: str = "unknown"
     cached: bool = False
     sentiment: Literal["POSITIVE", "NEGATIVE", "NEUTRAL"] = "NEUTRAL"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """このオブジェクトを辞書に変換します。"""
         return asdict(self)
+
 
 # セレクタ発見や偵察結果の共通モデル
 @dataclass(kw_only=True, slots=True)
 class DiscoveryResult:
     """エージェントによる発見・偵察タスクの結果を格納する標準データクラス。"""
+
     ok: bool
     site: str
     query: str
-    proposal: Dict[str, Any] = field(default_factory=dict)
-    evidence: Dict[str, Any] = field(default_factory=dict)
-    ai_analysis: Optional[GenerateResult] = None
-    message: Optional[str] = None
-    screenshot: Optional[str] = None
-    file_path: Optional[str] = None  # 生成ファイルの保存先
+    proposal: dict[str, Any] = field(default_factory=dict)
+    evidence: dict[str, Any] = field(default_factory=dict)
+    ai_analysis: GenerateResult | None = None
+    message: str | None = None
+    screenshot: str | None = None
+    file_path: str | None = None  # 生成ファイルの保存先
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """このオブジェクトを辞書に変換します。ai_analysisも再帰的に変換します。"""
         data = asdict(self)
         if self.ai_analysis:
-            data['ai_analysis'] = self.ai_analysis.to_dict()
+            data["ai_analysis"] = self.ai_analysis.to_dict()
         return data

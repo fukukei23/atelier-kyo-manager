@@ -1,13 +1,12 @@
 """Tests for sourcing_csv_batch_runner module."""
+
 import json
 from pathlib import Path
 
-import pytest
-
 from app.utils.sourcing_csv_batch_runner import (
+    _process_single_row,
     check_csv_header,
     process_csv_batch,
-    _process_single_row,
 )
 
 

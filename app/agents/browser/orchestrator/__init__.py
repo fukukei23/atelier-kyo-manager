@@ -1,31 +1,32 @@
-# -*- coding: utf-8 -*-
 """BrowserOrchestrator Mix-in: コアフロー（PLP/PDP/成功段階）"""
+
 from __future__ import annotations
 
 import json as _json
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
-from playwright.async_api import Page, BrowserContext
+from playwright.async_api import BrowserContext, Page
 
-from app.core.run_context import RunContext
-from app.models.result_models import DiscoveryResult
+from app.agents.browser.extractor import BrowserExtractionService
 from app.agents.browser.navigation_driver import (
+    NavigationContext,
     NavigationDriver,
     NavigationOutcome,
-    NavigationContext,
     TrapPageDetected,
 )
 from app.agents.browser.plp_driver import PlpDriver, PlpNavigationResult
-from app.agents.browser.extractor import BrowserExtractionService
+from app.core.run_context import RunContext
+from app.models.result_models import DiscoveryResult
 
 from .config_and_metrics import ConfigAndMetricsMixin
 from .self_healing import SelfHealingMixin
 
 # Optional imports
 try:
-    from app.utils.e2e_success_stage import compute_success_stage, collect_run_artifacts
+    from app.utils.e2e_success_stage import collect_run_artifacts, compute_success_stage
 except ImportError:
     compute_success_stage = None  # type: ignore
     collect_run_artifacts = None  # type: ignore
@@ -82,18 +83,18 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
     def __init__(
         self,
         *,
-        runtime_kwargs: Optional[Dict[str, Any]] = None,
-        analysis_agent: Optional[Any] = None,
-        discovery_agent: Optional[Any] = None,
-        patch_agent: Optional[Any] = None,
-        sandbox: Optional[Any] = None,
-        policy: Optional[Any] = None,
-        patch_applier: Optional[Any] = None,
-        selector_repair_agent: Optional[Any] = None,
-        llm_client: Optional[Any] = None,
-        log: Optional[logging.Logger] = None,
+        runtime_kwargs: dict[str, Any] | None = None,
+        analysis_agent: Any | None = None,
+        discovery_agent: Any | None = None,
+        patch_agent: Any | None = None,
+        sandbox: Any | None = None,
+        policy: Any | None = None,
+        patch_applier: Any | None = None,
+        selector_repair_agent: Any | None = None,
+        llm_client: Any | None = None,
+        log: logging.Logger | None = None,
     ) -> None:
-        self.runtime_kwargs: Dict[str, Any] = runtime_kwargs or {}
+        self.runtime_kwargs: dict[str, Any] = runtime_kwargs or {}
         self.log = log or logger
 
         if analysis_agent is not None:
@@ -159,20 +160,18 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
         context: BrowserContext,
         site: str,
         query: str,
-        site_config: Dict[str, Any],
-        settings: Dict[str, Any],
+        site_config: dict[str, Any],
+        settings: dict[str, Any],
         run_context: RunContext,
         target_url: str,
         start_t: float,
         budget_ms: int,
-        nav_outcome: Optional[NavigationOutcome] = None,
-        trap_checker: Optional[Callable[[str], bool]] = None,
-        telemetry: Optional[Any] = None,
-        plugin: Optional[Any] = None,
-    ) -> Union[PlpNavigationResult, DiscoveryResult]:
-        self.log.info(
-            f"[Debug][Telemetry] telemetry value={telemetry}, type={type(telemetry)}"
-        )
+        nav_outcome: NavigationOutcome | None = None,
+        trap_checker: Callable[[str], bool] | None = None,
+        telemetry: Any | None = None,
+        plugin: Any | None = None,
+    ) -> PlpNavigationResult | DiscoveryResult:
+        self.log.info(f"[Debug][Telemetry] telemetry value={telemetry}, type={type(telemetry)}")
 
         nav_ctx = NavigationContext(
             site=site,
@@ -201,7 +200,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
 
         try:
             if nav_outcome is None:
-                if telemetry and hasattr(telemetry, 'record_plp_state'):
+                if telemetry and hasattr(telemetry, "record_plp_state"):
                     try:
                         await telemetry.record_plp_state(
                             page,
@@ -212,12 +211,17 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                         self.log.warning(f"[Orchestrator] Failed to record PLP initial state: {te}", exc_info=True)
 
                 nav_outcome = await navigation_driver.run_plp_flow(nav_ctx)
-                self.log.debug(f"[Orchestrator] NavigationDriver.run_plp_flow called: entry_url={nav_outcome.entry_url}")
+                self.log.debug(
+                    f"[Orchestrator] NavigationDriver.run_plp_flow called: entry_url={nav_outcome.entry_url}"
+                )
 
-                if telemetry and hasattr(telemetry, 'save_json'):
+                if telemetry and hasattr(telemetry, "save_json"):
                     try:
                         from app.agents.browser.telemetry import TelemetryContext
-                        tctx = TelemetryContext(site=site, query=query, run_id=run_context.run_id, stage="plp_after_nav")
+
+                        tctx = TelemetryContext(
+                            site=site, query=query, run_id=run_context.run_id, stage="plp_after_nav"
+                        )
                         await telemetry.save_json(
                             "plp_navigation_outcome",
                             {
@@ -285,7 +289,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                     run_context=run_context,
                 )
                 analysis = await self._maybe_analyze_failure(failure_ctx, page=page, run_context=run_context)
-                evidence: Dict[str, Any] = {"failure_context": failure_ctx}
+                evidence: dict[str, Any] = {"failure_context": failure_ctx}
                 if analysis:
                     evidence["failure_analysis"] = analysis
                     patch = await self._maybe_build_patch_candidate(
@@ -309,9 +313,10 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
 
         if not pdp_links:
             self.log.warning("[Orchestrator] No PDP links found. Clicking first card using PlpDriver...")
-            if telemetry and hasattr(telemetry, 'save_json'):
+            if telemetry and hasattr(telemetry, "save_json"):
                 try:
                     from app.agents.browser.telemetry import TelemetryContext
+
                     tctx = TelemetryContext(site=site, query=query, run_id=run_context.run_id, stage="plp_no_pdp_links")
                     await telemetry.save_json(
                         "plp_no_pdp_links",
@@ -354,9 +359,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                 )
 
                 if nav_result.trap_detected:
-                    self.log.warning(
-                        f"[Orchestrator] Trap detected in PlpDriver. Early exit: {nav_result.trap_reason}"
-                    )
+                    self.log.warning(f"[Orchestrator] Trap detected in PlpDriver. Early exit: {nav_result.trap_reason}")
                     failure_ctx = self._build_failure_context(
                         site=site,
                         query=query,
@@ -412,10 +415,13 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
 
         if pdp_links:
             self.log.debug(f"[Orchestrator] Found {len(pdp_links)} PDP links, extracting from PDP list...")
-            if telemetry and hasattr(telemetry, 'save_json'):
+            if telemetry and hasattr(telemetry, "save_json"):
                 try:
                     from app.agents.browser.telemetry import TelemetryContext
-                    tctx = TelemetryContext(site=site, query=query, run_id=run_context.run_id, stage="plp_pdp_links_found")
+
+                    tctx = TelemetryContext(
+                        site=site, query=query, run_id=run_context.run_id, stage="plp_pdp_links_found"
+                    )
                     await telemetry.save_json(
                         "plp_pdp_links",
                         {
@@ -435,6 +441,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                 async def prepare_hook(page: Page):
                     try:
                         from app.agents.browser import ui_helpers
+
                         if ui_helpers.kill_overlays:
                             await ui_helpers.kill_overlays(page)
                         if ui_helpers.click_continue_shopping_if_present:
@@ -447,6 +454,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                     if settings.get("enable_visual_regression_check") and "pdp" in (settings.get("vrt_scope") or ""):
                         try:
                             from app.utils.visual_regression import compare_and_maybe_update
+
                             await compare_and_maybe_update(page, "pdp", settings)
                         except Exception as e:
                             self.log.warning(f"[Orchestrator] Visual regression check failed: {e}", exc_info=True)
@@ -543,10 +551,10 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
         context: BrowserContext,
         site: str,
         query: str,
-        site_config: Dict[str, Any],
-        settings: Dict[str, Any],
+        site_config: dict[str, Any],
+        settings: dict[str, Any],
         run_context: RunContext,
-        target_url: Optional[str] = None,
+        target_url: str | None = None,
     ) -> DiscoveryResult:
         extraction_service = BrowserExtractionService(self.log, self.runtime_kwargs)
 
@@ -558,7 +566,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
             self.log.warning(f"[Orchestrator] Failed to create TelemetryClient: {te}", exc_info=True)
 
         async def prepare_hook(inner_page: Page) -> None:
-            if telemetry_client and hasattr(telemetry_client, 'record_plp_state'):
+            if telemetry_client and hasattr(telemetry_client, "record_plp_state"):
                 try:
                     await telemetry_client.record_plp_state(
                         inner_page,
@@ -569,6 +577,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                     self.log.warning(f"[Orchestrator] Failed to record PDP DOM: {te}", exc_info=True)
             try:
                 from app.agents.browser import ui_helpers
+
                 if ui_helpers.kill_overlays:
                     await ui_helpers.kill_overlays(inner_page)
                 if ui_helpers.click_continue_shopping_if_present:
@@ -581,10 +590,12 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
             if settings.get("enable_visual_regression_check") and "pdp" in (settings.get("vrt_scope") or ""):
                 try:
                     from app.utils.visual_regression import compare_and_maybe_update
+
                     vrt_result = await compare_and_maybe_update(inner_page, "pdp", settings)
-                    if vrt_result and telemetry_client and hasattr(telemetry_client, 'save_json'):
+                    if vrt_result and telemetry_client and hasattr(telemetry_client, "save_json"):
                         try:
                             from app.agents.browser.telemetry import TelemetryContext
+
                             tctx = TelemetryContext(site=site, query=query, run_id=run_context.run_id, stage="pdp_vrt")
                             await telemetry_client.save_json(
                                 "pdp_vrt_result",
@@ -622,7 +633,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                 run_context=run_context,
             )
             analysis = await self._maybe_analyze_failure(failure_ctx, page=page, run_context=run_context)
-            evidence: Dict[str, Any] = {"failure_context": failure_ctx}
+            evidence: dict[str, Any] = {"failure_context": failure_ctx}
             if analysis:
                 evidence["failure_analysis"] = analysis
                 patch = await self._maybe_build_patch_candidate(
@@ -653,16 +664,16 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
         context: BrowserContext,
         site: str,
         query: str,
-        site_config: Dict[str, Any],
-        settings: Dict[str, Any],
+        site_config: dict[str, Any],
+        settings: dict[str, Any],
         run_context: RunContext,
         target_url: str,
         start_t: float,
         budget_ms: int,
-        nav_outcome: Optional[NavigationOutcome] = None,
-        trap_checker: Optional[Callable[[str], bool]] = None,
-        telemetry: Optional[Any] = None,
-        plugin: Optional[Any] = None,
+        nav_outcome: NavigationOutcome | None = None,
+        trap_checker: Callable[[str], bool] | None = None,
+        telemetry: Any | None = None,
+        plugin: Any | None = None,
     ) -> DiscoveryResult:
         result_plp = await self.run_plp_to_pdp(
             page=page,
@@ -723,8 +734,8 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
         self,
         result: DiscoveryResult,
         run_context: RunContext,
-        nav_outcome: Optional[NavigationOutcome] = None,
-        page: Optional[Page] = None,
+        nav_outcome: NavigationOutcome | None = None,
+        page: Page | None = None,
     ) -> DiscoveryResult:
         if not compute_success_stage or not collect_run_artifacts:
             return result
@@ -757,7 +768,8 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                     validation_report_path = run_context.get_path("pdp_link_validation_report.json")
                     if validation_report_path.exists():
                         import json
-                        with open(validation_report_path, "r", encoding="utf-8") as f:
+
+                        with open(validation_report_path, encoding="utf-8") as f:
                             validation_report = json.load(f)
                         result.evidence["link_collection"] = {
                             "total_candidates": validation_report.get("total_candidates", 0),
@@ -769,6 +781,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                     self.log.debug(f"[Orchestrator] Failed to load pdp_link_validation_report: {e}")
 
             from app.utils.e2e_success_stage import should_result_be_ok
+
             result.ok = should_result_be_ok(success_stage)
 
             self.log.info(

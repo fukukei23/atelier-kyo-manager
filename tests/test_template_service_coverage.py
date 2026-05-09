@@ -1,4 +1,5 @@
 """template_service のテスト — DB依存はmock"""
+
 import json
 from unittest.mock import MagicMock, patch
 
@@ -56,7 +57,7 @@ class TestGenerateBuymaCsv:
         p.description = kwargs.get("description", "説明文")
         p.item_category = kwargs.get("item_category", "バッグ")
         p.image_url = kwargs.get("image_url", "img.jpg")
-        p.processed_images = kwargs.get("processed_images", None)
+        p.processed_images = kwargs.get("processed_images")
         p.pipeline_status = kwargs.get("pipeline_status", "complete")
         return p
 
@@ -75,18 +76,12 @@ class TestGenerateBuymaCsv:
         assert "テスト商品" not in csv_text
 
     def test_processed_images_json(self):
-        products = [self._make_product(
-            processed_images=json.dumps(["img1.jpg", "img2.jpg"]),
-            image_url="fallback.jpg"
-        )]
+        products = [self._make_product(processed_images=json.dumps(["img1.jpg", "img2.jpg"]), image_url="fallback.jpg")]
         csv_text, skipped = generate_buyma_csv(products)
         assert "img1.jpg,img2.jpg" in csv_text
 
     def test_processed_images_invalid_json(self):
-        products = [self._make_product(
-            processed_images="not json",
-            image_url="fallback.jpg"
-        )]
+        products = [self._make_product(processed_images="not json", image_url="fallback.jpg")]
         csv_text, skipped = generate_buyma_csv(products)
         assert "fallback.jpg" in csv_text
 

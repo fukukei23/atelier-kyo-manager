@@ -2,6 +2,7 @@ from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from selenium.webdriver.support.ui import WebDriverWait
 from webdriver_manager.chrome import ChromeDriverManager
+
 from app.extractors.product_info_extractor import extract_product_info
 
 d = webdriver.Chrome(service=ChromeService(ChromeDriverManager().install()))

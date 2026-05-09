@@ -6,10 +6,10 @@ from app import create_app
 from app.extensions import db as _db
 from app.models.shipment_notification import ShipmentNotification
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def app():
@@ -46,11 +46,11 @@ def clean_db(app):
 # Model tests
 # ---------------------------------------------------------------------------
 
+
 class TestShipmentNotificationModel:
     def test_status_label(self, app):
         with app.app_context():
-            labels = {"pending": "未通知", "notified": "通知済み",
-                      "confirmed": "確認済み", "error": "エラー"}
+            labels = {"pending": "未通知", "notified": "通知済み", "confirmed": "確認済み", "error": "エラー"}
             for status, expected in labels.items():
                 n = ShipmentNotification(status=status)
                 assert n.status_label() == expected
@@ -86,6 +86,7 @@ class TestShipmentNotificationModel:
 # Route tests
 # ---------------------------------------------------------------------------
 
+
 class TestShipmentNotificationRoutes:
     def test_list_page(self, client, clean_db):
         resp = client.get("/shipment-notifications")
@@ -98,12 +99,16 @@ class TestShipmentNotificationRoutes:
         assert "発送通知" in resp.text
 
     def test_create_submit(self, app, client, clean_db):
-        resp = client.post("/shipment-notifications/new", data={
-            "order_id": "1",
-            "tracking_number": "TZ123456789",
-            "warehouse": "stackry",
-            "carrier": "fedex",
-        }, follow_redirects=True)
+        resp = client.post(
+            "/shipment-notifications/new",
+            data={
+                "order_id": "1",
+                "tracking_number": "TZ123456789",
+                "warehouse": "stackry",
+                "carrier": "fedex",
+            },
+            follow_redirects=True,
+        )
         assert resp.status_code == 200
         with app.app_context():
             n = ShipmentNotification.query.first()
@@ -118,8 +123,7 @@ class TestShipmentNotificationRoutes:
             _db.session.add(n)
             _db.session.commit()
             sid = n.id
-        resp = client.post(f"/shipment-notifications/{sid}/notify",
-                           follow_redirects=True)
+        resp = client.post(f"/shipment-notifications/{sid}/notify", follow_redirects=True)
         assert resp.status_code == 200
         with app.app_context():
             n = ShipmentNotification.query.get(sid)
@@ -131,8 +135,7 @@ class TestShipmentNotificationRoutes:
             _db.session.add(n)
             _db.session.commit()
             sid = n.id
-        resp = client.post(f"/shipment-notifications/{sid}/delete",
-                           follow_redirects=True)
+        resp = client.post(f"/shipment-notifications/{sid}/delete", follow_redirects=True)
         assert resp.status_code == 200
         with app.app_context():
             assert ShipmentNotification.query.get(sid) is None

@@ -19,9 +19,7 @@ from . import bp
 @login_required
 def listing_templates():
     """テンプレート一覧"""
-    templates = ListingTemplate.query.order_by(
-        ListingTemplate.is_default.desc(), ListingTemplate.id.asc()
-    ).all()
+    templates = ListingTemplate.query.order_by(ListingTemplate.is_default.desc(), ListingTemplate.id.asc()).all()
     return render_template("listing_templates.html", templates=templates)
 
 
@@ -41,11 +39,11 @@ def edit_listing_template(tid: int | None = None):
 
         if not name or not template_text:
             flash("テンプレート名と本文は必須です。", "error")
-            return render_template("edit_listing_template.html",
-                                   tpl=tpl or SimpleNamespace(name=name,
-                                                              template_text=template_text,
-                                                              category=category,
-                                                              is_default=is_default))
+            return render_template(
+                "edit_listing_template.html",
+                tpl=tpl
+                or SimpleNamespace(name=name, template_text=template_text, category=category, is_default=is_default),
+            )
 
         if tpl is None:
             tpl = ListingTemplate()

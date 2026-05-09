@@ -3,22 +3,23 @@
 既存の app.core.pricing.calculator を使用して利益を計算する。
 partial（unknown含む）の場合は安全側に処理する。
 """
+
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.rules import load_pricing_config
 from app.core.pricing.schemas import PricingInput
 
 
-def calculate_profitability(normalized_data: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+def calculate_profitability(normalized_data: dict[str, Any] | None) -> dict[str, Any]:
     """
     正規化された入力データから利益を計算する。
-    
+
     Args:
         normalized_data: validate_sourcing_input の normalized 結果
-        
+
     Returns:
         {
             "status": "complete" | "partial" | "invalid",
@@ -44,14 +45,14 @@ def calculate_profitability(normalized_data: Optional[Dict[str, Any]]) -> Dict[s
             "missing_fields": None,
             "errors": ["入力データが無効です"],
         }
-    
+
     # unknown が含まれている場合は partial
-    missing_fields: List[str] = []
+    missing_fields: list[str] = []
     for key, value in normalized_data.items():
         if value is None:
             missing_fields.append(key)
     has_unknown = len(missing_fields) > 0
-    
+
     if has_unknown:
         # partial の場合、計算可能な項目のみで計算
         # ただし、必須項目（purchase_price, selling_price）が None の場合は計算不可
@@ -67,17 +68,17 @@ def calculate_profitability(normalized_data: Optional[Dict[str, Any]]) -> Dict[s
                 "missing_fields": missing_fields,
                 "errors": ["必須項目が 'unknown' のため計算できません"],
             }
-        
+
         # revenue（selling_price）を確定
         selling_price = normalized_data.get("selling_price", 0.0)
         revenue = float(selling_price)
-        
+
         # known_cost_sum（確定コスト合計）を計算
         # unknown の項目（None）は合計に含めず、確定している項目のみを合計
         cfg = load_pricing_config()
         buyma_fee = revenue * cfg.buyma_effective_fee_rate
         additional_fee = revenue * cfg.additional_fee_rate
-        
+
         # 確定している項目のみを合計（None の項目は合計から除外）
         known_cost_sum = 0.0
         if normalized_data.get("purchase_price") is not None:
@@ -94,10 +95,10 @@ def calculate_profitability(normalized_data: Optional[Dict[str, Any]]) -> Dict[s
             known_cost_sum += float(normalized_data["warehouse_shipping_cost"])
         known_cost_sum += buyma_fee
         known_cost_sum += additional_fee
-        
+
         # profit_upper_bound = revenue - known_cost_sum（上限であり確定利益ではない）
         profit_upper_bound = revenue - known_cost_sum
-        
+
         return {
             "status": "partial",
             "revenue": revenue,
@@ -109,7 +110,7 @@ def calculate_profitability(normalized_data: Optional[Dict[str, Any]]) -> Dict[s
             "missing_fields": missing_fields,
             "errors": [],
         }
-    
+
     # complete の場合、通常計算
     inp = PricingInput(
         purchase_price=normalized_data.get("purchase_price", 0.0),
@@ -124,9 +125,9 @@ def calculate_profitability(normalized_data: Optional[Dict[str, Any]]) -> Dict[s
         item_category=normalized_data.get("item_category", ""),
         item_material=normalized_data.get("item_material", ""),
     )
-    
+
     result = calculate_pricing(inp)
-    
+
     return {
         "status": "complete",
         "revenue": result.revenue,
@@ -138,4 +139,3 @@ def calculate_profitability(normalized_data: Optional[Dict[str, Any]]) -> Dict[s
         "missing_fields": None,
         "errors": [],
     }
-

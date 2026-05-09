@@ -11,7 +11,7 @@ from flask import Flask
 from flask_login import LoginManager
 
 from .config.config import AppConfig
-from .extensions import db, migrate, csrf
+from .extensions import csrf, db, migrate
 
 __version__ = "2.0.0"
 
@@ -38,14 +38,17 @@ def create_app(config_name: str | None = None) -> Flask:
 
     # --- Blueprint 登録 ---
     from .routes import bp as main_bp  # noqa: F811
+
     app.register_blueprint(main_bp)
 
     from .auth import bp as auth_bp
+
     app.register_blueprint(auth_bp, url_prefix="/auth")
 
     # --- モデルをインポート（DB作成用） ---
     with app.app_context():
         from . import models  # noqa: F401
+
         db.create_all()
 
     return app
@@ -54,4 +57,5 @@ def create_app(config_name: str | None = None) -> Flask:
 @login_manager.user_loader
 def _load_user(user_id: int):
     from .models.user import User
+
     return db.session.get(User, user_id)

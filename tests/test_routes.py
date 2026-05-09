@@ -1,23 +1,25 @@
 """atelier-kyo-manager ルートテスト"""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from app import create_app
 from app.extensions import db
 from app.models.user import User
-from app.models.product import Product
 
 
 @pytest.fixture(scope="function")
 def app():
     app = create_app()
-    app.config.update({
-        "TESTING": True,
-        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-        "WTF_CSRF_ENABLED": False,
-        "SECRET_KEY": "test-secret",
-    })
+    app.config.update(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "WTF_CSRF_ENABLED": False,
+            "SECRET_KEY": "test-secret",
+        }
+    )
     with app.app_context():
         db.create_all()
         yield app
@@ -67,12 +69,24 @@ class TestAuth:
 
 # ---- Protected routes redirect ----
 class TestProtectedRoutes:
-    @pytest.mark.parametrize("path", [
-        "/manage", "/products", "/orders", "/partners",
-        "/stock-check", "/popularity", "/regions", "/customers",
-        "/cashflow", "/brand-analytics", "/listing-progress",
-        "/templates", "/auto-research",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/manage",
+            "/products",
+            "/orders",
+            "/partners",
+            "/stock-check",
+            "/popularity",
+            "/regions",
+            "/customers",
+            "/cashflow",
+            "/brand-analytics",
+            "/listing-progress",
+            "/templates",
+            "/auto-research",
+        ],
+    )
     def test_unauthenticated_redirects(self, client, path):
         r = client.get(path, follow_redirects=False)
         assert r.status_code == 302
@@ -81,12 +95,25 @@ class TestProtectedRoutes:
 
 # ---- Authenticated pages 200 ----
 class TestAuthenticatedPages:
-    @pytest.mark.parametrize("path", [
-        "/", "/manage", "/products", "/orders", "/partners",
-        "/stock-check", "/popularity", "/regions", "/customers",
-        "/cashflow", "/brand-analytics", "/listing-progress",
-        "/templates", "/auto-research",
-    ])
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "/",
+            "/manage",
+            "/products",
+            "/orders",
+            "/partners",
+            "/stock-check",
+            "/popularity",
+            "/regions",
+            "/customers",
+            "/cashflow",
+            "/brand-analytics",
+            "/listing-progress",
+            "/templates",
+            "/auto-research",
+        ],
+    )
     def test_page_200(self, auth_client, path):
         r = auth_client.get(path)
         assert r.status_code == 200
@@ -138,12 +165,13 @@ class TestPriceScraper:
         with patch("app.services.price_scraper.requests.Session.get") as mock_get:
             mock_resp = MagicMock()
             mock_resp.status_code = 200
-            mock_resp.text = '<html><title>Test</title><span>¥12,345</span></html>'
+            mock_resp.text = "<html><title>Test</title><span>¥12,345</span></html>"
             mock_resp.url = "http://example.com"
             mock_resp.headers = {}
             mock_get.return_value = mock_resp
 
             from app.services.price_scraper import PriceScraper
+
             scraper = PriceScraper()
             result = scraper.fetch("http://example.com")
             assert result["success"] is True
@@ -152,10 +180,12 @@ class TestPriceScraper:
 
     def test_fetch_connection_error(self):
         import requests as _req
+
         with patch("app.services.price_scraper.requests.Session.get") as mock_get:
             mock_get.side_effect = _req.ConnectionError("fail")
 
             from app.services.price_scraper import PriceScraper
+
             result = PriceScraper().fetch("http://bad.example.com")
             assert result["success"] is False
 
@@ -163,12 +193,13 @@ class TestPriceScraper:
         with patch("app.services.price_scraper.requests.Session.get") as mock_get:
             mock_resp = MagicMock()
             mock_resp.status_code = 200
-            mock_resp.text = '<html><title>Sold</title><div>SOLD OUT</div></html>'
+            mock_resp.text = "<html><title>Sold</title><div>SOLD OUT</div></html>"
             mock_resp.url = "http://example.com"
             mock_resp.headers = {}
             mock_get.return_value = mock_resp
 
             from app.services.price_scraper import PriceScraper
+
             result = PriceScraper().fetch("http://example.com")
             assert result["in_stock"] is False
 
@@ -177,37 +208,44 @@ class TestPriceScraper:
 class TestPriceScraperFallback:
     def test_classify_error_blocked(self):
         from app.services.price_scraper import PriceScraper
+
         assert PriceScraper.classify_error("403") == "blocked"
         assert PriceScraper.classify_error("429") == "blocked"
         assert PriceScraper.classify_error("Cloudflare") == "blocked"
 
     def test_classify_error_not_found(self):
         from app.services.price_scraper import PriceScraper
+
         assert PriceScraper.classify_error("404") == "not_found"
 
     def test_classify_error_timeout(self):
         from app.services.price_scraper import PriceScraper
+
         assert PriceScraper.classify_error("タイムアウト") == "timeout"
         assert PriceScraper.classify_error("Timeout") == "timeout"
 
     def test_classify_error_connection(self):
         from app.services.price_scraper import PriceScraper
+
         assert PriceScraper.classify_error("接続失敗") == "connection"
 
     def test_classify_error_server(self):
         from app.services.price_scraper import PriceScraper
+
         assert PriceScraper.classify_error("HTTP 500") == "server_error"
 
     def test_classify_error_unknown(self):
         from app.services.price_scraper import PriceScraper
+
         assert PriceScraper.classify_error("何か不明なエラー") == "unknown"
 
     def test_fetch_with_retry_success_first(self):
         from app.services.price_scraper import PriceScraper
+
         with patch("app.services.price_scraper.requests.Session.get") as mock_get:
             mock_resp = MagicMock()
             mock_resp.status_code = 200
-            mock_resp.text = '<html><title>OK</title><span>¥9,999</span></html>'
+            mock_resp.text = "<html><title>OK</title><span>¥9,999</span></html>"
             mock_resp.url = "http://example.com"
             mock_resp.headers = {}
             mock_get.return_value = mock_resp
@@ -221,8 +259,10 @@ class TestPriceScraperFallback:
 
     @patch("time.sleep", return_value=None)
     def test_fetch_with_retry_blocked_retries(self, mock_sleep):
-        from app.services.price_scraper import PriceScraper
         import requests as _req
+
+        from app.services.price_scraper import PriceScraper
+
         with patch("app.services.price_scraper.requests.Session.get") as mock_get:
             mock_resp = MagicMock()
             mock_resp.status_code = 403
@@ -242,8 +282,10 @@ class TestPriceScraperFallback:
             scraper.close()
 
     def test_fetch_with_retry_not_found_no_retry(self):
-        from app.services.price_scraper import PriceScraper
         import requests as _req
+
+        from app.services.price_scraper import PriceScraper
+
         with patch("app.services.price_scraper.requests.Session.get") as mock_get:
             mock_resp = MagicMock()
             mock_resp.status_code = 404
@@ -263,10 +305,11 @@ class TestPriceScraperFallback:
 
     def test_fetch_cached_returns_cache(self):
         from app.services.price_scraper import PriceScraper
+
         with patch("app.services.price_scraper.requests.Session.get") as mock_get:
             mock_resp = MagicMock()
             mock_resp.status_code = 200
-            mock_resp.text = '<html><title>C</title><span>¥1,000</span></html>'
+            mock_resp.text = "<html><title>C</title><span>¥1,000</span></html>"
             mock_resp.url = "http://example.com/cached"
             mock_resp.headers = {}
             mock_get.return_value = mock_resp
@@ -284,6 +327,7 @@ class TestPriceScraperFallback:
 class TestNotificationService:
     def test_send_no_webhook_url(self):
         from app.services.notification_service import NotificationService
+
         ns = NotificationService()
         result = ns.send("test")
         assert result["success"] is False
@@ -291,6 +335,7 @@ class TestNotificationService:
 
     def test_send_success(self):
         from app.services.notification_service import NotificationService
+
         with patch("app.services.notification_service.requests.post") as mock_post:
             mock_resp = MagicMock()
             mock_resp.raise_for_status.return_value = None
@@ -303,8 +348,10 @@ class TestNotificationService:
             mock_post.assert_called_once()
 
     def test_send_connection_error(self):
-        from app.services.notification_service import NotificationService
         import requests as _req
+
+        from app.services.notification_service import NotificationService
+
         with patch("app.services.notification_service.requests.post") as mock_post:
             mock_post.side_effect = _req.ConnectionError("fail")
 
@@ -315,6 +362,7 @@ class TestNotificationService:
 
     def test_send_pipeline_result_success(self):
         from app.services.notification_service import NotificationService
+
         with patch("app.services.notification_service.requests.post") as mock_post:
             mock_resp = MagicMock()
             mock_resp.raise_for_status.return_value = None
@@ -329,6 +377,7 @@ class TestNotificationService:
 
     def test_send_pipeline_result_failed(self):
         from app.services.notification_service import NotificationService
+
         with patch("app.services.notification_service.requests.post") as mock_post:
             mock_resp = MagicMock()
             mock_resp.raise_for_status.return_value = None
@@ -342,6 +391,7 @@ class TestNotificationService:
 
     def test_init_app_reads_config(self, app):
         from app.services.notification_service import NotificationService
+
         ns = NotificationService()
         ns.init_app(app)
         assert ns.webhook_url == ""  # test config has no SLACK_WEBHOOK_URL
@@ -351,12 +401,14 @@ class TestNotificationService:
 class TestFaqTemplateModel:
     def test_match_single_keyword(self):
         from app.models.faq_template import FaqTemplate
+
         faq = FaqTemplate(question_pattern="送料", answer_template="送料無料です")
         assert faq.match("送料はいくらですか") is True
         assert faq.match("返品したい") is False
 
     def test_match_multiple_keywords(self):
         from app.models.faq_template import FaqTemplate
+
         faq = FaqTemplate(question_pattern="送料, 配送, 届かない", answer_template="確認します")
         assert faq.match("配送方法は？") is True
         assert faq.match("商品が届かない") is True
@@ -364,12 +416,14 @@ class TestFaqTemplateModel:
 
     def test_match_empty_text(self):
         from app.models.faq_template import FaqTemplate
+
         faq = FaqTemplate(question_pattern="送料", answer_template="送料無料")
         assert faq.match("") is False
         assert faq.match(None) is False
 
     def test_render_template(self):
         from app.models.faq_template import FaqTemplate
+
         faq = FaqTemplate(question_pattern="送料", answer_template="{product_name}は送料無料です")
         result = faq.render(product_name="テスト商品")
         assert "テスト商品" in result
@@ -386,30 +440,39 @@ class TestFaqTemplateRoutes:
         assert r.status_code == 200
 
     def test_create_faq_template_submit(self, auth_client, app):
-        r = auth_client.post("/faq-templates/new", data={
-            "category": "shipping",
-            "question_pattern": "送料,配送",
-            "answer_template": "{product_name}は送料無料です",
-        }, follow_redirects=True)
+        r = auth_client.post(
+            "/faq-templates/new",
+            data={
+                "category": "shipping",
+                "question_pattern": "送料,配送",
+                "answer_template": "{product_name}は送料無料です",
+            },
+            follow_redirects=True,
+        )
         assert r.status_code == 200
         with app.app_context():
             from app.models.faq_template import FaqTemplate
+
             faq = FaqTemplate.query.first()
             assert faq is not None
             assert faq.category == "shipping"
             assert faq.match("送料は？")
 
     def test_create_faq_template_missing_fields(self, auth_client):
-        r = auth_client.post("/faq-templates/new", data={
-            "category": "general",
-            "question_pattern": "",
-            "answer_template": "",
-        })
+        r = auth_client.post(
+            "/faq-templates/new",
+            data={
+                "category": "general",
+                "question_pattern": "",
+                "answer_template": "",
+            },
+        )
         assert r.status_code == 200  # re-renders form
 
     def test_delete_faq_template(self, auth_client, app):
         with app.app_context():
             from app.models.faq_template import FaqTemplate
+
             faq = FaqTemplate(category="test", question_pattern="test", answer_template="test")
             db.session.add(faq)
             db.session.commit()
@@ -422,19 +485,18 @@ class TestFaqTemplateRoutes:
     def test_faq_match_api(self, auth_client, app):
         with app.app_context():
             from app.models.faq_template import FaqTemplate
-            faq = FaqTemplate(category="shipping", question_pattern="送料,配送", answer_template="送料無料です", is_active=True)
+
+            faq = FaqTemplate(
+                category="shipping", question_pattern="送料,配送", answer_template="送料無料です", is_active=True
+            )
             db.session.add(faq)
             db.session.commit()
-        r = auth_client.post("/api/faq-match",
-                             json={"text": "送料はいくらですか"},
-                             content_type="application/json")
+        r = auth_client.post("/api/faq-match", json={"text": "送料はいくらですか"}, content_type="application/json")
         assert r.status_code == 200
         data = r.get_json()
         assert data["success"] is True
         assert len(data["matches"]) >= 1
 
     def test_faq_match_api_no_text(self, auth_client):
-        r = auth_client.post("/api/faq-match",
-                             json={},
-                             content_type="application/json")
+        r = auth_client.post("/api/faq-match", json={}, content_type="application/json")
         assert r.status_code == 400

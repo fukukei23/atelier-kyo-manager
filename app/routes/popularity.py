@@ -21,9 +21,11 @@ from . import bp
 @login_required
 def popularity_list():
     """人気度トラッキング一覧"""
-    trackers = PopularityTracker.query.options(
-        joinedload(PopularityTracker.product)
-    ).order_by(PopularityTracker.popularity_score.desc()).all()
+    trackers = (
+        PopularityTracker.query.options(joinedload(PopularityTracker.product))
+        .order_by(PopularityTracker.popularity_score.desc())
+        .all()
+    )
     avg_score = db.session.query(func.avg(PopularityTracker.popularity_score)).scalar() or 0
     top_count = sum(1 for t in trackers if (t.popularity_score or 0) >= 100)
     low_count = sum(1 for t in trackers if (t.popularity_score or 0) < 20)

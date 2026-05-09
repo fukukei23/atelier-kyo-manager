@@ -68,22 +68,20 @@ test: venv
 
 .PHONY: lint
 lint: venv
-	@echo ">>> Run linters (ruff / flake8 があれば実行)..."
+	@echo ">>> Run ruff check..."
 	@if command -v $(VENV_DIR)/bin/ruff >/dev/null 2>&1; then \
-		$(VENV_DIR)/bin/ruff check .; \
-	elif command -v $(VENV_DIR)/bin/flake8 >/dev/null 2>&1; then \
-		$(VENV_DIR)/bin/flake8 .; \
+		$(VENV_DIR)/bin/ruff check app/ tests/ scripts/ dev_tools/; \
 	else \
-		echo "[INFO] ruff / flake8 が見つかりません。lint をスキップします。"; \
+		echo "[INFO] ruff が見つかりません。make install-dev を実行してください。"; \
 	fi
 
 .PHONY: format
 format: venv
-	@echo ">>> Run formatter (black があれば実行)..."
-	@if command -v $(VENV_DIR)/bin/black >/dev/null 2>&1; then \
-		$(VENV_DIR)/bin/black .; \
+	@echo ">>> Run ruff format..."
+	@if command -v $(VENV_DIR)/bin/ruff >/dev/null 2>&1; then \
+		$(VENV_DIR)/bin/ruff format app/ tests/ scripts/ dev_tools/; \
 	else \
-		echo "[INFO] black が見つかりません。format をスキップします。"; \
+		echo "[INFO] ruff が見つかりません。make install-dev を実行してください。"; \
 	fi
 
 # ==== clean ===========================================================

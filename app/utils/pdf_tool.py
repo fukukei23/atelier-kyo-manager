@@ -1,4 +1,3 @@
-# -- coding: utf-8 --
 # ======================================================================
 # File: app/utils/pdf_tool.py
 # Registry: app/utils/pdf_tool.py
@@ -14,31 +13,30 @@
 # ======================================================================
 from __future__ import annotations
 
+import logging
 import shutil
 import subprocess
-import logging
 from pathlib import Path
-from typing import Optional
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
 
 def _weasyprint_available() -> bool:
     """Check if weasyprint is installed and available."""
     try:
         import weasyprint  # noqa: F401
+
         return True
     except (ImportError, ModuleNotFoundError):
         return False
 
-def _wkhtmltopdf_available() -> Optional[str]:
+
+def _wkhtmltopdf_available() -> str | None:
     """Check if wkhtmltopdf executable is in PATH."""
     return shutil.which("wkhtmltopdf")
 
-def convert_html_file_to_pdf(
-    html_path: str | Path,
-    out_pdf: Optional[str | Path] = None,
-    engine: str = "auto"
-) -> Path:
+
+def convert_html_file_to_pdf(html_path: str | Path, out_pdf: str | Path | None = None, engine: str = "auto") -> Path:
     """
     Converts an HTML file to a PDF document.
 
@@ -69,6 +67,7 @@ def convert_html_file_to_pdf(
         logging.info(f"Using 'weasyprint' engine to convert {html_path.name}")
         try:
             from weasyprint import HTML
+
             HTML(filename=str(html_path)).write_pdf(str(out_pdf))
             logging.info(f"Successfully created PDF: {out_pdf}")
             return out_pdf

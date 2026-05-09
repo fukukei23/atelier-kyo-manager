@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 import pytest
 
 from app.agents.browser.session_manager import SessionManager
@@ -109,4 +107,3 @@ async def test_session_manager_open_and_close(monkeypatch, tmp_path):
     # ensure handles are cleared after close
     assert mgr.page is None
     assert mgr.context is None
-

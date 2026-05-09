@@ -19,14 +19,10 @@ class CustomerInquiry(db.Model):
     message = db.Column(db.Text, nullable=False)
     status = db.Column(db.String(32), default="pending", nullable=False)
     response_text = db.Column(db.Text, nullable=True)
-    faq_template_id = db.Column(
-        db.Integer, db.ForeignKey("faq_template.id"), nullable=True
-    )
+    faq_template_id = db.Column(db.Integer, db.ForeignKey("faq_template.id"), nullable=True)
     escalation_reason = db.Column(db.Text, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(
-        db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def mark_matched(self, faq_template_id: int, response: str) -> None:
         self.status = "matched"

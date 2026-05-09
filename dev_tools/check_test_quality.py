@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import ast
@@ -20,19 +19,12 @@ class TestSmellVisitor(ast.NodeVisitor):
     def visit_Call(self, node: ast.Call) -> None:
         # time.sleep in tests
         if isinstance(node.func, ast.Attribute):
-            if (
-                isinstance(node.func.value, ast.Name)
-                and node.func.value.id == "time"
-                and node.func.attr == "sleep"
-            ):
-                self.issues.append(
-                    f"{node.lineno}:{node.col_offset}: use of time.sleep() in tests"
-                )
+            if isinstance(node.func.value, ast.Name) and node.func.value.id == "time" and node.func.attr == "sleep":
+                self.issues.append(f"{node.lineno}:{node.col_offset}: use of time.sleep() in tests")
         # direct open on test files
         if isinstance(node.func, ast.Name) and node.func.id == "open":
             self.issues.append(
-                f"{node.lineno}:{node.col_offset}: open() used directly in test; "
-                f"consider tmp_path or fixtures"
+                f"{node.lineno}:{node.col_offset}: open() used directly in test; consider tmp_path or fixtures"
             )
         self.generic_visit(node)
 
@@ -77,4 +69,3 @@ def main(argv: list[str]) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main(sys.argv))
-

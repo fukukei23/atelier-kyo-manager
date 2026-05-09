@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ==============================================================================
 # ファイル名: app/agents/gpt_integration.py
 # 日付 (JST): 2025-11-05 13:00:00
@@ -10,17 +9,16 @@
 # - [v1.2.2] ★修正: save_proposal で使用する 're' モジュールをインポート。
 # ==============================================================================
 import json
-import time
 import logging
 import os  # ★ NEW
 import re  # ★ NEW (v1.2.2: save_proposal のために必須)
-from typing import Any, Dict, Optional, Tuple
+import time
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-SAFE_OUT_KEYS = {
-    "selectors_patch", "overrides_patch", "url_rules", "code_hints", "rationale", "risk"
-}
+SAFE_OUT_KEYS = {"selectors_patch", "overrides_patch", "url_rules", "code_hints", "rationale", "risk"}
+
 
 class GPTIntegration:
     """
@@ -31,23 +29,23 @@ class GPTIntegration:
       - PII/DOM の過剰流出防止（文字数制限）
     """
 
-    def __init__(self, site_config: Dict[str, Any], generation_config: Optional[Dict[str, Any]] = None):
+    def __init__(self, site_config: dict[str, Any], generation_config: dict[str, Any] | None = None):
         # 遅延import（依存を薄く）
         from app.utils.ai_llm_controller import AILlmController  # type: ignore
+
         self.ctrl = AILlmController()
         self.site_config = site_config or {}
-        self.generation_config = (
-            generation_config
-            or (self.site_config.get("proxy_agent", {}).get("llm", {}).get("generation_config") or {})
+        self.generation_config = generation_config or (
+            self.site_config.get("proxy_agent", {}).get("llm", {}).get("generation_config") or {}
         )
-        self.last_saved_proposal_path: Optional[str] = None
+        self.last_saved_proposal_path: str | None = None
         # 安全・回復パラメータ
         self.max_blob = int(self.generation_config.get("max_context_blob_chars", 12000))
         self.max_retry = int(self.generation_config.get("max_retry", 2))
         self.retry_backoff = float(self.generation_config.get("retry_backoff", 2.0))
 
     # ---------------------------------------------------------------------
-    def propose_fixes(self, failure_context: Dict[str, Any]) -> Dict[str, Any]:
+    def propose_fixes(self, failure_context: dict[str, Any]) -> dict[str, Any]:
         """
         入力: 失敗URL・エラー・（あれば）DOM抜粋 等
         出力: { selectors_patch, overrides_patch, url_rules, code_hints, rationale, risk }
@@ -57,14 +55,11 @@ class GPTIntegration:
         prompt = self._build_prompt(fc)
 
         tries = 0
-        last_err: Optional[str] = None
+        last_err: str | None = None
         while tries <= self.max_retry:
             tries += 1
             res = self.ctrl.generate(
-                prompt=prompt,
-                task="analysis",
-                use_cache=False,
-                generation_config=self.generation_config
+                prompt=prompt, task="analysis", use_cache=False, generation_config=self.generation_config
             )
             if getattr(res, "success", False) and getattr(res, "text", None):
                 ok, data_or_err = self._parse_and_validate(res.text)
@@ -86,7 +81,9 @@ class GPTIntegration:
 
             if tries <= self.max_retry:
                 sleep_s = self.retry_backoff ** (tries - 1)
-                logger.warning(f"[GPTIntegration] retry {tries}/{self.max_retry} after error: {last_err} (sleep {sleep_s:.1f}s)")
+                logger.warning(
+                    f"[GPTIntegration] retry {tries}/{self.max_retry} after error: {last_err} (sleep {sleep_s:.1f}s)"
+                )
                 time.sleep(sleep_s)
 
         raise RuntimeError(last_err or "LLM failed")
@@ -96,11 +93,11 @@ class GPTIntegration:
         self,
         site: str,
         query: str,
-        site_config: Dict[str, Any],
-        settings: Dict[str, Any],
-        failure_context: Dict[str, Any],
-        run_context: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        site_config: dict[str, Any],
+        settings: dict[str, Any],
+        failure_context: dict[str, Any],
+        run_context: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         FailureAnalysisAgent から呼ばれる互換メソッド。
         propose_fixes を呼び出し、提案と保存パスを返す。
@@ -114,7 +111,7 @@ class GPTIntegration:
         }
 
     # --- ★追加(v1.2.1): 提案JSONの保存ユーティリティ ---
-    def save_proposal(self, proposal: Dict[str, Any], base_dir: Optional[str] = None) -> Optional[str]:
+    def save_proposal(self, proposal: dict[str, Any], base_dir: str | None = None) -> str | None:
         """
         LLM提案の辞書をタイムスタンプ付きJSONファイルとして保存する。
         """
@@ -127,10 +124,10 @@ class GPTIntegration:
             site_key_guess = (
                 proposal.get("site")
                 or proposal.get("site_key")
-                or self.site_config.get("site_key") # __init__ の self.site_config からも参照
+                or self.site_config.get("site_key")  # __init__ の self.site_config からも参照
                 or "site"
             )
-            site = re.sub(r"[^a-z0-9_-]", "", str(site_key_guess).lower()) # ファイル名用にサニタイズ
+            site = re.sub(r"[^a-z0-9_-]", "", str(site_key_guess).lower())  # ファイル名用にサニタイズ
 
             fname = f"{site}_{ts}_proposal.json"
             path = os.path.join(out_dir, fname)
@@ -145,17 +142,17 @@ class GPTIntegration:
 
     # ---------------------------------------------------------------------
     # Helpers
-    def _sanitize_context(self, fc: Dict[str, Any]) -> Dict[str, Any]:
+    def _sanitize_context(self, fc: dict[str, Any]) -> dict[str, Any]:
         """DOMやクッキーの機微情報は切り詰める。"""
         out = dict(fc or {})
         for k in ("dom_snapshot", "dom_excerpt", "html", "cookies", "headers"):
             if k in out and isinstance(out[k], str):
                 s = out[k]
                 if len(s) > self.max_blob:
-                    out[k] = s[: self.max_blob] + f"\n"
+                    out[k] = s[: self.max_blob] + "\n"
         return out
 
-    def _parse_and_validate(self, text: str) -> Tuple[bool, Any]:
+    def _parse_and_validate(self, text: str) -> tuple[bool, Any]:
         raw = self._extract_json(text)
         try:
             data = json.loads(raw)
@@ -173,16 +170,22 @@ class GPTIntegration:
         out["rationale"] = out.get("rationale") or ""
         out["risk"] = (out.get("risk") or "low").lower()
 
-        if not isinstance(out["selectors_patch"], dict): out["selectors_patch"] = {}
-        if not isinstance(out["overrides_patch"], dict): out["overrides_patch"] = {}
-        if not isinstance(out["url_rules"], dict): out["url_rules"] = {}
-        if not isinstance(out["code_hints"], list): out["code_hints"] = []
-        if not isinstance(out["rationale"], str): out["rationale"] = ""
-        if out["risk"] not in ("low", "medium", "high"): out["risk"] = "low"
+        if not isinstance(out["selectors_patch"], dict):
+            out["selectors_patch"] = {}
+        if not isinstance(out["overrides_patch"], dict):
+            out["overrides_patch"] = {}
+        if not isinstance(out["url_rules"], dict):
+            out["url_rules"] = {}
+        if not isinstance(out["code_hints"], list):
+            out["code_hints"] = []
+        if not isinstance(out["rationale"], str):
+            out["rationale"] = ""
+        if out["risk"] not in ("low", "medium", "high"):
+            out["risk"] = "low"
 
         return True, out
 
-    def _build_prompt(self, fc: Dict[str, Any]) -> str:
+    def _build_prompt(self, fc: dict[str, Any]) -> str:
         site = self.site_config.get("site_key") or self.site_config.get("name") or "TARGET"
         guidance = {
             "instruction": "あなたはECサイトのPLPスクレイピングを『安全に』自己進化させるエージェントです。",
@@ -193,23 +196,22 @@ class GPTIntegration:
                 "4) selectors_patch/overrides_patch は最小差分のみ。既存キーは壊さない。",
                 "5) URLトラップ（/en-jp 等）や monclergroup.com への誤遷移を避ける正規化ルールを歓迎。",
                 "6) リスク評価(risk: low/medium/high)を必ず含める。",
-            ]
+            ],
         }
-        return json.dumps({
-            "site": site,
-            "failure_context": fc,
-            "site_overrides": self.site_config,
-            "guidance": guidance
-        }, ensure_ascii=False, indent=2)
+        return json.dumps(
+            {"site": site, "failure_context": fc, "site_overrides": self.site_config, "guidance": guidance},
+            ensure_ascii=False,
+            indent=2,
+        )
 
     def _extract_json(self, text: str) -> str:
         l = text.find("{")
         r = text.rfind("}")
         if l >= 0 and r >= 0 and r > l:
-            return text[l:r+1]
+            return text[l : r + 1]
         return "{}"
 
-    def _dump_raw_response(self, text: str, prefix: str = "llm_raw") -> Optional[str]:
+    def _dump_raw_response(self, text: str, prefix: str = "llm_raw") -> str | None:
         try:
             base_dir = os.environ.get("PROXY_OUTPUT_DIR", "exports")
             out_dir = os.path.join(base_dir, "llm_proposals", "raw")

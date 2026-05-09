@@ -408,9 +408,7 @@ class TestProhibitedSourceIsProhibited:
             db.session.add(entry)
             db.session.commit()
 
-            result, reason = ProhibitedSource.is_prohibited(
-                "https://prohibited.com/item/123"
-            )
+            result, reason = ProhibitedSource.is_prohibited("https://prohibited.com/item/123")
             assert result is True
             assert reason == "テスト禁止"
 
@@ -424,9 +422,7 @@ class TestProhibitedSourceIsProhibited:
             db.session.add(entry)
             db.session.commit()
 
-            result, reason = ProhibitedSource.is_prohibited(
-                "https://allowed.com/item/123"
-            )
+            result, reason = ProhibitedSource.is_prohibited("https://allowed.com/item/123")
             assert result is False
             assert reason == ""
 
@@ -441,15 +437,11 @@ class TestProhibitedSourceIsProhibited:
             db.session.commit()
 
             # domestic type → should NOT match overseas entry
-            result, reason = ProhibitedSource.is_prohibited(
-                "https://overseas-bad.com/item", source_type="domestic"
-            )
+            result, reason = ProhibitedSource.is_prohibited("https://overseas-bad.com/item", source_type="domestic")
             assert result is False
 
             # overseas type → should match
-            result, reason = ProhibitedSource.is_prohibited(
-                "https://overseas-bad.com/item", source_type="overseas"
-            )
+            result, reason = ProhibitedSource.is_prohibited("https://overseas-bad.com/item", source_type="overseas")
             assert result is True
 
     def test_is_prohibited_no_reason_uses_default_message(self, app):
@@ -462,9 +454,7 @@ class TestProhibitedSourceIsProhibited:
             db.session.add(entry)
             db.session.commit()
 
-            result, reason = ProhibitedSource.is_prohibited(
-                "https://noreasonsite.com/product"
-            )
+            result, reason = ProhibitedSource.is_prohibited("https://noreasonsite.com/product")
             assert result is True
             assert "noreasonsite.com" in reason
 
@@ -478,9 +468,7 @@ class TestProhibitedSourceIsProhibited:
             db.session.add(entry)
             db.session.commit()
 
-            result, reason = ProhibitedSource.is_prohibited(
-                "https://bigsite.com/product"
-            )
+            result, reason = ProhibitedSource.is_prohibited("https://bigsite.com/product")
             assert result is True
 
 
