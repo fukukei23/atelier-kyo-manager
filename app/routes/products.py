@@ -13,6 +13,7 @@ from flask_login import login_required
 from app.extensions import db
 from app.forms import ProductForm
 from app.models import Product
+from app.utils.decorators import handle_db_error
 
 from . import bp
 
@@ -39,6 +40,7 @@ def index():
 
 @bp.route("/manage", methods=["GET", "POST"])
 @login_required
+@handle_db_error()
 def manage_products():
     """
     商品登録/更新 + 一覧
@@ -48,43 +50,39 @@ def manage_products():
     form = ProductForm()
 
     if form.validate_on_submit():
-        try:
-            product = Product(
-                name=form.name.data,
-                brand=form.brand.data,
-                purchase_price=form.purchase_price.data,
-                selling_price=form.selling_price.data,
-                transaction_fee=form.transaction_fee.data,
-                shipping_cost=form.shipping_cost.data,
-                customs_duty=form.customs_duty.data,
-                procurement_fee=form.procurement_fee.data,
-                supplier_url=form.supplier_url.data,
-                image_url=form.image_url.data,
-                stock_status=bool(form.stock_status.data),
-                # --- BUYMA拡張 (F02) ---
-                source_type=form.source_type.data or None,
-                source_region=form.source_region.data or None,
-                color=form.color.data or None,
-                size=form.size.data or None,
-                material=form.material.data or None,
-                description=form.description.data or None,
-                retail_price=form.retail_price.data or None,
-                target_profit_rate=(form.target_profit_rate.data or 10.0) / 100.0,
-                listing_status=form.listing_status.data or "draft",
-                # --- FR-005 実ベース利益計算 ---
-                warehouse_shipping_cost=form.warehouse_shipping_cost.data or 0.0,
-                original_currency=form.original_currency.data or "JPY",
-                exchange_rate=form.exchange_rate.data or 1.0,
-                item_category=form.item_category.data or None,
-            )
-            product.auto_classify_tier()
-            db.session.add(product)
-            db.session.commit()
-            flash("商品を登録しました。", "success")
-            return redirect(url_for("main.manage_products"))
-        except Exception as e:
-            db.session.rollback()
-            flash(f"登録に失敗しました: {e}", "error")
+        product = Product(
+            name=form.name.data,
+            brand=form.brand.data,
+            purchase_price=form.purchase_price.data,
+            selling_price=form.selling_price.data,
+            transaction_fee=form.transaction_fee.data,
+            shipping_cost=form.shipping_cost.data,
+            customs_duty=form.customs_duty.data,
+            procurement_fee=form.procurement_fee.data,
+            supplier_url=form.supplier_url.data,
+            image_url=form.image_url.data,
+            stock_status=bool(form.stock_status.data),
+            # --- BUYMA拡張 (F02) ---
+            source_type=form.source_type.data or None,
+            source_region=form.source_region.data or None,
+            color=form.color.data or None,
+            size=form.size.data or None,
+            material=form.material.data or None,
+            description=form.description.data or None,
+            retail_price=form.retail_price.data or None,
+            target_profit_rate=(form.target_profit_rate.data or 10.0) / 100.0,
+            listing_status=form.listing_status.data or "draft",
+            # --- FR-005 実ベース利益計算 ---
+            warehouse_shipping_cost=form.warehouse_shipping_cost.data or 0.0,
+            original_currency=form.original_currency.data or "JPY",
+            exchange_rate=form.exchange_rate.data or 1.0,
+            item_category=form.item_category.data or None,
+        )
+        product.auto_classify_tier()
+        db.session.add(product)
+        db.session.commit()
+        flash("商品を登録しました。", "success")
+        return redirect(url_for("main.manage_products"))
 
     products = Product.query.order_by(Product.id.desc()).all()
     return render_template("products/manage.html", form=form, products=products)
@@ -100,23 +98,20 @@ def product_list():
 
 @bp.route("/products/<int:product_id>/edit", methods=["GET", "POST"])
 @login_required
+@handle_db_error()
 def edit_product(product_id: int):
     """商品編集"""
     product = Product.query.get_or_404(product_id)
     form = ProductForm(obj=product)
 
     if form.validate_on_submit():
-        try:
-            form.populate_obj(product)
-            product.stock_status = bool(form.stock_status.data)
-            product.target_profit_rate = (form.target_profit_rate.data or 10.0) / 100.0
-            product.auto_classify_tier()
-            db.session.commit()
-            flash("商品を更新しました。", "success")
-            return redirect(url_for("main.manage_products"))
-        except Exception as e:
-            db.session.rollback()
-            flash(f"更新に失敗しました: {e}", "error")
+        form.populate_obj(product)
+        product.stock_status = bool(form.stock_status.data)
+        product.target_profit_rate = (form.target_profit_rate.data or 10.0) / 100.0
+        product.auto_classify_tier()
+        db.session.commit()
+        flash("商品を更新しました。", "success")
+        return redirect(url_for("main.manage_products"))
 
     products = Product.query.order_by(Product.id.desc()).all()
     return render_template("products/manage.html", form=form, products=products)
@@ -124,16 +119,13 @@ def edit_product(product_id: int):
 
 @bp.post("/products/<int:id>/delete")
 @login_required
+@handle_db_error("main.manage_products")
 def delete_product(id: int):
     """商品削除"""
     product = Product.query.get_or_404(id)
-    try:
-        db.session.delete(product)
-        db.session.commit()
-        flash("商品を削除しました。", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"削除に失敗しました: {e}", "error")
+    db.session.delete(product)
+    db.session.commit()
+    flash("商品を削除しました。", "success")
     return redirect(url_for("main.manage_products"))
 
 
