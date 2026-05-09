@@ -6,7 +6,7 @@
 from __future__ import annotations
 from datetime import datetime, date
 
-from sqlalchemy import Integer, String, Float, DateTime, Date, Text
+from sqlalchemy import Integer, String, Float, DateTime, Date, Text, func
 from app.extensions import db
 
 
@@ -64,7 +64,6 @@ class ListingProgress(db.Model):
     @staticmethod
     def get_monthly_summary(year: int, month: int) -> dict:
         """月間サマリーを取得"""
-        from sqlalchemy import func
         start = date(year, month, 1)
         if month == 12:
             end = date(year + 1, 1, 1)

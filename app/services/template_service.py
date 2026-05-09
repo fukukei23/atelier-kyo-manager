@@ -4,10 +4,11 @@ import csv
 import io
 import json
 
+from app.models.listing_template import ListingTemplate
+
 
 def generate_listing_text(product, template=None):
     """Product から出品文を生成。template未指定ならデフォルトテンプレートを使用。"""
-    from app.models.listing_template import ListingTemplate
 
     if template is None:
         template = ListingTemplate.query.filter_by(is_default=True).first()
@@ -71,7 +72,6 @@ def generate_buyma_csv(products) -> tuple[str, int]:
 
 def _fallback_template():
     """テンプレート未登録時のフォールバック"""
-    from app.models.listing_template import ListingTemplate
     t = ListingTemplate()
     t.template_text = (
         "【{{brand}}】{{productName}}\n"

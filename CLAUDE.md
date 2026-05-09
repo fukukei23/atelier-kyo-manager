@@ -47,14 +47,24 @@ Flask MVC + Service Layer
 
 ## 主要モジュール
 
-### routes/（Blueprint）
+### routes/（Blueprint — 14モジュール）
 | ファイル | URLプレフィックス | 役割 |
 |---|---|---|
-| analytics.py | `/` | ダッシュボード・テンプレート・FAQ・禁止ソース・在庫チェック |
-| orders.py | `/orders`, `/cashflow` | 注文CRUD・キャッシュフロー |
-| partners.py | `/partners`, `/customers` | パートナー・リピーター管理 |
-| products.py | `/`, `/manage`, `/products` | 商品CRUD・パイプライン・CSV入出力 |
-| misc.py | `/auto-research`, `/api/warehouses` | リサーチ・倉庫API |
+| products.py | `/`, `/manage`, `/products` | F01商品CRUD + F02BUYMA拡張 + CSV入出力 + パイプライン |
+| orders.py | `/orders`, `/cashflow` | F05注文管理（18日ルール） + F08キャッシュフロー予測 |
+| partners.py | `/partners`, `/customers` | F06パートナー + F13リピーター管理 |
+| analytics.py | `/analytics`, `/dashboard` | F09ブランド分析 + FR-018ダッシュボード |
+| listing_templates.py | `/listing-templates` | F03出品テンプレート管理 |
+| faq_templates.py | `/faq-templates` | FR-010基盤 FAQテンプレートCRUD |
+| prohibited_sources.py | `/api/prohibited-sources` | F04禁制品買付先チェックAPI |
+| listing_progress.py | `/listing-progress` | F07出品進捗トラッカー |
+| shipment_notifications.py | `/shipment-notifications` | FR-012発送通知管理 |
+| stock_checks.py | `/stock-check`, `/api/stock-check` | F10在庫＆価格チェック（クイック更新API含む） |
+| popularity.py | `/popularity` | F11人気度トラッキング |
+| region_recommendations.py | `/region-recommendations` | F12買付先地域レコメンド |
+| auto_orders.py | `/auto-orders` | FR-009 AI自動発注ステートマシン |
+| chatbot.py | `/chatbot` | FR-010顧客対応AI ChatBot |
+| misc.py | `/auto-research`, `/api/warehouses` | 互換リダイレクト + リサーチ + API倉庫 |
 | warehouse_webhook.py | `/api/warehouse/events` | Webhook受信 |
 
 ### services/（ビジネスロジック）
