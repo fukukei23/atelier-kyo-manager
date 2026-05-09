@@ -38,7 +38,6 @@ ignore = [
     "SIM102", # if-with-same-arms
     "SIM108", # ternary operator
     "SIM117", # with statement merging
-    "F841",   # assigned but never used
 ]
 fixable = ["ALL"]
 unfixable = []
