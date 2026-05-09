@@ -5,14 +5,19 @@ from __future__ import annotations
 
 import csv
 import io
+import json as _json
 from typing import List
 
-from flask import flash, make_response, redirect, render_template, request, url_for
+from flask import current_app, flash, make_response, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from app.extensions import db
 from app.forms import ProductForm
 from app.models import Product
+from app.services.notification_service import NotificationService
+from app.services.pipeline_service import PipelineService
+from app.services.template_service import generate_buyma_csv as _gen_csv
+from app.services.template_service import generate_listing_text
 from app.utils.decorators import handle_db_error
 
 from . import bp
@@ -132,6 +137,7 @@ def delete_product(id: int):
 # ---- CSV 入出力 --------------------------------------------------------
 @bp.post("/import_csv")
 @login_required
+@handle_db_error()
 def import_csv():
     """CSV インポート"""
     file = request.files.get("file")
@@ -139,13 +145,11 @@ def import_csv():
         flash("CSV ファイルが選択されていません。", "error")
         return redirect(url_for("main.manage_products"))
 
-    # ファイル名・拡張子チェック
     filename = file.filename or ""
     if not filename.lower().endswith(".csv"):
         flash("CSV ファイルのみアップロード可能です。", "error")
         return redirect(url_for("main.manage_products"))
 
-    # ファイルサイズチェック（10MB上限）
     file.seek(0, 2)
     size = file.tell()
     file.seek(0)
@@ -153,54 +157,49 @@ def import_csv():
         flash("ファイルサイズは10MB以下にしてください。", "error")
         return redirect(url_for("main.manage_products"))
 
-    try:
-        data = file.read().decode("utf-8-sig")
-        reader = csv.DictReader(io.StringIO(data))
+    data = file.read().decode("utf-8-sig")
+    reader = csv.DictReader(io.StringIO(data))
 
-        count = 0
-        for row in reader:
-            if not row.get("name"):
-                continue
-            if row.get("purchase_price") in (None, "") or row.get("selling_price") in (None, ""):
-                continue
+    count = 0
+    for row in reader:
+        if not row.get("name"):
+            continue
+        if row.get("purchase_price") in (None, "") or row.get("selling_price") in (None, ""):
+            continue
 
-            p = Product(
-                name=row.get("name"),
-                brand=row.get("brand"),
-                purchase_price=float(row.get("purchase_price", 0) or 0),
-                selling_price=float(row.get("selling_price", 0) or 0),
-                transaction_fee=float(row.get("transaction_fee", 0) or 0),
-                shipping_cost=float(row.get("shipping_cost", 0) or 0),
-                customs_duty=float(row.get("customs_duty", 0) or 0),
-                procurement_fee=float(row.get("procurement_fee", 0) or 0),
-                supplier_url=row.get("supplier_url"),
-                image_url=row.get("image_url"),
-                stock_status=str(row.get("stock_status", "")).strip() in ("1", "true", "True", "yes", "on"),
-                source_type=row.get("source_type") or None,
-                source_region=row.get("source_region") or None,
-                color=row.get("color") or None,
-                size=row.get("size") or None,
-                material=row.get("material") or None,
-                description=row.get("description") or None,
-                retail_price=float(row.get("retail_price", 0) or 0) or None,
-                target_profit_rate=float(row.get("target_profit_rate", 10) or 10) / 100.0,
-                listing_status=row.get("listing_status") or "draft",
-                # --- FR-005 実ベース利益計算 ---
-                warehouse_shipping_cost=float(row.get("warehouse_shipping_cost", 0) or 0),
-                original_currency=row.get("original_currency", "JPY") or "JPY",
-                exchange_rate=float(row.get("exchange_rate", 1) or 1),
-                item_category=row.get("item_category") or None,
-            )
-            p.auto_classify_tier()
-            db.session.add(p)
-            count += 1
+        p = Product(
+            name=row.get("name"),
+            brand=row.get("brand"),
+            purchase_price=float(row.get("purchase_price", 0) or 0),
+            selling_price=float(row.get("selling_price", 0) or 0),
+            transaction_fee=float(row.get("transaction_fee", 0) or 0),
+            shipping_cost=float(row.get("shipping_cost", 0) or 0),
+            customs_duty=float(row.get("customs_duty", 0) or 0),
+            procurement_fee=float(row.get("procurement_fee", 0) or 0),
+            supplier_url=row.get("supplier_url"),
+            image_url=row.get("image_url"),
+            stock_status=str(row.get("stock_status", "")).strip() in ("1", "true", "True", "yes", "on"),
+            source_type=row.get("source_type") or None,
+            source_region=row.get("source_region") or None,
+            color=row.get("color") or None,
+            size=row.get("size") or None,
+            material=row.get("material") or None,
+            description=row.get("description") or None,
+            retail_price=float(row.get("retail_price", 0) or 0) or None,
+            target_profit_rate=float(row.get("target_profit_rate", 10) or 10) / 100.0,
+            listing_status=row.get("listing_status") or "draft",
+            # --- FR-005 実ベース利益計算 ---
+            warehouse_shipping_cost=float(row.get("warehouse_shipping_cost", 0) or 0),
+            original_currency=row.get("original_currency", "JPY") or "JPY",
+            exchange_rate=float(row.get("exchange_rate", 1) or 1),
+            item_category=row.get("item_category") or None,
+        )
+        p.auto_classify_tier()
+        db.session.add(p)
+        count += 1
 
-        db.session.commit()
-        flash(f"CSV を {count} 件取り込みました。", "success")
-    except Exception as e:
-        db.session.rollback()
-        flash(f"CSV 取り込みに失敗しました: {e}", "error")
-
+    db.session.commit()
+    flash(f"CSV を {count} 件取り込みました。", "success")
     return redirect(url_for("main.manage_products"))
 
 
@@ -326,7 +325,6 @@ def export_listing_candidates():
 def generate_listing(product_id: int):
     """商品の出品文をプレビュー生成"""
     product = Product.query.get_or_404(product_id)
-    from app.services.template_service import generate_listing_text
     try:
         text = generate_listing_text(product)
     except Exception:
@@ -338,7 +336,6 @@ def generate_listing(product_id: int):
 @login_required
 def generate_buyma_csv():
     """BUYMA用CSV一括生成"""
-    from app.services.template_service import generate_buyma_csv as _gen_csv
     products = Product.query.filter(Product.listing_status.in_(["draft", "listed"])).all()
     csv_text, skipped = _gen_csv(products)
     resp = make_response(csv_text)
@@ -354,14 +351,10 @@ def generate_buyma_csv():
 def run_pipeline(product_id: int):
     """画像収集→背景除去→説明文生成→出品文生成の統合パイプライン"""
     product = Product.query.get_or_404(product_id)
-    from app.services.pipeline_service import PipelineService
     svc = PipelineService()
     site_key = request.form.get("site_key", "")
     result = svc.run(product_id=product_id, site_key=site_key)
 
-    # Slack通知
-    from flask import current_app
-    from app.services.notification_service import NotificationService
     ns = NotificationService(current_app._get_current_object())
     ns.send_pipeline_result(
         product_name=product.name,
@@ -390,7 +383,6 @@ def run_pipeline_batch():
         flash("商品が選択されていません。", "error")
         return redirect(url_for("main.listing_candidates"))
 
-    from app.services.pipeline_service import PipelineService
     svc = PipelineService()
     batch = svc.run_batch(product_ids=product_ids, site_key=site_key)
 
@@ -408,7 +400,6 @@ def run_pipeline_batch():
 def pipeline_result(product_id: int):
     """パイプライン実行結果の表示"""
     product = Product.query.get_or_404(product_id)
-    import json as _json
     processed = []
     if product.processed_images:
         try:
@@ -416,7 +407,6 @@ def pipeline_result(product_id: int):
         except (ValueError, TypeError):
             processed = []
 
-    from app.services.template_service import generate_listing_text
     try:
         listing_text = generate_listing_text(product)
     except Exception:
@@ -440,7 +430,6 @@ def upload_images(product_id: int):
         flash("画像ファイルが選択されていません。", "error")
         return redirect(url_for("main.pipeline_result", product_id=product_id))
 
-    from app.services.pipeline_service import PipelineService
     svc = PipelineService()
     saved = svc.save_uploaded_images(product_id, files)
 

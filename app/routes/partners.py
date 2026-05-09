@@ -3,10 +3,14 @@
 # ======================================================================
 from __future__ import annotations
 
+from datetime import datetime
+
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from app.extensions import db
+from app.models.partner import Partner
+from app.models.repeat_customer import RepeatCustomer
 from app.utils.decorators import handle_db_error
 
 from . import bp
@@ -17,7 +21,6 @@ from . import bp
 @login_required
 def partner_list():
     """パートナー一覧"""
-    from app.models.partner import Partner
     partners = Partner.query.order_by(Partner.priority_level.asc(), Partner.name.asc()).all()
     return render_template("partners.html", partners=partners)
 
@@ -27,7 +30,6 @@ def partner_list():
 @handle_db_error()
 def create_partner():
     """パートナー新規登録"""
-    from app.models.partner import Partner
     if request.method == "POST":
         name = request.form.get("name", "").strip()
         if not name:
@@ -55,7 +57,6 @@ def create_partner():
 @handle_db_error()
 def edit_partner(pid: int):
     """パートナー編集"""
-    from app.models.partner import Partner
     p = Partner.query.get_or_404(pid)
     if request.method == "POST":
         name = request.form.get("name", "").strip()
@@ -81,7 +82,6 @@ def edit_partner(pid: int):
 @handle_db_error("main.partner_list")
 def delete_partner(pid: int):
     """パートナー削除"""
-    from app.models.partner import Partner
     p = Partner.query.get_or_404(pid)
     db.session.delete(p)
     db.session.commit()
@@ -94,7 +94,6 @@ def delete_partner(pid: int):
 @login_required
 def customer_list():
     """リピーター一覧"""
-    from app.models.repeat_customer import RepeatCustomer
     customers = RepeatCustomer.query.order_by(RepeatCustomer.total_orders.desc()).all()
     return render_template("repeat_customers.html", customers=customers)
 
@@ -104,8 +103,6 @@ def customer_list():
 @handle_db_error()
 def create_customer():
     """顧客新規登録"""
-    from app.models.repeat_customer import RepeatCustomer
-    from datetime import datetime as _dt
     if request.method == "POST":
         total_orders = int(request.form.get("total_orders", 0) or 0)
         total_spent = float(request.form.get("total_spent", 0) or 0)
@@ -122,9 +119,9 @@ def create_customer():
         fod = request.form.get("first_order_date", "")
         lod = request.form.get("last_order_date", "")
         if fod:
-            c.first_order_date = _dt.strptime(fod, "%Y-%m-%d")
+            c.first_order_date = datetime.strptime(fod, "%Y-%m-%d")
         if lod:
-            c.last_order_date = _dt.strptime(lod, "%Y-%m-%d")
+            c.last_order_date = datetime.strptime(lod, "%Y-%m-%d")
         c.notes = request.form.get("notes", "")
         c.update_avg()
         c.segment = c.calc_segment()
@@ -140,8 +137,6 @@ def create_customer():
 @handle_db_error()
 def edit_customer(cid: int):
     """顧客編集"""
-    from app.models.repeat_customer import RepeatCustomer
-    from datetime import datetime as _dt
     c = RepeatCustomer.query.get_or_404(cid)
     if request.method == "POST":
         c.customer_name = request.form.get("customer_name", c.customer_name)
@@ -155,9 +150,9 @@ def edit_customer(cid: int):
         fod = request.form.get("first_order_date", "")
         lod = request.form.get("last_order_date", "")
         if fod:
-            c.first_order_date = _dt.strptime(fod, "%Y-%m-%d")
+            c.first_order_date = datetime.strptime(fod, "%Y-%m-%d")
         if lod:
-            c.last_order_date = _dt.strptime(lod, "%Y-%m-%d")
+            c.last_order_date = datetime.strptime(lod, "%Y-%m-%d")
         c.notes = request.form.get("notes", "")
         c.update_avg()
         c.segment = c.calc_segment()
@@ -172,7 +167,6 @@ def edit_customer(cid: int):
 @handle_db_error("main.customer_list")
 def delete_customer(cid: int):
     """顧客削除"""
-    from app.models.repeat_customer import RepeatCustomer
     c = RepeatCustomer.query.get_or_404(cid)
     db.session.delete(c)
     db.session.commit()
