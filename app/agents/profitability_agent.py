@@ -31,7 +31,11 @@ try:
 except ImportError:
     print("Pydantic is not installed. Please run 'pip install pydantic'.")
     # Pydanticがない場合は、ダミーのBaseModelで最低限動作させる
-    BaseModel = object
+    class _DummyBaseModel:
+        def __init__(self, **kwargs):
+            for k, v in kwargs.items():
+                setattr(self, k, v)
+    BaseModel = _DummyBaseModel
     Field = lambda **kwargs: None
     ValidationError = Exception
 
@@ -235,7 +239,8 @@ class ProfitabilityAgent:
             market = MarketData(**market_data)
             supplier = SupplierData(**supplier_data)
         except ValidationError as ve:
-            summary = f"入力データの検証に失敗しました: {ve.errors()}"
+            errors = ve.errors() if hasattr(ve, 'errors') else str(ve)
+            summary = f"入力データの検証に失敗しました: {errors}"
             self.logger.error(summary)
             return {"decision": "error", "summary": summary}
         except Exception as e:

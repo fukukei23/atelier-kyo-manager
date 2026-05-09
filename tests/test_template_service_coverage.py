@@ -25,7 +25,7 @@ class TestGenerateListingText:
         assert result == "出品文テスト"
         mock_template.render.assert_called_once_with(product)
 
-    @patch("app.models.listing_template.ListingTemplate")
+    @patch("app.services.template_service.ListingTemplate")
     def test_no_template_uses_default(self, mock_lt_cls):
         mock_default = MagicMock()
         mock_default.render.return_value = "デフォルト出品文"
@@ -35,7 +35,7 @@ class TestGenerateListingText:
         assert result == "デフォルト出品文"
 
     def test_no_default_uses_fallback(self):
-        with patch("app.models.listing_template.ListingTemplate") as mock_lt_cls:
+        with patch("app.services.template_service.ListingTemplate") as mock_lt_cls:
             mock_lt_cls.query.filter_by.return_value.first.return_value = None
             product = MagicMock()
             result = generate_listing_text(product)

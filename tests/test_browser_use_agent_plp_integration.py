@@ -203,7 +203,7 @@ async def test_browser_use_agent_delegates_to_plp_driver(
         pdp_links=[],
     )
 
-    with patch("app.agents.browser_orchestrator.PlpDriver") as mock_plp_cls,          patch("app.agents.browser_orchestrator.NavigationDriver"),          patch("app.agents.browser_orchestrator.NavigationContext"):
+    with patch("app.agents.browser.orchestrator.PlpDriver") as mock_plp_cls,          patch("app.agents.browser.orchestrator.NavigationDriver"),          patch("app.agents.browser.orchestrator.NavigationContext"):
         mock_plp_instance = MagicMock()
         mock_plp_instance.navigate_to_pdp = AsyncMock(return_value=expected_result)
         mock_plp_cls.return_value = mock_plp_instance
@@ -261,7 +261,7 @@ async def test_browser_use_agent_uses_plp_driver_result(
         pdp_links=[],
     )
 
-    with patch("app.agents.browser_orchestrator.PlpDriver") as mock_plp_cls,          patch("app.agents.browser_orchestrator.NavigationDriver"),          patch("app.agents.browser_orchestrator.NavigationContext"):
+    with patch("app.agents.browser.orchestrator.PlpDriver") as mock_plp_cls,          patch("app.agents.browser.orchestrator.NavigationDriver"),          patch("app.agents.browser.orchestrator.NavigationContext"):
         mock_plp_instance = MagicMock()
         mock_plp_instance.navigate_to_pdp = AsyncMock(return_value=plp_result)
         mock_plp_cls.return_value = mock_plp_instance
@@ -317,7 +317,7 @@ async def test_browser_use_agent_handles_trap_detection(
     )
     
     # PlpDriver をモック
-    with patch('app.agents.browser_orchestrator.PlpDriver') as mock_plp_driver_class:
+    with patch('app.agents.browser.orchestrator.PlpDriver') as mock_plp_driver_class:
         mock_plp_driver = AsyncMock()
         mock_plp_driver.navigate_to_pdp = AsyncMock(return_value=trap_result)
         mock_plp_driver.page = mock_page
@@ -394,8 +394,8 @@ async def test_browser_use_agent_saves_overlays_handled(
     # PlpDriver をモック
     # CR-ATELIER-003 Phase C-4 Step 2: Orchestrator 経由でもモックが効くように、
     # browser_orchestrator.PlpDriver もモックする
-    with patch('app.agents.browser_orchestrator.PlpDriver') as mock_plp_driver_class, \
-         patch("app.agents.browser_orchestrator.PlpDriver") as mock_orchestrator_plp_driver_class:
+    with patch('app.agents.browser.orchestrator.PlpDriver') as mock_plp_driver_class, \
+         patch("app.agents.browser.orchestrator.PlpDriver") as mock_orchestrator_plp_driver_class:
         mock_plp_driver = AsyncMock()
         mock_plp_driver.navigate_to_pdp = AsyncMock(return_value=overlay_result)
         mock_plp_driver.page = mock_page
@@ -466,7 +466,7 @@ async def test_run_plp_flow_saves_plp_navigation_result(
         "overall_plp_budget_ms": 120000,
     }
 
-    with patch("app.agents.browser_orchestrator.PlpDriver") as mock_plp_cls,          patch("app.agents.browser_orchestrator.NavigationDriver"),          patch("app.agents.browser_orchestrator.NavigationContext"):
+    with patch("app.agents.browser.orchestrator.PlpDriver") as mock_plp_cls,          patch("app.agents.browser.orchestrator.NavigationDriver"),          patch("app.agents.browser.orchestrator.NavigationContext"):
         mock_plp_driver = MagicMock()
         mock_plp_driver.navigate_to_pdp = AsyncMock(return_value=nav_result)
         mock_plp_cls.return_value = mock_plp_driver
@@ -556,7 +556,7 @@ async def test_browser_use_agent_saves_plp_navigation_result_to_run_context(
     
     # BrowserUseAgent の _run_plp_flow 内で PlpDriver が使用される部分を直接テスト
     # PlpDriver をモック化して、実際の BrowserUseAgent のロジックをテスト
-    with patch('app.agents.browser_orchestrator.PlpDriver') as mock_plp_driver_class:
+    with patch('app.agents.browser.orchestrator.PlpDriver') as mock_plp_driver_class:
         mock_plp_driver = AsyncMock()
         mock_plp_driver.navigate_to_pdp = AsyncMock(return_value=nav_result)
         mock_plp_driver.page = mock_page
