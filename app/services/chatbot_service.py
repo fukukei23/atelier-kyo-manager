@@ -7,6 +7,7 @@ import logging
 from app.extensions import db
 from app.models.customer_inquiry import CustomerInquiry
 from app.models.faq_template import FaqTemplate
+from app.utils.ai_llm_controller import AILlmController
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +33,6 @@ class ChatBotService:
 
         # 2. AIによる分類
         try:
-            from app.utils.ai_llm_controller import AILlmController
-
             prompt = (
                 "以下の顧客問い合わせを分類してください。"
                 "単純な質問なら 'ai' 、専門的な判断やクレーム・緊急対応が必要なら 'escalation' とだけ返答してください。\n"
@@ -52,8 +51,6 @@ class ChatBotService:
     def generate_ai_response(inquiry: CustomerInquiry) -> str:
         """AIで返答テキストを生成"""
         try:
-            from app.utils.ai_llm_controller import AILlmController
-
             prompt = (
                 "BUYMA出品者として、以下の顧客問い合わせに丁寧かつ専門的に回答してください: "
                 f"{inquiry.subject} - {inquiry.message}"

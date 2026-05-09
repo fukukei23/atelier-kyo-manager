@@ -11,6 +11,7 @@ from datetime import datetime
 
 from sqlalchemy import Integer, String, Float, Boolean, DateTime, Text
 from app.extensions import db
+from app.core.pricing import calculate_pricing, PricingInput
 from app.config.constants import (
     DOMESTIC_COMMISSION_RATE,
     OVERSEAS_COMMISSION_RATE,
@@ -126,8 +127,7 @@ class Product(db.Model):
         return result.profit_rate * 100
 
     def _calculate_pricing(self):
-        """calculator.py を呼び出す内部メソッド"""
-        from app.core.pricing import calculate_pricing, PricingInput
+        """価格計算の内部メソッド"""
         nz = lambda x: float(x or 0.0)
         inp = PricingInput(
             purchase_price=nz(self.purchase_price),
