@@ -27,16 +27,10 @@ extend-exclude = [
 [lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = [
-    # --- Phase 2: 残存する違反（段階的に削減） ---
+    # --- Phase 3: 残存する違反 ---
     "E501",   # line too long (formatterが扱う)
     "E402",   # module level import not at top — try/except import guards
-    "F401",   # unused import — availability checks in try/except
-    "F403",   # undefined name with star import
-    "F406",   # undefined name with star import from
     "F821",   # undefined name — forward references, conditional imports
-    "B023",   # loop variable binding in lambda
-    "SIM102", # if-with-same-arms
-    "SIM108", # ternary operator
     "SIM117", # with statement merging
 ]
 fixable = ["ALL"]

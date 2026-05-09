@@ -124,13 +124,13 @@ class PrivateAPIVisitor(ast.NodeVisitor):
                     )
             # valueがAttributeの場合（ネストされた属性アクセス）
             elif isinstance(node.value, ast.Attribute):
-                # `X.Y._something` のような形式
-                # ただし、親属性が`__xxx__`形式の場合は除外
-                if not (node.value.attr.startswith("__") and node.value.attr.endswith("__")) and node.attr.startswith(
-                    "_"
+                # `X.Y._something` のような形式（__xxx__形式は除外）
+                # 親がimportされたモジュール/aliasかチェック
+                if (
+                    not (node.value.attr.startswith("__") and node.value.attr.endswith("__"))
+                    and node.attr.startswith("_")
+                    and isinstance(node.value.value, ast.Name)
                 ):
-                    # 親がimportされたモジュール/aliasかチェック
-                    if isinstance(node.value.value, ast.Name):
                         parent_var = node.value.value.id
                         if parent_var in self.imported_modules or parent_var in self.imported_names:
                             violation_type = "PRIVATE_ATTRIBUTE_ACCESS"

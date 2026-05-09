@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json as _json
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 from playwright.async_api import BrowserContext, Page
 
@@ -186,10 +185,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
         )
 
         if telemetry is None:
-            if TelemetryClient is not None:
-                telemetry = TelemetryClient(run_context=run_context)
-            else:
-                telemetry = None
+            telemetry = TelemetryClient(run_context=run_context) if TelemetryClient is not None else None
 
         navigation_driver = NavigationDriver(
             page=page,
@@ -331,10 +327,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                     self.log.warning(f"[Orchestrator] Failed to record no PDP links: {te}", exc_info=True)
             try:
                 if telemetry is None:
-                    if TelemetryClient is not None:
-                        telemetry = TelemetryClient(run_context=run_context)
-                    else:
-                        telemetry = None
+                    telemetry = TelemetryClient(run_context=run_context) if TelemetryClient is not None else None
 
                 plp_driver = PlpDriver(
                     page=page,
@@ -346,10 +339,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                 )
 
                 default_timeout_ms = int(settings.get("timeout_sec", 60)) * 1000
-                if budget_ms is not None:
-                    timeout_ms = min(budget_ms, default_timeout_ms)
-                else:
-                    timeout_ms = default_timeout_ms
+                timeout_ms = min(budget_ms, default_timeout_ms) if budget_ms is not None else default_timeout_ms
 
                 nav_result = await plp_driver.navigate_to_pdp(
                     target_url=target_url,

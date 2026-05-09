@@ -138,10 +138,7 @@ def dashboard():
     tier_rates = []
     for tier in ("high", "medium", "low"):
         tier_prods = [p for p in products if (p.brand_tier or "low") == tier]
-        if tier_prods:
-            avg = sum(p.profit_rate() for p in tier_prods) / len(tier_prods)
-        else:
-            avg = 0
+        avg = sum(p.profit_rate() for p in tier_prods) / len(tier_prods) if tier_prods else 0
         label_map = {"high": "ハイブランド", "medium": "ミドル", "low": "ロー"}
         tier_labels.append(label_map[tier])
         tier_rates.append(round(avg, 1))

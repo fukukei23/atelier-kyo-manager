@@ -53,9 +53,8 @@ class PradaPLPStrategy(StrategyPlugin):
 
         # ロケールトラップ検出
         path = self._path(url)
-        if path:
-            # 不一致パターンを検出 (/us/en/, /it/it/, etc.)
-            if re.search(r"/([a-z]{2})/([a-z]{2})/", path):
+        # 不一致パターンを検出 (/us/en/, /it/it/, etc.)
+        if path and re.search(r"/([a-z]{2})/([a-z]{2})/", path):
                 locale_match = re.search(r"/([a-z]{2})/([a-z]{2})/", path)
                 if locale_match:
                     lang = locale_match.group(1)

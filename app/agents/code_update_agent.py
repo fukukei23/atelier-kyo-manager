@@ -190,10 +190,7 @@ class CodeUpdateAgent:
         """
         try:
             # 出力先ディレクトリの決定 (diff提案ロジックを尊重)
-            if base_dir:
-                out_dir_root = Path(base_dir)
-            else:
-                out_dir_root = Path(os.environ.get("PROXY_OUTPUT_DIR", "exports"))
+            out_dir_root = Path(base_dir) if base_dir else Path(os.environ.get("PROXY_OUTPUT_DIR", "exports"))
 
             out_dir = out_dir_root / "patches"
             out_dir.mkdir(parents=True, exist_ok=True)

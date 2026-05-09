@@ -2375,7 +2375,7 @@ class BrowserUseAgent:
                         if href and not any(bad in href for bad in block_ng):
                             await el.scroll_into_view_if_needed()
                             newp = await self._click_and_capture_navigation(
-                                lambda: el.click(timeout=5000), page, context, url_regex=url_pat
+                                lambda el=el: el.click(timeout=5000), page, context, url_regex=url_pat
                             )
                             if newp:
                                 return newp
@@ -2396,7 +2396,7 @@ class BrowserUseAgent:
                     await card.scroll_into_view_if_needed()
                     if await card.count() > 0:
                         newp = await self._click_and_capture_navigation(
-                            lambda: card.click(timeout=5000), page, context, url_regex=url_pat
+                            lambda card=card: card.click(timeout=5000), page, context, url_regex=url_pat
                         )
                         if newp:
                             return newp

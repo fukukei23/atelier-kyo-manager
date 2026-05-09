@@ -612,19 +612,15 @@ class SelectorRepairAgent:
         allow_path_patterns = url_rules.get("allow_path_patterns", [])
 
         if allow_path_patterns:
-            # "/products/" または "/p/" を含むパターンがある場合
+            # "/products/" または "/p/" パターンがある場合、セレクタにもそれらが含まれるかチェック
             has_products_pattern = any("/products/" in p or "/p/" in p for p in allow_path_patterns)
-            if has_products_pattern:
-                # セレクタに "/products/" または "/p/" が含まれるかチェック
-                if "/products/" not in selector and "/p/" not in selector:
-                    return False
+            if has_products_pattern and "/products/" not in selector and "/p/" not in selector:
+                return False
 
-        # allowed_domain チェック
+        # allowed_domain チェック: セレクタにドメインが含まれる場合、allowed_domainと一致するか
         allowed_domain = site_config.get("allowed_domain")
-        if allowed_domain:
-            # セレクタにドメインが含まれる場合、allowed_domain と一致するかチェック
-            if allowed_domain in selector:
-                return True
+        if allowed_domain and allowed_domain in selector:
+            return True
             # セレクタに他のドメインが含まれる場合は False
             # （簡易実装: より厳密なチェックが必要な場合は拡張）
 

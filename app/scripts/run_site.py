@@ -221,7 +221,7 @@ async def main() -> int:
 
         # Check Stealth module
         try:
-            from scraping.stealth import apply_stealth_to_context, build_stealth_params_from_site_config
+            from scraping.stealth import apply_stealth_to_context, build_stealth_params_from_site_config  # noqa: F401
 
             logger.info("[run_site] ✅ Stealth module is available")
             # Test build_stealth_params_from_site_config
@@ -235,7 +235,7 @@ async def main() -> int:
 
         # Check SessionManager
         try:
-            from app.agents.browser.session_manager import SessionManager
+            from app.agents.browser.session_manager import SessionManager  # noqa: F401
 
             logger.info("[run_site] ✅ SessionManager is available")
         except ImportError as e:
@@ -254,7 +254,7 @@ async def main() -> int:
         # Check Moncler patch
         if site_name == "MONCLER_OFFICIAL":
             try:
-                from app.agents.browser_use_moncler_patch import moncler_plp_recovery
+                from app.agents.browser_use_moncler_patch import moncler_plp_recovery  # noqa: F401
 
                 logger.info("[run_site] ✅ Moncler patch is available")
             except ImportError as e:

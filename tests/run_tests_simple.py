@@ -15,7 +15,7 @@ def test_imports():
     print("Testing imports...")
 
     try:
-        from tests.test_plp_driver import *
+        import tests.test_plp_driver  # noqa: F401
 
         print("✓ test_plp_driver.py imported successfully")
     except Exception as e:
@@ -26,7 +26,7 @@ def test_imports():
         return False
 
     try:
-        from tests.test_product_extractor import *
+        import tests.test_product_extractor  # noqa: F401
 
         print("✓ test_product_extractor.py imported successfully")
     except Exception as e:
@@ -37,7 +37,7 @@ def test_imports():
         return False
 
     try:
-        from tests.test_browser_use_agent_plp_integration import *
+        import tests.test_browser_use_agent_plp_integration  # noqa: F401
 
         print("✓ test_browser_use_agent_plp_integration.py imported successfully")
     except Exception as e:

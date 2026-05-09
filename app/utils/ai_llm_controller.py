@@ -61,10 +61,7 @@ try:
 
     # 注意: モデルパスは環境に合わせて調整してください
     model_path = Path(__file__).resolve().parents[2] / "models" / "llama-7b-q4_0.gguf"
-    if model_path.exists():
-        LOCAL_LLAMA = Llama(model_path=str(model_path), n_ctx=2048)
-    else:
-        LOCAL_LLAMA = None
+    LOCAL_LLAMA = Llama(model_path=str(model_path), n_ctx=2048) if model_path.exists() else None
 except Exception:
     LOCAL_LLAMA = None
 
@@ -290,7 +287,7 @@ class AILlmController:
         """
         try:
             import os
-            import uuid
+            import uuid  # noqa: F401
 
             from app import db
             from app.models import ChatHistory
