@@ -49,7 +49,7 @@ import logging
 import re
 from typing import List, Dict, Optional
 
-from playwright.async_api import async_playwright, Page, BrowserContext, TimeoutError as PWTimeoutError
+from playwright.async_api import async_playwright, Page, BrowserContext
 from flask import current_app
 
 # --- 定数定義 ---

@@ -39,7 +39,7 @@ import re
 import sys
 import random
 import time
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field, asdict, fields as dataclass_fields
 from datetime import datetime
 from typing import Dict, List, Optional
 from urllib.parse import urlparse, quote_plus
@@ -152,14 +152,13 @@ def _load_json_if_exists(path: Path) -> dict:
     except Exception as e:
         logging.warning(f"Could not load/parse JSON {path.name}: {e}"); return {}
 def _dict_to_siteconfig(d: dict) -> SiteConfig:
-    from dataclasses import fields as field_iter
     base_obj = SiteConfig(name="", home_url="")
     full_dict = asdict(base_obj)
     full_dict = _update_dict_recursive(full_dict, d)
     sel_dict = asdict(SiteSelectors())
     sel_dict = _update_dict_recursive(sel_dict, full_dict.get("selectors", {}))
     full_dict["selectors"] = SiteSelectors(**sel_dict)
-    valid_keys = {f.name for f in field_iter(SiteConfig)}
+    valid_keys = {f.name for f in dataclass_fields(SiteConfig)}
     final_dict = {k: v for k, v in full_dict.items() if k in valid_keys}
     return SiteConfig(**final_dict)
 def load_config_sites() -> List[SiteConfig]:
