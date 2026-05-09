@@ -51,7 +51,7 @@ def test_self_healing_agent_has_required_attributes():
 def test_fkb_local_json_is_valid():
     """FKBローカルファイルが有効なJSONであることを確認"""
     import json
-    fkb_path = APP_ROOT / "fkb_local.json"
+    fkb_path = APP_ROOT / "config" / "fkb" / "fkb_local.json"
     assert fkb_path.exists(), "fkb_local.json not found"
 
     with open(fkb_path) as f:
@@ -72,7 +72,7 @@ def test_fkb_local_json_is_valid():
 def test_fkb_has_minimum_coverage():
     """FKBが主要なサイトカテゴリをカバーしていることを確認"""
     import json
-    fkb_path = APP_ROOT / "fkb_local.json"
+    fkb_path = APP_ROOT / "config" / "fkb" / "fkb_local.json"
     with open(fkb_path) as f:
         data = json.load(f)
 
@@ -117,7 +117,7 @@ def test_self_healing_agent_has_circuit_breaker():
 def test_fkb_entry_ids_are_unique():
     """FKBエントリIDが重複していないことを確認"""
     import json
-    fkb_path = APP_ROOT / "fkb_local.json"
+    fkb_path = APP_ROOT / "config" / "fkb" / "fkb_local.json"
     with open(fkb_path) as f:
         data = json.load(f)
 
@@ -129,7 +129,7 @@ def test_fkb_entry_ids_are_unique():
 def test_all_fkb_entries_have_verified_date():
     """全FKBエントリがverified_dateを持つことを確認"""
     import json
-    fkb_path = APP_ROOT / "fkb_local.json"
+    fkb_path = APP_ROOT / "config" / "fkb" / "fkb_local.json"
     with open(fkb_path) as f:
         data = json.load(f)
 

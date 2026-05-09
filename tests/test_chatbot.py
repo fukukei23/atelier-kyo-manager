@@ -123,7 +123,7 @@ class TestChatBotService:
         """FAQ不一致時にAI回答が生成される"""
         _mock_llm.quick.return_value = "AIによるテスト回答です。"
         with app.app_context():
-            with patch.dict(sys.modules, {"app.utils.ai_llm_controller": MagicMock(AILlmController=_mock_llm)}):
+            with patch("app.services.chatbot_service.AILlmController", _mock_llm):
                 from app.services.chatbot_service import ChatBotService
                 inquiry = ChatBotService.process_inquiry(
                     subject="カスタム質問",
@@ -136,7 +136,7 @@ class TestChatBotService:
         """escalation判定時にpendingのまま"""
         _mock_llm.quick.return_value = "escalation"
         with app.app_context():
-            with patch.dict(sys.modules, {"app.utils.ai_llm_controller": MagicMock(AILlmController=_mock_llm)}):
+            with patch("app.services.chatbot_service.AILlmController", _mock_llm):
                 from app.services.chatbot_service import ChatBotService
                 inquiry = ChatBotService.process_inquiry(
                     subject="クレーム",
@@ -164,7 +164,7 @@ class TestChatBotService:
         """AI返答生成が呼ばれる"""
         _mock_llm.quick.return_value = "AI回答テキスト"
         with app.app_context():
-            with patch.dict(sys.modules, {"app.utils.ai_llm_controller": MagicMock(AILlmController=_mock_llm)}):
+            with patch("app.services.chatbot_service.AILlmController", _mock_llm):
                 from app.services.chatbot_service import ChatBotService
                 inquiry = CustomerInquiry(subject="質問", message="本文")
                 result = ChatBotService.generate_ai_response(inquiry)
@@ -174,7 +174,7 @@ class TestChatBotService:
         """AI失敗時にエラーメッセージを返す"""
         _mock_llm.quick.side_effect = RuntimeError("API Error")
         with app.app_context():
-            with patch.dict(sys.modules, {"app.utils.ai_llm_controller": MagicMock(AILlmController=_mock_llm)}):
+            with patch("app.services.chatbot_service.AILlmController", _mock_llm):
                 from app.services.chatbot_service import ChatBotService
                 inquiry = CustomerInquiry(subject="質問", message="本文")
                 result = ChatBotService.generate_ai_response(inquiry)
