@@ -672,7 +672,7 @@ class PlpDriver:
                         if href and not any(bad in href for bad in block_ng):
                             await el.scroll_into_view_if_needed()
                             new_page = await self._click_and_wait_for_navigation(
-                                lambda: el.click(timeout=5000),
+                                lambda el=el: el.click(timeout=5000),
                                 url_regex=url_regex,
                                 timeout_ms=timeout_ms,
                             )
@@ -698,7 +698,7 @@ class PlpDriver:
                         await card.scroll_into_view_if_needed()
                         if await card.count() > 0:
                             new_page = await self._click_and_wait_for_navigation(
-                                lambda: card.click(timeout=5000),
+                                lambda card=card: card.click(timeout=5000),
                                 url_regex=url_regex,
                                 timeout_ms=timeout_ms,
                             )
@@ -1182,9 +1182,8 @@ class PlpDriver:
 
         if prefer_locale and allowed_domain:
             target_locale_path = f"/{prefer_locale}/"
-            if allowed_domain.lower() in current_url and target_locale_path not in current_url:
-                if _LOCALE_SEG_RE.search(current_url):
-                    return True
+            if allowed_domain.lower() in current_url and target_locale_path not in current_url and _LOCALE_SEG_RE.search(current_url):
+                return True
         return False
 
     def _time_left_ms(self, start_t: float, budget_ms: int) -> float:

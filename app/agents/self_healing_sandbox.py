@@ -210,10 +210,7 @@ class SelfHealingSandbox:
 
         # page_type が指定されていない場合、kind から推論
         if not page_type:
-            if kind == "pdp_link":
-                page_type = "plp"  # PLP から PDP リンクを抽出
-            else:
-                page_type = "pdp"  # デフォルト
+            page_type = "plp" if kind == "pdp_link" else "pdp"
 
         key = f"{site}:{page_type}"
         if key not in self._selector_results:
@@ -252,10 +249,7 @@ class SelfHealingSandbox:
         """
         # page_type が指定されていない場合、kind から推論
         if not page_type:
-            if kind == "pdp_link":
-                page_type = "plp"
-            else:
-                page_type = "pdp"
+            page_type = "plp" if kind == "pdp_link" else "pdp"
 
         key = f"{site}:{page_type}"
         results = self._selector_results.get(key, [])
@@ -285,10 +279,7 @@ class SelfHealingSandbox:
         """
         # page_type が指定されていない場合、kind から推論
         if not page_type:
-            if kind == "pdp_link":
-                page_type = "plp"
-            else:
-                page_type = "pdp"
+            page_type = "plp" if kind == "pdp_link" else "pdp"
 
         key = f"{site}:{page_type}"
         results = self._selector_results.get(key, [])

@@ -158,9 +158,8 @@ def build_moncler_patch_candidate(
                         "before": current_pdp_link_selectors,
                         "after": valid_candidates[:10],  # 最大10件
                     }
-            elif recommended_layer in ("secondary", "tertiary"):
-                # Secondary/Tertiary の場合は、tile_selectors も更新を検討
-                if current_tile_selectors != valid_candidates:
+            # Secondary/Tertiary の場合は、tile_selectors も更新を検討
+            elif recommended_layer in ("secondary", "tertiary") and current_tile_selectors != valid_candidates:
                     patch["changes"]["selectors.plp"] = patch["changes"].get("selectors.plp", {})
                     patch["changes"]["selectors.plp"]["tile_selectors"] = {
                         "before": current_tile_selectors,

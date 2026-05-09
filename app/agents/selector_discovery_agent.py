@@ -253,10 +253,7 @@ class SelectorDiscoveryAgent:
         # recommended_layer を決定
         recommended_layer = "primary"
         if layer_stats.get("primary_accepted", 0) == 0:
-            if layer_stats.get("secondary_accepted", 0) > 0:
-                recommended_layer = "secondary"
-            else:
-                recommended_layer = "tertiary"
+            recommended_layer = "secondary" if layer_stats.get("secondary_accepted", 0) > 0 else "tertiary"
 
         result = {
             "candidate_selectors": candidate_selectors[:10],  # 最大10件

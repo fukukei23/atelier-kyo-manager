@@ -36,9 +36,8 @@ def load_plugins_for_site(site: str) -> list[StrategyPlugin]:
             obj = getattr(mod, attr)
             try:
                 # クラスかつ StrategyPlugin のサブクラスで site が一致
-                if isinstance(obj, type) and issubclass(obj, StrategyPlugin):
-                    if getattr(obj, "site", "") == site:
-                        instances.append(obj())  # インスタンス化
+                if isinstance(obj, type) and issubclass(obj, StrategyPlugin) and getattr(obj, "site", "") == site:
+                    instances.append(obj())  # インスタンス化
             except Exception:
                 continue
     if instances:

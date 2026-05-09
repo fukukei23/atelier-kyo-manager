@@ -67,10 +67,7 @@ class ListingProgress(db.Model):
     def get_monthly_summary(year: int, month: int) -> dict:
         """月間サマリーを取得"""
         start = date(year, month, 1)
-        if month == 12:
-            end = date(year + 1, 1, 1)
-        else:
-            end = date(year, month + 1, 1)
+        end = date(year + 1, 1, 1) if month == 12 else date(year, month + 1, 1)
 
         result = (
             db.session.query(

@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 try:
     from app.agents.browser.extractor import (
         VISIBLE_PRICE_SELECTORS,
-        extract_moncler_pdp_links,
+        extract_moncler_pdp_links,  # noqa: F401
         looks_like_product_url,
     )
 except ImportError:
@@ -1424,39 +1424,38 @@ class NavigationDriver:
                 for candidate in all_candidates:
                     if not candidate.normalized_url:
                         continue
-                    if candidate.product_url_rules:
-                        # forbidden_path_matchedがFalseの場合
-                        if not candidate.product_url_rules.get("forbidden_path_matched", True):
-                            # domain_allowedがTrueで、allow_path_matchedがFalseでも、商品カード由来など強い根拠があるものだけ試す
-                            if candidate.product_url_rules.get("domain_allowed", False):
-                                # source_selectorが商品カード関連の場合は採用を試す
-                                if candidate.source_selector and any(
-                                    keyword in candidate.source_selector.lower()
-                                    for keyword in ["product", "card", "tile", "item"]
-                                ):
-                                    found_links.add(candidate.normalized_url)
-                                    candidate.accepted = True
-                                    candidate.reject_reasons = [
-                                        r
-                                        for r in candidate.reject_reasons
-                                        if r not in (RejectReason.NO_PRODUCTS_PATH.value,)
-                                    ]
-                                    candidate.notes = (candidate.notes or "") + " [Refilter: product card source]"
-                                    logger.debug(
-                                        f"[PLP→PDP][Refilter] Accepted candidate (product card source): {candidate.normalized_url}"
-                                    )
+                    # forbidden_pathに当たっていない & domain_allowed & 商品カード由来など強い根拠があるものだけ試す
+                    if (
+                        candidate.product_url_rules
+                        and not candidate.product_url_rules.get("forbidden_path_matched", True)
+                        and candidate.product_url_rules.get("domain_allowed", False)
+                        and candidate.source_selector
+                        and any(
+                            keyword in candidate.source_selector.lower()
+                            for keyword in ["product", "card", "tile", "item"]
+                        )
+                    ):
+                        found_links.add(candidate.normalized_url)
+                        candidate.accepted = True
+                        candidate.reject_reasons = [
+                            r
+                            for r in candidate.reject_reasons
+                            if r not in (RejectReason.NO_PRODUCTS_PATH.value,)
+                        ]
+                        candidate.notes = (candidate.notes or "") + " [Refilter: product card source]"
+                        logger.debug(
+                            f"[PLP→PDP][Refilter] Accepted candidate (product card source): {candidate.normalized_url}"
+                        )
 
                 # 2. same-siteのみ許可（forbidden_pathに当たってない場合）
                 if not found_links and refilter_config.get("allow_same_site_only", False):
                     for candidate in all_candidates:
                         if not candidate.normalized_url:
                             continue
-                        # same-site判定
-                        if self._is_same_site(candidate.normalized_url, target_url):
-                            # forbidden_pathに当たっていない場合のみ
-                            if candidate.product_url_rules and not candidate.product_url_rules.get(
-                                "forbidden_path_matched", False
-                            ):
+                        # same-site判定: forbidden_pathに当たっていない場合のみ
+                        if self._is_same_site(candidate.normalized_url, target_url) and candidate.product_url_rules and not candidate.product_url_rules.get(
+                            "forbidden_path_matched", False
+                        ):
                                 # same-siteの場合は、domain/subdomain rejectを無視
                                 relaxed_reasons = [
                                     r
@@ -2947,18 +2946,17 @@ class NavigationDriver:
                 if target_locale and gate_paths:
                     # ホストがallowed_domainに一致し、パスがgate_pathsに一致する場合
                     allowed_domain = site_config.get("allowed_domain", "")
-                    if allowed_domain and allowed_domain.lower() in host:
-                        if path_lower in [p.lower() for p in gate_paths]:
-                            logger.warning(f"[_looks_like_trap] Detected locale gate: {url}")
-                            return True
+                    if allowed_domain and allowed_domain.lower() in host and path_lower in [p.lower() for p in gate_paths]:
+                        logger.warning(f"[_looks_like_trap] Detected locale gate: {url}")
+                        return True
 
             # デフォルトのリーガルキーワード（site_configに定義がない場合のフォールバック）
             # ただし、これは最小限に抑える
             default_legal_keywords = ["/cookie-policy", "/privacy", "/legal", "/help", "/account", "/login"]
-            if not legal_patterns:  # site_configにlegal_patternsが定義されていない場合のみ
-                if any(kw in path_lower for kw in default_legal_keywords):
-                    logger.warning(f"[_looks_like_trap] Detected default legal keyword: {url}")
-                    return True
+            # site_configにlegal_patternsが定義されていない場合のみフォールバック
+            if not legal_patterns and any(kw in path_lower for kw in default_legal_keywords):
+                logger.warning(f"[_looks_like_trap] Detected default legal keyword: {url}")
+                return True
 
             return False
 
@@ -3559,31 +3557,29 @@ class NavigationDriver:
 
             # ターゲットロケール以外のロケールにリダイレクトされた場合を検出
             if prefer_locale and allowed_domain:
-                # 現在のURLがターゲットロケールを含まない場合
+                # 現在のURLがターゲットロケールを含まず、別ロケールセグメントが含まれている場合
                 target_locale_path = f"/{prefer_locale}/"
-                if allowed_domain.lower() in current_url and target_locale_path not in current_url:
-                    # ロケールセグメントが含まれているかチェック
-                    if _LOCALE_SEG_RE.search(current_url):
-                        logger.warning(
-                            f"[Materialize] Detected locale redirect away from {prefer_locale} mid-attempt: {current_url}"
-                        )
-                        if locale_recover_attempts >= locale_recover_max:
-                            logger.error("[Materialize] Locale recovery exceeded max attempts. Aborting.")
-                            return False
-                        locale_recover_attempts += 1
-                        if target_url:
-                            await self._force_plp_recover(page, site_config, target_url)
-                            await page.wait_for_timeout(800)
-                            # CR-ATELIER-002 Step 2: Locale redirect recovery 後のロケールチェック
-                            # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
-                            try:
-                                await self._ensure_expected_locale(ctx)
-                            except Exception as locale_e:
-                                logger.warning(
-                                    f"[Materialize] Locale Guard after locale redirect recovery failed: {locale_e}",
-                                    exc_info=True,
-                                )
-                            continue
+                if allowed_domain.lower() in current_url and target_locale_path not in current_url and _LOCALE_SEG_RE.search(current_url):
+                    logger.warning(
+                        f"[Materialize] Detected locale redirect away from {prefer_locale} mid-attempt: {current_url}"
+                    )
+                    if locale_recover_attempts >= locale_recover_max:
+                        logger.error("[Materialize] Locale recovery exceeded max attempts. Aborting.")
+                        return False
+                    locale_recover_attempts += 1
+                    if target_url:
+                        await self._force_plp_recover(page, site_config, target_url)
+                        await page.wait_for_timeout(800)
+                        # CR-ATELIER-002 Step 2: Locale redirect recovery 後のロケールチェック
+                        # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
+                        try:
+                            await self._ensure_expected_locale(ctx)
+                        except Exception as locale_e:
+                            logger.warning(
+                                f"[Materialize] Locale Guard after locale redirect recovery failed: {locale_e}",
+                                exc_info=True,
+                            )
+                        continue
 
             if run_ctx is not None and hasattr(run_ctx, "take_screenshot") and attempt < 3:
                 try:
@@ -4001,7 +3997,7 @@ class NavigationDriver:
                         if href and not any(bad in href for bad in block_ng):
                             await el.scroll_into_view_if_needed()
                             newp = await self._click_and_capture_navigation(
-                                lambda: el.click(timeout=5000), page, context, url_regex=url_pat
+                                lambda el=el: el.click(timeout=5000), page, context, url_regex=url_pat
                             )
                             if newp:
                                 return newp.url
@@ -4040,7 +4036,7 @@ class NavigationDriver:
                 if count > 0:
                     await card.scroll_into_view_if_needed(timeout=3000)
                     newp = await self._click_and_capture_navigation(
-                        lambda: card.click(timeout=5000), page, context, url_regex=url_pat
+                        lambda card=card: card.click(timeout=5000), page, context, url_regex=url_pat
                     )
                     if newp:
                         return newp.url
@@ -4078,7 +4074,7 @@ class NavigationDriver:
                     if count > 0:
                         await card.scroll_into_view_if_needed(timeout=3000)
                         newp = await self._click_and_capture_navigation(
-                            lambda: card.click(timeout=5000), page, context, url_regex=url_pat
+                            lambda card=card: card.click(timeout=5000), page, context, url_regex=url_pat
                         )
                         if newp:
                             return newp.url
