@@ -31,8 +31,8 @@ from selenium.webdriver.support.ui import WebDriverWait
 # Flask 経由でなく単体実行も可能にするための config 読み込み
 try:
     from app.config.config import Config
-except ImportError:
-    raise ImportError("config.py が見つかりません。プロジェクトルートに config.py を配置してください。")
+except ImportError as _err:
+    raise ImportError("config.py が見つかりません。プロジェクトルートに config.py を配置してください。") from _err
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 

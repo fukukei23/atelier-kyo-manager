@@ -1599,8 +1599,6 @@ class NavigationDriver:
                         await res
         except Exception as e:
             logger.debug(f"[PLP→PDP] TelemetryClient.save_raw_hrefs failed: {e}")
-        except Exception:
-            pass
         return cleaned
 
     async def _collect_moncler_pdp_links(self, ctx: NavigationContext) -> set[str]:
@@ -2689,8 +2687,6 @@ class NavigationDriver:
                                                         f"[LocaleGuard] Selected location using selector: {country_sel}"
                                                     )
                                                     break
-                                            except Exception:
-                                                continue
                                         except Exception:
                                             continue
 
@@ -2713,19 +2709,16 @@ class NavigationDriver:
                                                         await close_locator.click(timeout=2000)
                                                         await page.wait_for_timeout(1000)
                                                         break
-                                                except Exception:
-                                                    continue
                                             except Exception:
                                                 continue
                                     break
-                            except Exception as e:
+                            except Exception as e:  # noqa: B025 — inner except catches Exception broadly, outer provides fallback logging
                                 # is_visible()が失敗した場合は次のセレクタを試す
                                 logger.debug(f"[LocaleGuard] Modal detection selector '{sel}' failed: {e}")
                                 continue
                         except Exception as e:
                             logger.debug(f"[LocaleGuard] Modal detection failed for selector '{sel}': {e}")
                             continue
-
                 # ロケール安定性チェック
                 current_url_check = page.url or ""
                 is_stable, stability_diag = self._is_locale_stable(current_url_check, site_config)
@@ -3554,11 +3547,9 @@ class NavigationDriver:
             except Exception as geo_e:
                 logger.debug(f"[Materialize] Geo modal dismissal failed (non-fatal): {geo_e}")
                 pass
-            try:
+            with contextlib.suppress(Exception):
                 # Stage 3A-2-5: site_config を渡す
                 await self._kill_overlays(page, site_config)
-            except Exception:
-                pass
 
             # Stage 4: ロケールリダイレクトの検出（汎用化）
             current_url = (page.url or "").lower()

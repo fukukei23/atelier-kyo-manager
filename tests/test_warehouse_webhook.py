@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import hmac
 import json
 from hashlib import sha256
@@ -28,10 +29,8 @@ def app():
     # warehouse_webhook Blueprint を手動登録（create_app に未登録のため）
     from app.routes.warehouse_webhook import router as warehouse_router
 
-    try:
+    with contextlib.suppress(ValueError):
         app.register_blueprint(warehouse_router)
-    except ValueError:
-        pass  # 既に登録済みの場合はスキップ
     with app.app_context():
         db.create_all()
         yield app

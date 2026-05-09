@@ -27,29 +27,17 @@ extend-exclude = [
 [lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = [
-    # --- Phase 1: 既存コードで多用されており一括修正困難 ---
+    # --- Phase 2: 残存する違反（段階的に削減） ---
     "E501",   # line too long (formatterが扱う)
-    "E701",   # multiple statements on one line (colon) — mock class definitions
-    "E702",   # multiple statements on one line (semicolon)
     "E402",   # module level import not at top — try/except import guards
     "F401",   # unused import — availability checks in try/except
     "F403",   # undefined name with star import
     "F406",   # undefined name with star import from
     "F821",   # undefined name — forward references, conditional imports
-    "B008",   # function call in argument defaults
     "B023",   # loop variable binding in lambda
-    "B025",   # duplicate exception in try/except
-    "B904",   # raise without from in except
-    "B905",   # zip() without strict
-    "E741",   # ambiguous variable name
     "SIM102", # if-with-same-arms
-    "SIM105", # try-except-pass → suppress
     "SIM108", # ternary operator
     "SIM117", # with statement merging
-    "UP007",  # Union → X | Y (Python 3.10+)
-    "UP035",  # typing.Dict → dict (deprecated import)
-    "UP045",  # Optional → X | None
-    "B007",   # unused loop control variable
     "F841",   # assigned but never used
 ]
 fixable = ["ALL"]

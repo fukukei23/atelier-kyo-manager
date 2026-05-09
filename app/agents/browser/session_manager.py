@@ -65,7 +65,7 @@ EXTERNAL_BLOCKLIST_HOSTS = (
     "googlesyndication.com",
 )
 
-UrlNormalizer = Optional[Callable[[str], str]]
+UrlNormalizer = Callable[[str], str] | None
 
 
 @dataclass

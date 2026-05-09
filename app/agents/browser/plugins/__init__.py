@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Dict
-
 try:
     from app.agents.plugins.base import StrategyPlugin
     from app.agents.plugins.moncler_plp_v1 import MonclerPLPStrategy

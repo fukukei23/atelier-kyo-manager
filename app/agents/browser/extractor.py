@@ -299,10 +299,8 @@ async def extract_moncler_pdp_links(
         ctx["moncler_outcome"] = outcome_info
     elif hasattr(ctx, "__dict__"):
         # NavigationContext などのオブジェクトの場合、動的に属性を追加
-        try:
+        with contextlib.suppress(Exception):
             ctx.moncler_outcome = outcome_info
-        except Exception:
-            pass  # 読み取り専用属性の場合は無視
 
     return urls
 
@@ -502,7 +500,7 @@ MAX_PDP_LINKS_TO_FOLLOW = 8
 DEFAULT_PDP_PARALLEL_LIMIT = 2
 OVERALL_PLP_BUDGET_MS_DEFAULT = 120000
 
-PreparePageCallable = Optional[Callable[[Page], Awaitable[None]]]
+PreparePageCallable = Callable[[Page], Awaitable[None]] | None
 
 
 @dataclass
