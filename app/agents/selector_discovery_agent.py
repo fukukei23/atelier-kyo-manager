@@ -232,13 +232,13 @@ class SelectorDiscoveryAgent:
         existing_selectors = set(plp_selectors)
         unique_candidates = []
         unique_scores = []
-        for sel, score in zip(candidate_selectors, confidence_scores):
+        for sel, score in zip(candidate_selectors, confidence_scores, strict=False):
             if sel not in existing_selectors:
                 unique_candidates.append(sel)
                 unique_scores.append(score)
 
         # 信頼度の高い順にソート
-        sorted_pairs = sorted(zip(unique_candidates, unique_scores), key=lambda x: x[1], reverse=True)
+        sorted_pairs = sorted(zip(unique_candidates, unique_scores, strict=False), key=lambda x: x[1], reverse=True)
         candidate_selectors = [sel for sel, _ in sorted_pairs]
         confidence_scores = [score for _, score in sorted_pairs]
 

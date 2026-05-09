@@ -467,7 +467,7 @@ async def moncler_plp_recovery(page: Page, site_config: dict[str, Any] | None, q
             pass
         with contextlib.suppress(Exception):
             await page.context.close()
-        raise RuntimeError("Gate dismissal failed -> aborting session")
+        raise RuntimeError("Gate dismissal failed -> aborting session") from None
 
     # --- 4. URL正規化 & リダイレクト脱出 ---
     # 現在のURLがターゲットロケールと異なる場合、強制的に遷移する

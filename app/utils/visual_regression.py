@@ -33,11 +33,13 @@ from playwright.async_api import Page
 logger = logging.getLogger(__name__)
 
 
-def _safe_relpath(p: Path, start: Path = Path.cwd()) -> str:
+def _safe_relpath(p: Path, start: Path | None = None) -> str:
     """
     ログ表示用。p が start 配下なら相対、無理なら絶対パスを返す。
     Windows のドライブ差異などで relative_to が失敗するケースを吸収。
     """
+    if start is None:
+        start = Path.cwd()
     try:
         # Resolve both paths to be absolute
         p_resolved = p.resolve()

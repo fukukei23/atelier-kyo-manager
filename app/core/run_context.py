@@ -12,7 +12,6 @@ import datetime
 import json
 import logging
 from pathlib import Path
-from typing import Union
 
 try:
     from playwright.async_api import Page as AsyncPage
@@ -23,7 +22,7 @@ try:
 except ImportError:
     SyncPage = type(None)
 
-PageObject = Union[AsyncPage, SyncPage]
+PageObject = AsyncPage | SyncPage
 
 
 class RunContext:

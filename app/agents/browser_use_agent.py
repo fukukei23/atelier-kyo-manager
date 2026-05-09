@@ -2339,10 +2339,8 @@ class BrowserUseAgent:
                     await new_page.wait_for_load_state("domcontentloaded", timeout=1500)
             except Exception as e_blank:
                 self.logger.debug(f"[_click_and_capture] Wait for about:blank failed: {e_blank}")
-            try:
+            with contextlib.suppress(Exception):
                 await new_page.wait_for_load_state(wait_state, timeout=max(500, timeout_ms // 10))  # 500ms
-            except Exception:
-                pass
             if url_regex:
                 try:
                     await new_page.wait_for_url(url_regex, timeout=max(1000, timeout_ms // 4))  # 1250ms

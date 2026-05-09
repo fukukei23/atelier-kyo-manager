@@ -7,7 +7,7 @@ app/config/protocols.py - 設定・依存の抽象化プロトコル
 
 from __future__ import annotations
 
-from typing import Any, Dict, Protocol, runtime_checkable  # noqa: F401
+from typing import Any, Protocol, runtime_checkable  # noqa: F401
 
 
 @runtime_checkable

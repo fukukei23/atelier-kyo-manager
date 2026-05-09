@@ -205,10 +205,10 @@ class GPTIntegration:
         )
 
     def _extract_json(self, text: str) -> str:
-        l = text.find("{")
-        r = text.rfind("}")
-        if l >= 0 and r >= 0 and r > l:
-            return text[l : r + 1]
+        left = text.find("{")
+        right = text.rfind("}")
+        if left >= 0 and right >= 0 and right > left:
+            return text[left : right + 1]
         return "{}"
 
     def _dump_raw_response(self, text: str, prefix: str = "llm_raw") -> str | None:

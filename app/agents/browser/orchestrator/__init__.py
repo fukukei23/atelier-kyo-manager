@@ -6,7 +6,7 @@ import json as _json
 import logging
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Optional, Union
 
 from playwright.async_api import BrowserContext, Page
 
