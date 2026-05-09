@@ -5,6 +5,14 @@ from pathlib import Path
 import json
 from typing import Any, Dict
 
+from app.config.constants import (
+    DOMESTIC_COMMISSION_RATE,
+    OVERSEAS_COMMISSION_RATE,
+    PLATFORM_FEE_RATE,
+    EFFECTIVE_FEE_RATE,
+    TRANSFER_FEE,
+)
+
 
 # 品目別関税率テーブル
 CUSTOMS_RATE_TABLE: dict[str, float] = {
@@ -58,22 +66,15 @@ class PricingConfig:
     - overseas_commission_rate: 海外仕入れ時の成約手数料率
     - transfer_fee: 振込手数料（固定）
     """
-    buyma_platform_fee_rate: float = 0.077   # 7.7% - プラットフォーム販売手数料
-    buyma_effective_fee_rate: float = 0.142  # 14.2% - 実効総手数料
-    additional_fee_rate: float = 0.0         # その他の手数料
-    domestic_commission_rate: float = 0.077  # 7.7% - 国内成約手数料
-    overseas_commission_rate: float = 0.055  # 5.5% - 海外成約手数料
-    transfer_fee: float = 220.0              # 振込手数料（楽天銀行想定）
+    buyma_platform_fee_rate: float = PLATFORM_FEE_RATE
+    buyma_effective_fee_rate: float = EFFECTIVE_FEE_RATE
+    additional_fee_rate: float = 0.0
+    domestic_commission_rate: float = DOMESTIC_COMMISSION_RATE
+    overseas_commission_rate: float = OVERSEAS_COMMISSION_RATE
+    transfer_fee: float = TRANSFER_FEE
 
 
-_DEFAULT_CONFIG = PricingConfig(
-    buyma_platform_fee_rate=0.077,
-    buyma_effective_fee_rate=0.142,
-    additional_fee_rate=0.0,
-    domestic_commission_rate=0.077,
-    overseas_commission_rate=0.055,
-    transfer_fee=220.0,
-)
+_DEFAULT_CONFIG = PricingConfig()
 
 
 def load_pricing_config(config_path: str | None = None) -> PricingConfig:

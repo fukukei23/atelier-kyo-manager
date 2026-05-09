@@ -11,32 +11,19 @@ from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean
 from app.extensions import db
 
 
-# 決済方法別 延長期限マッピング（日数）
-PAYMENT_METHOD_EXTENSION_DAYS: dict[str, int] = {
-    "credit_card": 45,
-    "rakuten_pay": 45,
-    "d_pay": 25,
-    "au_pay": 25,
-    "paidy": 25,
-    "bank_transfer": 90,
-    "convenience": 90,
-    "paypay": 90,
-    "amazon_pay": 90,
-}
+from app.config.constants import (
+    DOMESTIC_COMMISSION_RATE,
+    OVERSEAS_COMMISSION_RATE,
+    TRANSFER_FEE,
+    PAYMENT_METHOD_EXTENSION_DAYS,
+    EXPECTED_PAYMENT_DAYS,
+)
 
-# 仕入区分別 平均着金日数
-EXPECTED_PAYMENT_DAYS: dict[str, int] = {
-    "domestic": 15,
-    "overseas": 25,
-}
-
-# BUYMA手数料率
+# 後方互換: 旧名前で外部参照される可能性あり
 COMMISSION_RATES: dict[str, float] = {
-    "domestic": 0.077,
-    "overseas": 0.055,
+    "domestic": DOMESTIC_COMMISSION_RATE,
+    "overseas": OVERSEAS_COMMISSION_RATE,
 }
-
-TRANSFER_FEE = 220.0  # 振込手数料（楽天銀行想定）
 
 
 class Order(db.Model):
