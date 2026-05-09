@@ -13,7 +13,7 @@ from app.extensions import db, csrf
 from app.models import Product
 from app.models.stock_check import StockCheck
 from app.services.price_scraper import PriceScraper
-from app.utils.decorators import handle_db_error
+from app.utils.decorators import handle_api_error, handle_db_error
 
 from . import bp
 
@@ -110,6 +110,7 @@ def api_fetch_stock(sid: int):
 @bp.post("/api/stock-check/quick-update")
 @login_required
 @csrf.exempt
+@handle_api_error()
 def api_quick_update_price():
     """インライン価格更新"""
     data = request.get_json(silent=True) or {}
@@ -126,22 +127,19 @@ def api_quick_update_price():
     sc = StockCheck.query.get(sid)
     if not sc:
         return jsonify({"success": False, "error": "not found"}), 404
-    try:
-        if sc.current_price != new_price:
-            sc.previous_price = sc.current_price
-            sc.price_changed = sc.previous_price is not None and sc.previous_price != new_price
-        sc.current_price = new_price
-        sc.checked_at = datetime.utcnow()
-        db.session.commit()
-        return jsonify({"success": True, "data": sc.to_dict()})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+    if sc.current_price != new_price:
+        sc.previous_price = sc.current_price
+        sc.price_changed = sc.previous_price is not None and sc.previous_price != new_price
+    sc.current_price = new_price
+    sc.checked_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"success": True, "data": sc.to_dict()})
 
 
 @bp.post("/api/stock-check/quick-add")
 @login_required
 @csrf.exempt
+@handle_api_error(status_code=500)
 def api_quick_add_check():
     """クイック追加（商品ID・価格・在庫のみ）"""
     data = request.get_json(silent=True) or {}
@@ -160,21 +158,17 @@ def api_quick_add_check():
         return jsonify({"success": False, "error": f"product_id {pid} not found"}), 400
     source_url = str(data.get("source_url", ""))[:2000]
     source_url = source_url.replace("<", "&lt;").replace(">", "&gt;")
-    try:
-        sc = StockCheck(
-            product_id=pid,
-            source_url=source_url,
-            current_price=price,
-            in_stock=bool(data.get("in_stock", True)),
-            checked_at=datetime.utcnow(),
-            notes=str(data.get("notes", "")).replace("<", "&lt;").replace(">", "&gt;"),
-        )
-        db.session.add(sc)
-        db.session.commit()
-        return jsonify({"success": True, "id": sc.id}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"success": False, "error": str(e)}), 500
+    sc = StockCheck(
+        product_id=pid,
+        source_url=source_url,
+        current_price=price,
+        in_stock=bool(data.get("in_stock", True)),
+        checked_at=datetime.utcnow(),
+        notes=str(data.get("notes", "")).replace("<", "&lt;").replace(">", "&gt;"),
+    )
+    db.session.add(sc)
+    db.session.commit()
+    return jsonify({"success": True, "id": sc.id}), 201
 
 
 @bp.get("/api/products-list")
