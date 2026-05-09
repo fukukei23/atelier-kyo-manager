@@ -13,11 +13,13 @@
 # ==============================================================================
 
 from __future__ import annotations
-import os
-import json
+
+import contextlib
 import logging
+import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -26,15 +28,17 @@ try:
 except Exception:  # pragma: no cover
     OpenAI = None  # type: ignore
 
+
 # 互換用の戻り値オブジェクト（既存コードが参照する属性を揃える）
 @dataclass
 class GenerateResult:
     text: str
-    tokens: Dict[str, int]
+    tokens: dict[str, int]
     cost_usd: float
     model_family: str
     sentiment: str = "neutral"
     cached: bool = False
+
 
 class AILlmController:
     """
@@ -54,7 +58,7 @@ class AILlmController:
         self.openai_model = os.environ.get("OPENAI_MODEL_RESPONSES", "gpt-5")
         # オプション：解析/コードで別モデルを振り分けたい場合
         self.openai_model_analysis = os.environ.get("OPENAI_MODEL_ANALYSIS_RESPONSES", self.openai_model)
-        self.openai_model_code     = os.environ.get("OPENAI_MODEL_CODE_RESPONSES", self.openai_model)
+        self.openai_model_code = os.environ.get("OPENAI_MODEL_CODE_RESPONSES", self.openai_model)
 
         # ---- OpenAI クライアント ----
         self.client = None
@@ -76,10 +80,10 @@ class AILlmController:
         self,
         prompt: str,
         task_type: str = "general",
-        tools: Optional[List[Dict[str, Any]]] = None,
+        tools: list[dict[str, Any]] | None = None,
         stream: bool = False,
-        chunk_callback: Optional[Callable[[str], None]] = None,
-        json_schema: Optional[Dict[str, Any]] = None,  # 追加: 構造化出力を要求する場合
+        chunk_callback: Callable[[str], None] | None = None,
+        json_schema: dict[str, Any] | None = None,  # 追加: 構造化出力を要求する場合
     ) -> GenerateResult:
         """
         Responses API で生成を実行。従来の AILlmController.generate と同シグネチャ。
@@ -87,7 +91,9 @@ class AILlmController:
         - json_schema: {"name": "...", "schema": {JSONSchema}, "strict": True}
         """
         if not self.client:
-            raise RuntimeError("OpenAI client unavailable for Responses API. Check OPENAI_API_KEY and package versions.")
+            raise RuntimeError(
+                "OpenAI client unavailable for Responses API. Check OPENAI_API_KEY and package versions."
+            )
 
         # タスク別モデル選択（任意で上書き）
         model = self.openai_model
@@ -98,7 +104,7 @@ class AILlmController:
             model = self.openai_model_code
 
         # Responses API の呼び出しペイロードを構築
-        kwargs: Dict[str, Any] = {
+        kwargs: dict[str, Any] = {
             "model": model,
             "input": prompt,
         }
@@ -113,7 +119,7 @@ class AILlmController:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
-        usage_tokens: Dict[str, int] = {}
+        usage_tokens: dict[str, int] = {}
         text_out = ""
 
         if stream:
@@ -124,10 +130,8 @@ class AILlmController:
                         delta = event.delta
                         if delta:
                             if chunk_callback:
-                                try:
+                                with contextlib.suppress(Exception):
                                     chunk_callback(delta)
-                                except Exception:
-                                    pass
                             text_out += delta
                     elif event.type == "response.completed":
                         try:
@@ -161,6 +165,7 @@ class AILlmController:
             cached=False,
         )
 
+
 # ----------------------------------------------------------------------
 # 内部ヘルパ
 # ----------------------------------------------------------------------
@@ -176,7 +181,7 @@ def _collect_text_from_response(res: Any) -> str:
             t = getattr(block, "text", None)
             if not t:
                 # text フィールドが list 構造の場合もある
-                t = "".join([seg.get("text","") for seg in getattr(block, "text_annotations", []) or []])
+                t = "".join([seg.get("text", "") for seg in getattr(block, "text_annotations", []) or []])
             if t:
                 parts.append(t)
         return "".join(parts)

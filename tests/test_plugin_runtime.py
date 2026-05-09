@@ -1,9 +1,8 @@
 """Tests for plugin_runtime module."""
+
 from unittest.mock import MagicMock, patch
 
-import pytest
-
-from app.agents.plugin_runtime import load_plugins_for_site, first_plugin_for_site
+from app.agents.plugin_runtime import first_plugin_for_site, load_plugins_for_site
 
 
 class TestLoadPluginsForSite:
@@ -25,9 +24,9 @@ class TestLoadPluginsForSite:
         with patch("app.agents.plugin_runtime.importlib.import_module", return_value=mock_module):
             mock_iter.return_value = ["app.agents.plugins.test_plugin"]
             # Need to mock issubclass to return True for our mock
-            with patch("app.agents.plugin_runtime.isinstance") as mock_isinstance:
+            with patch("app.agents.plugin_runtime.isinstance"):
                 with patch("app.agents.plugin_runtime.issubclass", return_value=True):
-                    with patch("app.agents.plugin_runtime.getattr") as mock_getattr:
+                    with patch("app.agents.plugin_runtime.getattr"):
                         # First getattr: dir iteration returns "MyPlugin"
                         # We need a different approach
                         pass

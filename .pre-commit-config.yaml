@@ -1,5 +1,31 @@
 repos:
-  # 1) 先頭インデントの NBSP/TAB 自動修正（渡されたファイルだけ処理）
+  # 1) ruff: lint (auto-fix) + format
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.11.11
+    hooks:
+      - id: ruff
+        name: ruff lint (auto-fix)
+        args: ["--fix"]
+        types_or: [python]
+        exclude: |
+          (?x)(
+            ^migrations/.* |
+            ^export/.* |
+            ^exports_atelier/.* |
+            ^\.venv/.* | ^venv/.* | ^\.venv_backup/.*
+          )
+      - id: ruff-format
+        name: ruff format
+        types_or: [python]
+        exclude: |
+          (?x)(
+            ^migrations/.* |
+            ^export/.* |
+            ^exports_atelier/.* |
+            ^\.venv/.* | ^venv/.* | ^\.venv_backup/.*
+          )
+
+  # 2) NBSP/TAB fix (ruff does not handle non-breaking spaces in indentation)
   - repo: local
     hooks:
       - id: fix-indent-nbsp
@@ -16,30 +42,7 @@ repos:
             ^\.venv/.* | ^venv/.* | ^\.venv_backup/.*
           )
 
-  # 2) 末尾空白・EOF 統一
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
-    hooks:
-      - id: trailing-whitespace
-        types: [python]
-        exclude: |
-          (?x)(
-            ^migrations/.* |
-            ^export/.* |
-            ^exports_atelier/.* |
-            ^\.venv/.* | ^venv/.* | ^\.venv_backup/.*
-          )
-      - id: end-of-file-fixer
-        types: [python]
-        exclude: |
-          (?x)(
-            ^migrations/.* |
-            ^export/.* |
-            ^exports_atelier/.* |
-            ^\.venv/.* | ^venv/.* | ^\.venv_backup/.*
-          )
-
-  # 3) 最終検査（先頭インデントに NBSP/TAB が残ってないか）
+  # 3) NBSP/TAB verify (catches what ruff misses)
   - repo: local
     hooks:
       - id: forbid-nbsp-indent

@@ -7,27 +7,26 @@
 #   - 自己テスト結果を PNG 画像として保存（コンタクトシート + メタ情報）
 # ======================================================================
 
-import os
+import datetime
 import io
 import json
-import math
-import time
 import logging
-import datetime
-from typing import List, Dict, Any, Optional
-from urllib.parse import quote_plus
+import math
+import os
+import time
 from pathlib import Path
+from typing import Any
+from urllib.parse import quote_plus
 
 import requests
 from PIL import Image, ImageDraw, ImageFont
-
 from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.remote.webdriver import WebDriver
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.remote.webdriver import WebDriver
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
 
 # Flask 経由でなく単体実行も可能にするための config 読み込み
 try:
@@ -35,10 +34,7 @@ try:
 except ImportError:
     raise ImportError("config.py が見つかりません。プロジェクトルートに config.py を配置してください。")
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 # =========================
@@ -47,7 +43,7 @@ logging.basicConfig(
 class CrawlerService:
     """対象サイトから商品画像URLを収集するクローラー"""
 
-    def __init__(self, sites_config: Dict[str, Dict[str, Any]], headless: bool = True, wait_time: int = 25):
+    def __init__(self, sites_config: dict[str, dict[str, Any]], headless: bool = True, wait_time: int = 25):
         self.sites_config = sites_config
         self.headless = headless
         self.wait_time = wait_time
@@ -66,7 +62,7 @@ class CrawlerService:
         driver.set_page_load_timeout(max(30, self.wait_time + 5))
         return driver
 
-    def _accept_cookie_if_any(self, driver: WebDriver, selector: Optional[str]) -> None:
+    def _accept_cookie_if_any(self, driver: WebDriver, selector: str | None) -> None:
         if not selector:
             return
         try:
@@ -76,16 +72,16 @@ class CrawlerService:
         except Exception:
             self.logger.info("No cookie consent (or not clickable).")
 
-    def _extract_images_from_jsonld(self, json_text: str) -> List[str]:
+    def _extract_images_from_jsonld(self, json_text: str) -> list[str]:
         """JSON-LD（<script type='application/ld+json'>）から image を抽出"""
-        out: List[str] = []
+        out: list[str] = []
         try:
             data = json.loads(json_text)
         except Exception:
             return out
 
         # Product 直下 or @graph 配下に対応
-        def _normalize_images(img_field) -> List[str]:
+        def _normalize_images(img_field) -> list[str]:
             if not img_field:
                 return []
             if isinstance(img_field, str):
@@ -130,7 +126,7 @@ class CrawlerService:
 
         return [u for u in images if isinstance(u, str)]
 
-    def search_and_collect_images(self, site_key: str, query: str, max_results: int = 6) -> List[str]:
+    def search_and_collect_images(self, site_key: str, query: str, max_results: int = 6) -> list[str]:
         """指定サイトで検索し、商品ページから画像URLを取得"""
         if site_key not in self.sites_config:
             raise ValueError(f"Site '{site_key}' is not defined in configuration.")
@@ -146,9 +142,7 @@ class CrawlerService:
         # 検索結果リンク要素の取得
         try:
             result_links = WebDriverWait(driver, self.wait_time).until(
-                EC.presence_of_all_elements_located(
-                    (By.CSS_SELECTOR, site_conf["search_result_link_selector"])
-                )
+                EC.presence_of_all_elements_located((By.CSS_SELECTOR, site_conf["search_result_link_selector"]))
             )
         except TimeoutException:
             self.logger.error("Search results not found within wait time.")
@@ -164,7 +158,7 @@ class CrawlerService:
         self.logger.info(f"Candidate product links: {len(product_links)}")
 
         # 各商品ページから JSON-LD を読み取って画像を集める
-        image_urls: List[str] = []
+        image_urls: list[str] = []
         for href in product_links[:max_results]:
             try:
                 driver.execute_script("window.open(arguments[0], '_blank');", href)
@@ -202,7 +196,7 @@ class CrawlerService:
 # =========================
 # Self-test Report (PNG)
 # =========================
-def _fetch_image(url: str, timeout: int = 20, max_bytes: int = 5_000_000) -> Optional[Image.Image]:
+def _fetch_image(url: str, timeout: int = 20, max_bytes: int = 5_000_000) -> Image.Image | None:
     """URL から画像を取得（簡易サイズ制限つき）"""
     try:
         headers = {
@@ -221,12 +215,12 @@ def _fetch_image(url: str, timeout: int = 20, max_bytes: int = 5_000_000) -> Opt
         return None
 
 
-def _text_wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int) -> List[str]:
+def _text_wrap(draw: ImageDraw.ImageDraw, text: str, font: ImageFont.ImageFont, max_width: int) -> list[str]:
     """簡易テキスト折り返し"""
     words = text.split()
     if not words:
         return [""]
-    lines: List[str] = []
+    lines: list[str] = []
     cur = words[0]
     for w in words[1:]:
         if draw.textlength(cur + " " + w, font=font) <= max_width:
@@ -243,7 +237,7 @@ def save_selftest_report_png(
     *,
     site: str,
     query: str,
-    image_urls: List[str],
+    image_urls: list[str],
     thumb_cols: int = 3,
     thumb_size: int = 256,
 ) -> Path:
@@ -302,7 +296,7 @@ def save_selftest_report_png(
     d2 = ImageDraw.Draw(canvas)
 
     # サムネイル描画
-    x0, y0 = padding, bg.size[1] + padding
+    _x0, y0 = padding, bg.size[1] + padding
     for idx, url in enumerate(grid_urls):
         col = idx % thumb_cols
         row = idx // thumb_cols
@@ -316,7 +310,13 @@ def save_selftest_report_png(
             dph = ImageDraw.Draw(ph)
             msg = "Failed\nto load"
             wmsg, hmsg = dph.textlength("Failed", font=font_small), 2 * 18
-            dph.multiline_text(((thumb_size - wmsg) / 2 - 6, (thumb_size - hmsg) / 2), msg, fill="gray40", font=font_small, align="center")
+            dph.multiline_text(
+                ((thumb_size - wmsg) / 2 - 6, (thumb_size - hmsg) / 2),
+                msg,
+                fill="gray40",
+                font=font_small,
+                align="center",
+            )
             thumb = ph
         else:
             # 余白あり縮小（サムネイル化）
@@ -388,7 +388,7 @@ if __name__ == "__main__":
             site=test_site,
             query=test_query,
             image_urls=urls,
-            thumb_cols=3,       # 3x3 グリッド
+            thumb_cols=3,  # 3x3 グリッド
             thumb_size=256,
         )
         logging.info(f"[SELF-TEST] Report saved: {outpath.resolve()}")

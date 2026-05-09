@@ -4,9 +4,11 @@
 # ======================================================================
 
 from __future__ import annotations
-from datetime import datetime, date
 
-from sqlalchemy import Integer, String, Float, DateTime, Date, Text, func
+from datetime import date, datetime
+
+from sqlalchemy import Date, DateTime, Integer, Text, func
+
 from app.extensions import db
 
 
@@ -70,14 +72,18 @@ class ListingProgress(db.Model):
         else:
             end = date(year, month + 1, 1)
 
-        result = db.session.query(
-            func.sum(ListingProgress.listings_count).label("total"),
-            func.count(ListingProgress.id).label("days"),
-            func.max(ListingProgress.cumulative_monthly).label("cumulative"),
-        ).filter(
-            ListingProgress.record_date >= start,
-            ListingProgress.record_date < end,
-        ).first()
+        result = (
+            db.session.query(
+                func.sum(ListingProgress.listings_count).label("total"),
+                func.count(ListingProgress.id).label("days"),
+                func.max(ListingProgress.cumulative_monthly).label("cumulative"),
+            )
+            .filter(
+                ListingProgress.record_date >= start,
+                ListingProgress.record_date < end,
+            )
+            .first()
+        )
 
         if not result or result.days == 0:
             return {"total": 0, "days": 0, "cumulative": 0, "daily_avg": 0}

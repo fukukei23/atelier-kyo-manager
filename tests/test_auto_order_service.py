@@ -6,17 +6,16 @@ from app import create_app
 from app.extensions import db as _db
 from app.models.order import Order
 from app.services.auto_order_service import (
-    AutoOrderService,
-    AutoOrderLog,
-    OrderStatus,
-    VALID_TRANSITIONS,
     STATUS_LABELS,
+    VALID_TRANSITIONS,
+    AutoOrderService,
+    OrderStatus,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(scope="module")
 def app():
@@ -62,12 +61,19 @@ def sample_order(app):
 # Service tests
 # ---------------------------------------------------------------------------
 
+
 class TestAutoOrderServiceModel:
     def test_valid_transitions_structure(self):
         """All defined statuses appear in VALID_TRANSITIONS."""
-        for s in [OrderStatus.PENDING, OrderStatus.SOURCING, OrderStatus.CART_ADDED,
-                  OrderStatus.CHECKOUT, OrderStatus.PAYMENT_DONE, OrderStatus.SHIPPED,
-                  OrderStatus.ERROR]:
+        for s in [
+            OrderStatus.PENDING,
+            OrderStatus.SOURCING,
+            OrderStatus.CART_ADDED,
+            OrderStatus.CHECKOUT,
+            OrderStatus.PAYMENT_DONE,
+            OrderStatus.SHIPPED,
+            OrderStatus.ERROR,
+        ]:
             assert s in VALID_TRANSITIONS
 
     def test_status_labels(self):
@@ -94,6 +100,7 @@ class TestAutoOrderServiceModel:
         class MockNotifier:
             def __init__(self):
                 self.messages = []
+
             def send(self, msg):
                 self.messages.append(msg)
                 return {"success": True, "error": None}
@@ -110,6 +117,7 @@ class TestAutoOrderServiceModel:
         class MockNotifier:
             def __init__(self):
                 self.messages = []
+
             def send(self, msg):
                 self.messages.append(msg)
                 return {"success": True, "error": None}
@@ -193,6 +201,7 @@ class TestAutoOrderServiceModel:
 # Route tests
 # ---------------------------------------------------------------------------
 
+
 class TestAutoOrderRoutes:
     def test_list_page(self, client, sample_order, app):
         resp = client.get("/auto-orders")
@@ -200,8 +209,7 @@ class TestAutoOrderRoutes:
         assert "自動発注" in resp.text
 
     def test_start_auto_order(self, client, sample_order, app):
-        resp = client.post(f"/auto-orders/{sample_order.id}/start",
-                           follow_redirects=True)
+        resp = client.post(f"/auto-orders/{sample_order.id}/start", follow_redirects=True)
         assert resp.status_code == 200
         with app.app_context():
             o = Order.query.get(sample_order.id)
@@ -215,8 +223,7 @@ class TestAutoOrderRoutes:
         # Start first (pending → sourcing)
         client.post(f"/auto-orders/{sample_order.id}/start")
         # Execute step (sourcing → cart_added)
-        resp = client.post(f"/auto-orders/{sample_order.id}/step",
-                           follow_redirects=True)
+        resp = client.post(f"/auto-orders/{sample_order.id}/step", follow_redirects=True)
         assert resp.status_code == 200
         with app.app_context():
             o = Order.query.get(sample_order.id)
@@ -227,9 +234,9 @@ class TestAutoOrderRoutes:
             o = Order.query.get(sample_order.id)
             o.status = OrderStatus.SOURCING
             _db.session.commit()
-        resp = client.post(f"/auto-orders/{sample_order.id}/error",
-                           data={"error_note": "在庫切れ"},
-                           follow_redirects=True)
+        resp = client.post(
+            f"/auto-orders/{sample_order.id}/error", data={"error_note": "在庫切れ"}, follow_redirects=True
+        )
         assert resp.status_code == 200
         with app.app_context():
             o = Order.query.get(sample_order.id)

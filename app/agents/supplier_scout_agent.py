@@ -10,10 +10,11 @@
 #   エラーなく行えるようになります。
 
 from __future__ import annotations
+
 import logging
-from typing import Dict, List, Any
 import sys
 from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin
 
 # --- プロジェクトルートをPythonの検索パスに追加 ---
@@ -21,10 +22,11 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
+from app.agents.browser_use_agent import BrowserUseAgent
 from app.agents.failure_analysis_agent import FailureAnalysisAgent
 from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
-from app.agents.browser_use_agent import BrowserUseAgent
 from app.models.result_models import DiscoveryResult
+
 try:
     from app.core.run_context import RunContext
 except Exception:
@@ -32,13 +34,15 @@ except Exception:
 
 logger = logging.getLogger(__name__)
 
+
 class SupplierScoutAgent:
     """現場総指揮官。作戦計画を策定・記録し、部隊に任務を割り当て、結果を報告する。"""
-    def __init__(self, runtime_kwargs: Dict[str, Any]):
+
+    def __init__(self, runtime_kwargs: dict[str, Any]):
         self.runtime_kwargs = runtime_kwargs
         self.analysis_agent = FailureAnalysisAgent(runtime_kwargs=runtime_kwargs)
 
-    def _generate_candidate_urls(self, query: str, site_config: Dict, max_urls: int) -> List[str]:
+    def _generate_candidate_urls(self, query: str, site_config: dict, max_urls: int) -> list[str]:
         brand_slug = query.split()[0].lower().replace(" ", "-")
         base_url = site_config.get("home_url", "")
         ds = site_config.get("discovery_settings", {})
@@ -51,8 +55,8 @@ class SupplierScoutAgent:
                 candidate_urls.append(full_url)
         return candidate_urls[:max_urls]
 
-    async def run(self, *, sites_config: Dict[str, Any], sites: List[str], query: str) -> List[Any]:
-        results: List[Any] = []
+    async def run(self, *, sites_config: dict[str, Any], sites: list[str], query: str) -> list[Any]:
+        results: list[Any] = []
         discover_selectors = self.runtime_kwargs.get("discover_selectors", False)
 
         for site in sites:
@@ -72,7 +76,13 @@ class SupplierScoutAgent:
                     raise ValueError("斥候任務のための目標URLが生成できませんでした。")
                 target_url = candidate_urls[0]
 
-                agent_kwargs = {"site": site, "query": query, "site_config": site_cfg, "run_context": run_context, "target_url": target_url}
+                agent_kwargs = {
+                    "site": site,
+                    "query": query,
+                    "site_config": site_cfg,
+                    "run_context": run_context,
+                    "target_url": target_url,
+                }
 
                 if discover_selectors:
                     agent = SelectorDiscoveryAgent(runtime_kwargs=self.runtime_kwargs)
@@ -88,8 +98,12 @@ class SupplierScoutAgent:
                 results.append(result)
 
             except Exception as e:
-                logging.error(f"[{site}] 現場総指揮官レベルで致命的なエラー発生 (RunID: {run_context.run_id}): {e}", exc_info=True)
-                analysis = self.analysis_agent.analyze(error=e, site=site, site_config=site_cfg, html_content="", run_context=run_context)
+                logging.error(
+                    f"[{site}] 現場総指揮官レベルで致命的なエラー発生 (RunID: {run_context.run_id}): {e}", exc_info=True
+                )
+                analysis = self.analysis_agent.analyze(
+                    error=e, site=site, site_config=site_cfg, html_content="", run_context=run_context
+                )
 
                 error_message = f"{str(e)} (詳細はRunID: {run_context.run_id} を参照)"
                 # --- ★★★ 失敗報告書にも管理番号(run_id)を付与 ★★★ ---

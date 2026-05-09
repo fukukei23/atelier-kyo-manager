@@ -1,4 +1,5 @@
 """Tests for ai_generate_descriptions module."""
+
 from unittest.mock import MagicMock, patch
 
 import pytest

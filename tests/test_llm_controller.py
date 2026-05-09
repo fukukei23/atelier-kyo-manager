@@ -5,6 +5,7 @@
 # ----------------------------------------------------------------
 import os
 import sys
+
 import pytest
 from dotenv import load_dotenv
 
@@ -14,11 +15,12 @@ load_dotenv()
 # --- ↑↑ ここまでが最重要修正点 ↑↑ ---
 
 # プロジェクトのルートディレクトリをPythonのパスに追加
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+import os
 
 from app import create_app
 from app.utils.ai_llm_controller import AILlmController
-import os
 
 
 @pytest.mark.skip(reason="product版ではWeb機能(create_app())は除外されています")
@@ -29,7 +31,11 @@ def test_deepseek_connection():
         app = create_app()
         with app.app_context():
             controller = AILlmController()
-            has_client = bool(controller.gemini_model or getattr(controller, 'deepseek_client', None) or getattr(controller, 'openai_client', None))
+            has_client = bool(
+                controller.gemini_model
+                or getattr(controller, "deepseek_client", None)
+                or getattr(controller, "openai_client", None)
+            )
             if not has_client:
                 pytest.skip("No LLM client configured (GEMINI_API_KEY, DEEPSEEK_API_KEY, or OPENAI_API_KEY required)")
     except Exception:
@@ -46,13 +52,14 @@ def test_deepseek_connection():
         print(f"2. DeepSeekに送信するプロンプト:\n   「{prompt}」")
 
         print("3. DeepSeekにリクエストを送信中...")
-        response = controller.generate(prompt, task_type='deepseek')
+        response = controller.generate(prompt, task_type="deepseek")
 
         # DeepSeekからの応答を検証
         assert not response.startswith("エラー:"), f"DeepSeek connection failed: {response}"
         assert len(response) > 0, "DeepSeek returned empty response"
-        assert "DeepSeek" in response or "deepseek" in response.lower() or len(response) > 10, \
+        assert "DeepSeek" in response or "deepseek" in response.lower() or len(response) > 10, (
             f"DeepSeek returned unexpected response: {response[:100]}"
+        )
 
         print("\n--- テスト結果 ---")
         print("✅ DeepSeekからの応答受信に成功しました！\n")
@@ -62,5 +69,5 @@ def test_deepseek_connection():
         print("-" * 20)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     test_deepseek_connection()

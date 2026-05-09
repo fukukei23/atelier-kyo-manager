@@ -1,16 +1,17 @@
-# -*- coding: utf-8 -*-
 """BrowserOrchestrator Mix-in: Self-Healing エンジン（診断→パッチ→再実行）"""
+
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
-from playwright.async_api import Page, BrowserContext
+from playwright.async_api import BrowserContext, Page
 
+from app.agents.browser.plp_driver import PlpNavigationResult
 from app.core.run_context import RunContext
 from app.models.result_models import DiscoveryResult
-from app.agents.browser.plp_driver import PlpNavigationResult
 
 logger = logging.getLogger(__name__)
 
@@ -29,10 +30,10 @@ class SelfHealingMixin:
         error_type: str,
         error_class: str,
         error_message: str,
-        site_config: Dict[str, Any],
+        site_config: dict[str, Any],
         run_context: RunContext,
-    ) -> Dict[str, Any]:
-        failure_ctx: Dict[str, Any] = {
+    ) -> dict[str, Any]:
+        failure_ctx: dict[str, Any] = {
             "final_url": final_url,
             "error_type": error_type,
             "error_class": error_class,
@@ -59,7 +60,7 @@ class SelfHealingMixin:
         except Exception:
             pass
         try:
-            site_summary: Dict[str, Any] = {
+            site_summary: dict[str, Any] = {
                 "site_code": site_config.get("site_code") or site_config.get("site") or site,
             }
             selectors = site_config.get("selectors", {})
@@ -75,11 +76,11 @@ class SelfHealingMixin:
 
     async def _maybe_analyze_failure(
         self,
-        failure_context: Dict[str, Any],
+        failure_context: dict[str, Any],
         *,
-        page: Optional[Page] = None,
-        run_context: Optional[RunContext] = None,
-    ) -> Optional[Dict[str, Any]]:
+        page: Page | None = None,
+        run_context: RunContext | None = None,
+    ) -> dict[str, Any] | None:
         self.log.info(
             f"[Orchestrator][SelfHealing] Failure detected: "
             f"type={failure_context.get('error_type')}, "
@@ -90,7 +91,7 @@ class SelfHealingMixin:
             self.log.debug("[Orchestrator][SelfHealing] AnalysisAgent is not available, skipping analysis")
             return None
         try:
-            if hasattr(self.analysis_agent, 'analyze_failure_context'):
+            if hasattr(self.analysis_agent, "analyze_failure_context"):
                 analysis = await self.analysis_agent.analyze_failure_context(
                     failure_context,
                     run_context=run_context,
@@ -108,10 +109,7 @@ class SelfHealingMixin:
                 )
                 return None
         except Exception as e:
-            self.log.error(
-                f"[Orchestrator][SelfHealing] Failure analysis failed: {e}",
-                exc_info=True
-            )
+            self.log.error(f"[Orchestrator][SelfHealing] Failure analysis failed: {e}", exc_info=True)
             return None
 
     # ---- Patch candidate generation (CR-ATELIER-003 Phase D-6, D-10) ----
@@ -119,26 +117,25 @@ class SelfHealingMixin:
     async def _maybe_build_patch_candidate(
         self,
         *,
-        failure_context: Dict[str, Any],
-        failure_analysis: Dict[str, Any],
-        site_config: Dict[str, Any],
+        failure_context: dict[str, Any],
+        failure_analysis: dict[str, Any],
+        site_config: dict[str, Any],
         run_context: RunContext,
-        page: Optional[Page] = None,
-    ) -> Optional[Dict[str, Any]]:
+        page: Page | None = None,
+    ) -> dict[str, Any] | None:
         if self.patch_agent is None:
             self.log.debug("[Orchestrator][SelfHealing] PatchAgent is not available, skipping patch generation")
             return None
         try:
             selector_repair_result = None
-            if self.selector_repair_agent and self.policy:
-                if self.policy.selector_auto_healing_enabled():
-                    selector_repair_result = await self._maybe_repair_selectors(
-                        failure_context=failure_context,
-                        failure_analysis=failure_analysis,
-                        site_config=site_config,
-                        run_context=run_context,
-                        page=page,
-                    )
+            if self.selector_repair_agent and self.policy and self.policy.selector_auto_healing_enabled():
+                selector_repair_result = await self._maybe_repair_selectors(
+                    failure_context=failure_context,
+                    failure_analysis=failure_analysis,
+                    site_config=site_config,
+                    run_context=run_context,
+                    page=page,
+                )
             patch_candidate = await self.patch_agent.build_patch_candidate(
                 failure_context=failure_context,
                 failure_analysis=failure_analysis,
@@ -154,10 +151,7 @@ class SelfHealingMixin:
                 )
             return patch_candidate
         except Exception as e:
-            self.log.error(
-                f"[Orchestrator][SelfHealing] Patch candidate generation failed: {e}",
-                exc_info=True
-            )
+            self.log.error(f"[Orchestrator][SelfHealing] Patch candidate generation failed: {e}", exc_info=True)
             return None
 
     # ---- Selector repair (CR-ATELIER-003 Phase D-10) ----
@@ -165,12 +159,12 @@ class SelfHealingMixin:
     async def _maybe_repair_selectors(
         self,
         *,
-        failure_context: Dict[str, Any],
-        failure_analysis: Dict[str, Any],
-        site_config: Dict[str, Any],
+        failure_context: dict[str, Any],
+        failure_analysis: dict[str, Any],
+        site_config: dict[str, Any],
         run_context: RunContext,
-        page: Optional[Page] = None,
-    ) -> Optional[Dict[str, Any]]:
+        page: Page | None = None,
+    ) -> dict[str, Any] | None:
         if self.selector_repair_agent is None:
             return None
         try:
@@ -178,9 +172,9 @@ class SelfHealingMixin:
             error_type = failure_context.get("error_type", "")
             error_message = failure_context.get("error_message", "")
             is_selector_error = (
-                "selector" in error_message.lower() or
-                "not found" in error_message.lower() or
-                error_type in ("pdp_extraction_failed", "plp_extraction_failed")
+                "selector" in error_message.lower()
+                or "not found" in error_message.lower()
+                or error_type in ("pdp_extraction_failed", "plp_extraction_failed")
             )
             if not is_selector_error:
                 self.log.debug(
@@ -224,10 +218,7 @@ class SelfHealingMixin:
                         f"successes={len(previous_successes)}, failures={len(previous_failures)}"
                     )
                 except Exception as e:
-                    self.log.warning(
-                        f"[Orchestrator][SelectorFeedback] Failed to load feedback: {e}",
-                        exc_info=True
-                    )
+                    self.log.warning(f"[Orchestrator][SelectorFeedback] Failed to load feedback: {e}", exc_info=True)
             selector_repair_result = await self.selector_repair_agent.propose_selector_patches(
                 site=site,
                 page_type=page_type,
@@ -246,10 +237,7 @@ class SelfHealingMixin:
                 )
             return selector_repair_result
         except Exception as e:
-            self.log.error(
-                f"[Orchestrator][SelectorRepair] Selector repair failed: {e}",
-                exc_info=True
-            )
+            self.log.error(f"[Orchestrator][SelectorRepair] Selector repair failed: {e}", exc_info=True)
             return None
 
     # ---- Self-Healing v1: single retry (CR-ATELIER-003 Phase D-8) ----
@@ -261,18 +249,18 @@ class SelfHealingMixin:
         context: BrowserContext,
         site: str,
         query: str,
-        site_config: Dict[str, Any],
-        settings: Dict[str, Any],
+        site_config: dict[str, Any],
+        settings: dict[str, Any],
         run_context: RunContext,
         target_url: str,
         start_t: float,
         budget_ms: int,
-        overrides_json: Dict[str, Any],
-        nav_outcome: Optional[Any] = None,
-        trap_checker: Optional[Callable[[str], bool]] = None,
-        telemetry: Optional[Any] = None,
-        plugin: Optional[Any] = None,
-    ) -> Dict[str, Any]:
+        overrides_json: dict[str, Any],
+        nav_outcome: Any | None = None,
+        trap_checker: Callable[[str], bool] | None = None,
+        telemetry: Any | None = None,
+        plugin: Any | None = None,
+    ) -> dict[str, Any]:
         self.log.info("[Orchestrator][SelfHealing] Starting initial run...")
 
         initial_result_plp = await self.run_plp_to_pdp(
@@ -470,17 +458,17 @@ class SelfHealingMixin:
         context: BrowserContext,
         site: str,
         query: str,
-        site_config: Dict[str, Any],
-        settings: Dict[str, Any],
+        site_config: dict[str, Any],
+        settings: dict[str, Any],
         run_context: RunContext,
         target_url: str,
         start_t: float,
         budget_ms: int,
-        max_attempts: Optional[int] = None,
-        nav_outcome: Optional[Any] = None,
-        trap_checker: Optional[Callable[[str], bool]] = None,
-        telemetry: Optional[Any] = None,
-        plugin: Optional[Any] = None,
+        max_attempts: int | None = None,
+        nav_outcome: Any | None = None,
+        trap_checker: Callable[[str], bool] | None = None,
+        telemetry: Any | None = None,
+        plugin: Any | None = None,
     ) -> DiscoveryResult:
         if not self.policy:
             self.log.warning("[Orchestrator][SelfHealingLoop] Policy not available. Falling back to normal execution.")
@@ -505,12 +493,9 @@ class SelfHealingMixin:
         max_attempts_value = max_attempts or self.policy.max_attempts()
         current_site_config = site_config
         auto_patches_applied = 0
-        patch_backups: List[str] = []
+        patch_backups: list[str] = []
 
-        self.log.info(
-            f"[Orchestrator][SelfHealingLoop] Starting Self-Healing Loop "
-            f"(max_attempts={max_attempts_value})"
-        )
+        self.log.info(f"[Orchestrator][SelfHealingLoop] Starting Self-Healing Loop (max_attempts={max_attempts_value})")
 
         while attempt < max_attempts_value:
             attempt += 1
@@ -534,9 +519,7 @@ class SelfHealingMixin:
             )
 
             if result.ok:
-                self.log.info(
-                    f"[Orchestrator][SelfHealingLoop] Success on attempt {attempt}"
-                )
+                self.log.info(f"[Orchestrator][SelfHealingLoop] Success on attempt {attempt}")
                 result.evidence["self_healing_attempts"] = attempt
                 result.evidence["auto_patches_applied"] = auto_patches_applied
                 result.evidence["patch_backups"] = patch_backups
@@ -554,50 +537,38 @@ class SelfHealingMixin:
             patch_candidate = result.evidence.get("self_healing_patch_candidate")
             if not patch_candidate:
                 self.log.warning(
-                    "[Orchestrator][SelfHealingLoop] No patch_candidate found. "
-                    "Stopping Self-Healing loop."
+                    "[Orchestrator][SelfHealingLoop] No patch_candidate found. Stopping Self-Healing loop."
                 )
                 break
 
             if not self.policy.enabled():
-                self.log.warning(
-                    "[Orchestrator][SelfHealingLoop] Policy disabled. Stopping Self-Healing loop."
-                )
+                self.log.warning("[Orchestrator][SelfHealingLoop] Policy disabled. Stopping Self-Healing loop.")
                 break
 
             if not self.policy.is_allowed_site(site):
                 self.log.warning(
-                    f"[Orchestrator][SelfHealingLoop] Site '{site}' not allowed. "
-                    "Stopping Self-Healing loop."
+                    f"[Orchestrator][SelfHealingLoop] Site '{site}' not allowed. Stopping Self-Healing loop."
                 )
                 break
 
             if not self.policy.safe_change(patch_candidate):
-                self.log.warning(
-                    "[Orchestrator][SelfHealingLoop] Unsafe change detected. "
-                    "Stopping Self-Healing loop."
-                )
+                self.log.warning("[Orchestrator][SelfHealingLoop] Unsafe change detected. Stopping Self-Healing loop.")
                 break
 
             if not self.policy.can_apply_today(site):
                 self.log.warning(
-                    f"[Orchestrator][SelfHealingLoop] Daily limit reached for '{site}'. "
-                    "Stopping Self-Healing loop."
+                    f"[Orchestrator][SelfHealingLoop] Daily limit reached for '{site}'. Stopping Self-Healing loop."
                 )
                 break
 
             if not self.sandbox:
-                self.log.warning(
-                    "[Orchestrator][SelfHealingLoop] Sandbox not available. "
-                    "Stopping Self-Healing loop."
-                )
+                self.log.warning("[Orchestrator][SelfHealingLoop] Sandbox not available. Stopping Self-Healing loop.")
                 break
 
             overrides_json = self._load_overrides_json()
             if not overrides_json:
                 self.log.warning(
-                    "[Orchestrator][SelfHealingLoop] Failed to load overrides_json. "
-                    "Stopping Self-Healing loop."
+                    "[Orchestrator][SelfHealingLoop] Failed to load overrides_json. Stopping Self-Healing loop."
                 )
                 break
 
@@ -636,15 +607,13 @@ class SelfHealingMixin:
 
             if not sandbox_result.ok:
                 self.log.warning(
-                    "[Orchestrator][SelfHealingLoop] Sandbox execution failed. "
-                    "Not applying patch to production."
+                    "[Orchestrator][SelfHealingLoop] Sandbox execution failed. Not applying patch to production."
                 )
                 break
 
             if not self.patch_applier:
                 self.log.warning(
-                    "[Orchestrator][SelfHealingLoop] PatchApplier not available. "
-                    "Stopping Self-Healing loop."
+                    "[Orchestrator][SelfHealingLoop] PatchApplier not available. Stopping Self-Healing loop."
                 )
                 break
 
@@ -662,10 +631,7 @@ class SelfHealingMixin:
                     backup_path = apply_meta.get("backup_path")
                     if backup_path:
                         patch_backups.append(str(backup_path))
-                    self.log.info(
-                        f"[Orchestrator][SelfHealingLoop] Patch applied successfully "
-                        f"(attempt {attempt})"
-                    )
+                    self.log.info(f"[Orchestrator][SelfHealingLoop] Patch applied successfully (attempt {attempt})")
                     self.policy.increment_daily_counter(site)
                     current_site_config = self._load_site_config_from_overrides(site)
                     if not current_site_config:
@@ -676,14 +642,12 @@ class SelfHealingMixin:
                         break
                 else:
                     self.log.warning(
-                        "[Orchestrator][SelfHealingLoop] Patch application failed. "
-                        "Stopping Self-Healing loop."
+                        "[Orchestrator][SelfHealingLoop] Patch application failed. Stopping Self-Healing loop."
                     )
                     break
             except Exception as e:
                 self.log.error(
-                    f"[Orchestrator][SelfHealingLoop] Exception during patch application: {e}",
-                    exc_info=True
+                    f"[Orchestrator][SelfHealingLoop] Exception during patch application: {e}", exc_info=True
                 )
                 break
 

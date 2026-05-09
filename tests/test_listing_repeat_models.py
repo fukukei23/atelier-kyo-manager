@@ -4,9 +4,10 @@ daily_achievement_rate, monthly_achievement_rate, status_color,
 get_monthly_summary, calc_segment, days_since_last, segment_label,
 segment_color, update_avg を完全カバー
 """
+
 from __future__ import annotations
 
-from datetime import datetime, date, timedelta
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -35,6 +36,7 @@ def app():
 
 
 # ─────────────────────────── ListingProgress ───────────────────────────
+
 
 class TestListingProgressDailyAchievementRate:
     def test_zero_target_returns_zero(self, app):
@@ -193,14 +195,14 @@ class TestListingProgressGetMonthlySummary:
 
 class TestListingProgressRepr:
     def test_repr_contains_key_info(self, app):
-        lp = ListingProgress(id=7, record_date=date(2026, 1, 1), listings_count=5,
-                             target_daily=20, target_monthly=600)
+        lp = ListingProgress(id=7, record_date=date(2026, 1, 1), listings_count=5, target_daily=20, target_monthly=600)
         r = repr(lp)
         assert "7" in r
         assert "5" in r
 
 
 # ─────────────────────────── RepeatCustomer ───────────────────────────
+
 
 class TestRepeatCustomerCalcSegment:
     def test_zero_orders_is_new(self, app):

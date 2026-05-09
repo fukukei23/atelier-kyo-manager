@@ -15,10 +15,11 @@
 # ==============================================================================
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+
 import json
-import re
 import logging
-from typing import Any, Dict, List, Optional, Set, Tuple
+import re
+from typing import Any
 
 try:
     from bs4 import BeautifulSoup
@@ -27,52 +28,90 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-VALID_PARSING_KEYS: Set[str] = { "title", "price", "brand", "list_price", "discount_pct" }
+VALID_PARSING_KEYS: set[str] = {"title", "price", "brand", "list_price", "discount_pct"}
 CURRENCY_SYMBOLS = {
-    "$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY", "￥": "JPY",
-    "₩": "KRW", "₽": "RUB", "₹": "INR", "₱": "PHP", "₺": "TRY",
-    "₪": "ILS", "฿": "THB", "₫": "VND", "₦": "NGN", "₲": "PYG",
+    "$": "USD",
+    "€": "EUR",
+    "£": "GBP",
+    "¥": "JPY",
+    "￥": "JPY",
+    "₩": "KRW",
+    "₽": "RUB",
+    "₹": "INR",
+    "₱": "PHP",
+    "₺": "TRY",
+    "₪": "ILS",
+    "฿": "THB",
+    "₫": "VND",
+    "₦": "NGN",
+    "₲": "PYG",
 }
 
-def _normalize_and_to_int(s: Optional[str]) -> Optional[int]:
-    if not s: return None
+
+def _normalize_and_to_int(s: str | None) -> int | None:
+    if not s:
+        return None
     try:
         normalized = s.translate(str.maketrans("０１２３４5６７８９", "0123456789"))
         cleaned = re.sub(r"[^0-9.]", "", normalized)
-        if not cleaned: return None
+        if not cleaned:
+            return None
         return int(float(cleaned))
     except (ValueError, TypeError):
         return None
 
-def _first_yen_from_text(text: str, preferred_currency: Optional[str] = None) -> Optional[int]:
-    if not text: return None
+
+def _first_yen_from_text(text: str, preferred_currency: str | None = None) -> int | None:
+    if not text:
+        return None
     match = re.search(r"(?:¥|￥|\$|€)\s*([\d,.]+)|([\d,.]+)\s*(?:円|USD|EUR)", text, re.IGNORECASE)
     if match:
         return _normalize_and_to_int(match.group(1) or match.group(2))
     return _normalize_and_to_int(text)
 
-def _norm_currency(cur: Optional[Any]) -> Optional[str]:
+
+def _norm_currency(cur: Any | None) -> str | None:
     """
     通貨表現を3桁コードへ正規化。シンボルも簡易対応。
     """
-    if cur is None: return None
+    if cur is None:
+        return None
     try:
         c = str(cur).strip()
     except Exception:
         return None
-    if not c: return None
+    if not c:
+        return None
     if c in CURRENCY_SYMBOLS:
         return CURRENCY_SYMBOLS[c]
     uc = c.upper()
     if len(uc) == 3:
         return uc
     # "usd", "Usd " など
-    if uc in ("USD", "EUR", "GBP", "JPY", "CNY", "HKD", "SGD", "CAD", "AUD", "NZD", "CHF", "KRW", "TWD", "MXN", "BRL", "ARS", "TRY"):
+    if uc in (
+        "USD",
+        "EUR",
+        "GBP",
+        "JPY",
+        "CNY",
+        "HKD",
+        "SGD",
+        "CAD",
+        "AUD",
+        "NZD",
+        "CHF",
+        "KRW",
+        "TWD",
+        "MXN",
+        "BRL",
+        "ARS",
+        "TRY",
+    ):
         return uc
     return None
 
 
-def _parse_price_text(text: str) -> Tuple[Optional[float], Optional[str]]:
+def _parse_price_text(text: str) -> tuple[float | None, str | None]:
     """
     価格表記の文字列から (数値, 通貨コード) を推定する。
     - "¥ 123,000" / "USD 1200" / "1,299.99 EUR" などを簡易対応
@@ -81,7 +120,11 @@ def _parse_price_text(text: str) -> Tuple[Optional[float], Optional[str]]:
         return None, None
     cleaned = text.replace("\u00a0", " ").strip()
     # 通貨らしき部分と数値部分をゆるく抽出
-    m = re.search(r"(?P<cur>[A-Z]{3}|USD|EUR|GBP|JPY|CNY|HKD|SGD|CAD|AUD|NZD|CHF|KRW|TWD|MXN|BRL|ARS|TRY|[€$£¥￥₩₽₹₱₺])?\s*(?P<amt>[0-9][0-9.,\s]+)", cleaned, re.IGNORECASE)
+    m = re.search(
+        r"(?P<cur>[A-Z]{3}|USD|EUR|GBP|JPY|CNY|HKD|SGD|CAD|AUD|NZD|CHF|KRW|TWD|MXN|BRL|ARS|TRY|[€$£¥￥₩₽₹₱₺])?\s*(?P<amt>[0-9][0-9.,\s]+)",
+        cleaned,
+        re.IGNORECASE,
+    )
     if not m:
         return None, None
     amt_raw = m.group("amt")
@@ -97,11 +140,11 @@ def _parse_price_text(text: str) -> Tuple[Optional[float], Optional[str]]:
     return amt_val, cur
 
 
-def _flatten_dicts(obj: Any) -> List[Dict[str, Any]]:
+def _flatten_dicts(obj: Any) -> list[dict[str, Any]]:
     """
     ネスト構造から dict ノードだけを抽出し、リスト化する。
     """
-    found: List[Dict[str, Any]] = []
+    found: list[dict[str, Any]] = []
 
     def _walk(o: Any) -> None:
         if isinstance(o, dict):
@@ -116,11 +159,11 @@ def _flatten_dicts(obj: Any) -> List[Dict[str, Any]]:
     return found
 
 
-def _collect_ldjson(soup) -> List[Dict[str, Any]]:
+def _collect_ldjson(soup) -> list[dict[str, Any]]:
     """
     <script type="application/ld+json"> を収集し、JSONとして読み込む。
     """
-    blobs: List[Dict[str, Any]] = []
+    blobs: list[dict[str, Any]] = []
     for tag in soup.find_all("script", {"type": "application/ld+json"}):
         try:
             txt = tag.string or tag.get_text() or ""
@@ -133,14 +176,14 @@ def _collect_ldjson(soup) -> List[Dict[str, Any]]:
     return blobs
 
 
-def _extract_json_objects_from_text(text: str) -> List[Any]:
+def _extract_json_objects_from_text(text: str) -> list[Any]:
     """
     スクリプト文字列からJSONオブジェクトを抽出する。
     - window.__NEXT_DATA__ = {...};
     - const data = {...};
     - 生の JSON (配列/オブジェクト)
     """
-    out: List[Any] = []
+    out: list[Any] = []
     if not text:
         return out
     stripped = text.strip()
@@ -164,11 +207,11 @@ def _extract_json_objects_from_text(text: str) -> List[Any]:
     return out
 
 
-def _collect_inline_json_candidates(soup) -> List[Dict[str, Any]]:
+def _collect_inline_json_candidates(soup) -> list[dict[str, Any]]:
     """
     __NEXT_DATA__ を含むあらゆる <script> 内の JSON をゆるく収集する。
     """
-    blobs: List[Dict[str, Any]] = []
+    blobs: list[dict[str, Any]] = []
     for tag in soup.find_all("script"):
         ttype = (tag.get("type") or "").lower()
         if "ld+json" in ttype:
@@ -182,7 +225,7 @@ def _collect_inline_json_candidates(soup) -> List[Dict[str, Any]]:
     return blobs
 
 
-def _dig_price_in_dict(obj: Dict[str, Any]) -> Tuple[Optional[float], Optional[str]]:
+def _dig_price_in_dict(obj: dict[str, Any]) -> tuple[float | None, str | None]:
     """
     ネスト辞書から price 相当の値を探索
     """
@@ -201,9 +244,7 @@ def _dig_price_in_dict(obj: Dict[str, Any]) -> Tuple[Optional[float], Optional[s
             cc = v.get("currency", v.get("currencyCode"))
             if isinstance(vv, (int, float)):
                 return (
-                    float(vv) / 100.0
-                    if key in ("centAmount",) or "centAmount" in v
-                    else float(vv)
+                    float(vv) / 100.0 if key in ("centAmount",) or "centAmount" in v else float(vv)
                 ), _norm_currency(cc)  # type: ignore
             if isinstance(vv, str):
                 a, c = _parse_price_text(vv)
@@ -235,7 +276,7 @@ def _dig_price_in_dict(obj: Dict[str, Any]) -> Tuple[Optional[float], Optional[s
             if isinstance(vv, (int, float)):
                 # centAmount の可能性を一応考慮
                 val = float(vv)
-                if "centamount" in (k.lower() for k in v.keys()):
+                if "centamount" in (k.lower() for k in v):
                     val = val / 100.0
                 return val, _norm_currency(cc)
             if isinstance(vv, str):
@@ -266,11 +307,13 @@ def _dig_price_in_dict(obj: Dict[str, Any]) -> Tuple[Optional[float], Optional[s
                         return a, c
     return None, None
 
-def extract_product_info(html: str, site_config: Dict[str, Any]) -> Dict[str, Any]:
-    if not BeautifulSoup: raise RuntimeError("BeautifulSoup4/lxml is not installed.")
+
+def extract_product_info(html: str, site_config: dict[str, Any]) -> dict[str, Any]:
+    if not BeautifulSoup:
+        raise RuntimeError("BeautifulSoup4/lxml is not installed.")
     soup = BeautifulSoup(html, "lxml")
     pdp_selectors = site_config.get("selectors", {}).get("pdp", {})
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "title": None,
         "price": None,
         "currency": None,
@@ -285,7 +328,8 @@ def extract_product_info(html: str, site_config: Dict[str, Any]) -> Dict[str, An
     if not out.get("title"):
         og_title = soup.select_one("meta[property='og:title']")
         if og_title and og_title.get("content"):
-            out["title"] = og_title["content"]; out["source_flags"]["title"] = "og:title"
+            out["title"] = og_title["content"]
+            out["source_flags"]["title"] = "og:title"
     if not out.get("title") and soup.title:
         out["title"] = (soup.title.string or "").strip()
 
@@ -293,7 +337,8 @@ def extract_product_info(html: str, site_config: Dict[str, Any]) -> Dict[str, An
     if not out.get("brand"):
         og_brand = soup.select_one("meta[property='og:site_name']")
         if og_brand and og_brand.get("content"):
-            out["brand"] = og_brand["content"]; out["source_flags"]["brand"] = "og:site_name"
+            out["brand"] = og_brand["content"]
+            out["source_flags"]["brand"] = "og:site_name"
 
     # ---------- 3) 価格：DOM 可視テキスト ----------
     if out.get("price") is None:
@@ -303,7 +348,7 @@ def extract_product_info(html: str, site_config: Dict[str, Any]) -> Dict[str, An
             "[class*='price' i]",
             "span.price, div.price, p.price",
         ]
-        text_candidates: List[str] = []
+        text_candidates: list[str] = []
         for sel in price_selectors:
             try:
                 node = soup.select_one(sel)
@@ -397,7 +442,7 @@ def extract_product_info(html: str, site_config: Dict[str, Any]) -> Dict[str, An
     return out
 
 
-async def extract_title_price(page) -> Dict[str, Any]:
+async def extract_title_price(page) -> dict[str, Any]:
     """
     BrowserUseAgent から利用されるタイトルと価格のシンプル抽出ヘルパー。
     Playwright Page オブジェクトを受け取り、title と価格テキストを返す。

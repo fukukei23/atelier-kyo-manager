@@ -4,28 +4,30 @@
 #  必要ライブラリ
 #     pip install rembg pillow opencv-python numpy pyoxipng
 # ----------------------------------------------------------------
-import io, sys, zipfile
+import io
+import sys
+import zipfile
 from pathlib import Path
 
 import cv2
 import numpy as np
 from PIL import Image
-from rembg import remove, new_session
+from rembg import new_session, remove
 
 try:
-    import pyoxipng           # Rust 圧縮ライブラリ
+    import pyoxipng  # Rust 圧縮ライブラリ
 except ImportError:
-    pyoxipng = None           # 無くても動く（Pillow 圧縮のみ）
+    pyoxipng = None  # 無くても動く（Pillow 圧縮のみ）
 
 # ── 設定 ────────────────────────────────────────────────────
-BASE_DIR        = r"D:\catalog_images"   # 画像&ZIP ルート
-MAX_W           = 1200                  # 横幅リサイズ上限
-MAX_BYTES       = 5_000_000             # 5 MB 超は JPEG にフォールバック
-JPEG_QUAL       = 90                    # JPEG 品質
+BASE_DIR = r"D:\catalog_images"  # 画像&ZIP ルート
+MAX_W = 1200  # 横幅リサイズ上限
+MAX_BYTES = 5_000_000  # 5 MB 超は JPEG にフォールバック
+JPEG_QUAL = 90  # JPEG 品質
 
-MAX_CONSEC_FAIL = 5                     # 連続失敗で停止
-MAX_TOTAL_FAIL  = 50                    # 累計失敗で停止
-FAIL_SIZE_KB    = 15                    # 15 KB 未満を失敗とみなす
+MAX_CONSEC_FAIL = 5  # 連続失敗で停止
+MAX_TOTAL_FAIL = 50  # 累計失敗で停止
+FAIL_SIZE_KB = 15  # 15 KB 未満を失敗とみなす
 # ──────────────────────────────────────────────────────────
 
 
@@ -60,8 +62,7 @@ def optimize_png(rgba: np.ndarray, out_path: Path):
         h = int(img.height * MAX_W / img.width)
         img = img.resize((MAX_W, h), Image.LANCZOS)
 
-    img8 = img.quantize(method=Image.Quantize.FASTOCTREE,
-                        dither=Image.Dither.NONE)
+    img8 = img.quantize(method=Image.Quantize.FASTOCTREE, dither=Image.Dither.NONE)
 
     buf = io.BytesIO()
     img8.save(buf, format="PNG", optimize=True)
@@ -78,13 +79,12 @@ def optimize_png(rgba: np.ndarray, out_path: Path):
 
 def save_white_jpeg(rgba: np.ndarray, out_path: Path):
     """白背景 JPEG 保存（RGB → BGR 変換込み）"""
-    rgb   = rgba[:, :, :3]
+    rgb = rgba[:, :, :3]
     alpha = rgba[:, :, 3:] / 255.0
     white = np.full_like(rgb, 255)
     merged = (alpha * rgb + (1 - alpha) * white).astype(np.uint8)
     bgr = cv2.cvtColor(merged, cv2.COLOR_RGB2BGR)
-    cv2.imwrite(str(out_path), bgr,
-                [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUAL])
+    cv2.imwrite(str(out_path), bgr, [int(cv2.IMWRITE_JPEG_QUALITY), JPEG_QUAL])
 
 
 def is_failure(file: Path, rgba: np.ndarray) -> bool:
@@ -136,7 +136,8 @@ def process_images(base_dir: str = BASE_DIR):
             out_file, kind, rgba = process_single(bgr, png_out, jpg_out)
         except Exception as e:
             print(f"[ERR] {p.name} → {e}")
-            consec_fail += 1; total_fail += 1
+            consec_fail += 1
+            total_fail += 1
             continue
 
         kb = out_file.stat().st_size // 1024
@@ -144,7 +145,8 @@ def process_images(base_dir: str = BASE_DIR):
 
         if is_failure(out_file, rgba):
             print(f"[FAIL] {out_file.name} を異常検知")
-            consec_fail += 1; total_fail += 1
+            consec_fail += 1
+            total_fail += 1
         else:
             consec_fail = 0
 

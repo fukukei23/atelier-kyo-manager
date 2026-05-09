@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Farfetch PLP Strategy Plugin
 ======================================================================
@@ -6,9 +5,10 @@ Version: 1.0.0
 Site: FARFETCH
 ======================================================================
 """
+
+import contextlib
 import logging
-import asyncio
-from typing import Optional
+
 from .base import StrategyPlugin, _apply_stealth
 
 logger = logging.getLogger(__name__)
@@ -36,11 +36,7 @@ class FarfetchPlpStrategy(StrategyPlugin):
         """Farfetch PLP 判定: 商品カードまたは検索結果がればOK"""
         try:
             # 商品カードが存在するか
-            card_selectors = [
-                "article[data-testid='productCard']",
-                "li.ProductCardWrapper",
-                "a[href*='/pression/']"
-            ]
+            card_selectors = ["article[data-testid='productCard']", "li.ProductCardWrapper", "a[href*='/pression/']"]
             for sel in card_selectors:
                 count = await page.locator(sel).count()
                 if count > 0:
@@ -99,7 +95,7 @@ class FarfetchPlpStrategy(StrategyPlugin):
                     "button:has-text('Load More')",
                     "button:has-text('LOAD MORE')",
                     "[data-testid='load-more-button']",
-                    "button.LoadMore"
+                    "button.LoadMore",
                 ]
                 clicked = False
                 for sel in btn_selectors:
@@ -127,15 +123,9 @@ class FarfetchPlpStrategy(StrategyPlugin):
 
     async def _count_cards(self, page) -> int:
         """商品カード数をカウント"""
-        selectors = [
-            "article[data-testid='productCard']",
-            "li.ProductCardWrapper",
-            "a[href*='/pression/']"
-        ]
+        selectors = ["article[data-testid='productCard']", "li.ProductCardWrapper", "a[href*='/pression/']"]
         total = 0
         for sel in selectors:
-            try:
+            with contextlib.suppress(Exception):
                 total += await page.locator(sel).count()
-            except Exception:
-                pass
         return total

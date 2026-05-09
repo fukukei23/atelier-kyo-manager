@@ -1,8 +1,9 @@
+from unittest.mock import patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from flask import Flask
 
-from app.decorators import handle_db, admin_required
+from app.decorators import admin_required, handle_db
 
 
 def create_test_app():

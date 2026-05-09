@@ -4,16 +4,17 @@
 # ======================================================================
 
 from __future__ import annotations
-from datetime import datetime, timedelta
-from typing import Optional
 
-from sqlalchemy import Integer, String, Float, DateTime, Text, Boolean
-from app.extensions import db
-from app.core.pricing import calculate_pricing, PricingInput
+from datetime import datetime, timedelta
+
+from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
+
 from app.config.constants import (
-    PAYMENT_METHOD_EXTENSION_DAYS,
     EXPECTED_PAYMENT_DAYS,
+    PAYMENT_METHOD_EXTENSION_DAYS,
 )
+from app.core.pricing import PricingInput, calculate_pricing
+from app.extensions import db
 
 
 class Order(db.Model):
@@ -76,7 +77,10 @@ class Order(db.Model):
 
     def calc_profit(self) -> None:
         """利益・手数料を自動計算"""
-        nz = lambda x: float(x or 0.0)
+
+        def nz(x):
+            return float(x or 0.0)
+
         inp = PricingInput(
             purchase_price=nz(self.purchase_cost),
             selling_price=nz(self.selling_price),
@@ -100,13 +104,13 @@ class Order(db.Model):
         if remaining is None:
             return "gray"
         if remaining < 0:
-            return "black"       # 期限切れ（キャンセル対象）
+            return "black"  # 期限切れ（キャンセル対象）
         if remaining == 0:
-            return "red"         # 当日（危険）
+            return "red"  # 当日（危険）
         if remaining <= 2:
-            return "orange"      # 2日以内（警告）
+            return "orange"  # 2日以内（警告）
         if remaining <= 4:
-            return "yellow"      # 4日以内（注意）
+            return "yellow"  # 4日以内（注意）
         return "green"
 
     def deadline_message(self) -> str:

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ==============================================================================
 # File: app/utils/diagnostics.py
 # Version: 1.1.0J (Auto Bundle + Manifest / Final)
@@ -10,10 +9,10 @@
 # ==============================================================================
 
 from __future__ import annotations
+
 import json
 import shutil
 from pathlib import Path
-from typing import List, Optional
 
 from app.utils.trace_reporter import make_trace_report
 
@@ -32,6 +31,7 @@ BUNDLE_FILES_GLOBS = [
     "trace_shot_*.png",
 ]
 
+
 async def make_diagnostic_bundle(run_context, include_trace_report: bool = True, max_trace_images: int = 6) -> str:
     run_dir = Path(run_context.run_path)
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -45,7 +45,7 @@ async def make_diagnostic_bundle(run_context, include_trace_report: bool = True,
             run_context.logger.warning(f"[diag] make_trace_report failed: {e}")
 
     # 収集対象のファイルを列挙
-    collected: List[str] = []
+    collected: list[str] = []
     for pat in BUNDLE_FILES_GLOBS:
         for p in run_dir.glob(pat):
             if p.is_file():
@@ -65,7 +65,7 @@ async def make_diagnostic_bundle(run_context, include_trace_report: bool = True,
         f"- Run ID: `{getattr(run_context, 'run_id', 'unknown')}`\n"
         "- 解凍後は MANIFEST.json の `files` を辿れば主要アーティファクトにアクセスできます。\n"
         "- 重要: `trace_report.md` はスクショと簡易統計をまとめたものです。\n",
-        encoding="utf-8"
+        encoding="utf-8",
     )
 
     # Zip化

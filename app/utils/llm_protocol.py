@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 app/utils/llm_protocol.py - LLM クライアントの抽象化プロトコル
 
@@ -8,7 +7,8 @@ app/utils/llm_protocol.py - LLM クライアントの抽象化プロトコル
 
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Optional, Protocol, runtime_checkable
+from collections.abc import Callable
+from typing import Any, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -19,9 +19,9 @@ class LLMClient(Protocol):
         self,
         prompt: str,
         task_type: str = "default",
-        tools: Optional[List[Dict[str, Any]]] = None,
+        tools: list[dict[str, Any]] | None = None,
         stream: bool = False,
-        chunk_callback: Optional[Callable[[str], None]] = None,
+        chunk_callback: Callable[[str], None] | None = None,
     ) -> Any:
         """プロンプトからテキストを生成し、GenerateResult 相当を返す。"""
         ...

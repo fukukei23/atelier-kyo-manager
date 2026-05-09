@@ -9,12 +9,13 @@
 # - [フォレンジックレポート] 分析結果と証拠リンクを統合して保存
 
 from __future__ import annotations
-import logging
-import traceback
+
 import json
-from typing import Optional, Dict, Any, List
+import logging
 import sys
+import traceback
 from pathlib import Path
+from typing import Any
 
 # --- プロジェクトルートをPythonの検索パスに追加 ---
 APP_ROOT = Path(__file__).resolve().parents[2]
@@ -24,8 +25,8 @@ if str(APP_ROOT) not in sys.path:
 # --- プロジェクトのモジュールをインポート ---
 try:
     from app.core.run_context import RunContext
-    from app.utils.ai_llm_controller import AILlmController
     from app.models.result_models import GenerateResult
+    from app.utils.ai_llm_controller import AILlmController
 except ImportError as e:
     logging.warning(f"[FailureAnalysisAgent] Import failed, using stubs: {e}")
 
@@ -40,9 +41,10 @@ except ImportError as e:
             dummy_response = {
                 "diagnosis": "ナビゲーション中にタイムアウトが発生しました。",
                 "root_cause": "ターゲットサイトの応答が遅いか、表示を待機すべき特定の要素（セレクタ）がDOM上に存在しなかった可能性があります。",
-                "recommended_action": "config/overrides.local.jsonの該当サイト設定で、`timeout_sec`を延長するか、`wait_for_selectors`の値を見直してください。"
+                "recommended_action": "config/overrides.local.jsonの該当サイト設定で、`timeout_sec`を延長するか、`wait_for_selectors`の値を見直してください。",
             }
             return GenerateResult(text=json.dumps(dummy_response, ensure_ascii=False, indent=2))
+
 
 logger = logging.getLogger(__name__)
 
@@ -50,9 +52,9 @@ logger = logging.getLogger(__name__)
 class FKB:
     """Failure Knowledge Base - 失敗パターンのデータベース"""
 
-    def __init__(self, fkb_path: Optional[Path] = None):
+    def __init__(self, fkb_path: Path | None = None):
         self.fkb_path = fkb_path or APP_ROOT / "config" / "fkb" / "fkb_local.json"
-        self.entries: List[Dict[str, Any]] = []
+        self.entries: list[dict[str, Any]] = []
         self._load()
 
     def _load(self):
@@ -62,14 +64,14 @@ class FKB:
             return
 
         try:
-            with open(self.fkb_path, "r", encoding="utf-8") as f:
+            with open(self.fkb_path, encoding="utf-8") as f:
                 data = json.load(f)
                 self.entries = data.get("entries", [])
                 logger.info(f"[FKB] {len(self.entries)} 件のエントリを読み込みました (v{data.get('version', '?')})")
         except Exception as e:
             logger.error(f"[FKB] FKB読み込みエラー: {e}")
 
-    def find_matching_entry(self, error_message: str, site: str, url: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    def find_matching_entry(self, error_message: str, site: str, url: str | None = None) -> dict[str, Any] | None:
         """エラーシグネチャに一致するエントリを検索"""
         checked = 0
         matched = 0
@@ -105,7 +107,7 @@ class FKB:
             logger.debug(f"[FKB] チェックしたエントリ: {checked}, マッチ: {matched}")
         return None
 
-    def get_solution(self, entry: Dict[str, Any]) -> Dict[str, Any]:
+    def get_solution(self, entry: dict[str, Any]) -> dict[str, Any]:
         """エントリから解決策を取得"""
         solution = {
             "id": entry.get("id"),
@@ -113,7 +115,7 @@ class FKB:
             "recovery_url": entry.get("recovery_url"),
             "alternate_selectors": entry.get("alternate_selectors", []),
             "root_cause": entry.get("root_cause"),
-            "auto_apply_rules": entry.get("auto_apply_rules", {})
+            "auto_apply_rules": entry.get("auto_apply_rules", {}),
         }
         logger.info(f"[FKB] 解決策を取得: {entry.get('id')} - {solution.get('solution_pattern', [])[:2]}")
         return solution
@@ -122,7 +124,7 @@ class FKB:
 class FailureAnalysisAgent:
     """エージェントの失敗を分析し、原因と対策を提案するメタエージェント。"""
 
-    def __init__(self, runtime_kwargs: Optional[Dict[str, Any]] = None):
+    def __init__(self, runtime_kwargs: dict[str, Any] | None = None):
         self.runtime_kwargs = runtime_kwargs or {}
         self.llm_controller = AILlmController()
         self.fkb = FKB()
@@ -132,10 +134,10 @@ class FailureAnalysisAgent:
         *,
         error: Exception,
         site: str,
-        site_config: Dict[str, Any],
-        html_content: Optional[str],
+        site_config: dict[str, Any],
+        html_content: str | None,
         run_context: RunContext,
-        current_url: Optional[str] = None
+        current_url: str | None = None,
     ) -> GenerateResult:
         """与分析し、AIの分析結果を返す"""
         error_message = str(error)
@@ -151,7 +153,7 @@ class FailureAnalysisAgent:
                     "diagnosis": f"既知のエラー: {fkb_entry.get('error_signature')}",
                     "root_cause": solution.get("root_cause"),
                     "recommended_action": f"FKB ID: {solution.get('id')} - 解決策: {', '.join(solution.get('solution_pattern', []))}",
-                    "fkb_based": True
+                    "fkb_based": True,
                 },
                 "fkb_entry": fkb_entry,
                 "solution": solution,
@@ -161,8 +163,8 @@ class FailureAnalysisAgent:
                     "trace_file": str(run_context.get_path("trace.zip").resolve()),
                     "har_file": str(run_context.get_path("network.har").resolve()),
                     "screenshots_directory": str(run_context.screenshots_path.resolve()),
-                    "final_settings": str(run_context.get_path("resolved_settings.json").resolve())
-                }
+                    "final_settings": str(run_context.get_path("resolved_settings.json").resolve()),
+                },
             }
 
             run_context.save_json("ai_forensic_report.json", forensic_report)
@@ -175,7 +177,7 @@ class FailureAnalysisAgent:
             site=site,
             html_snippet=html_content[:8000] if html_content else "N/A",
             run_context=run_context,
-            site_config=site_config
+            site_config=site_config,
         )
 
         logger.info(f"AIによる失敗分析を要請します (RunID: {run_context.run_id})")
@@ -193,8 +195,8 @@ class FailureAnalysisAgent:
                     "trace_file": str(run_context.get_path("trace.zip").resolve()),
                     "har_file": str(run_context.get_path("network.har").resolve()),
                     "screenshots_directory": str(run_context.screenshots_path.resolve()),
-                    "final_settings": str(run_context.get_path("resolved_settings.json").resolve())
-                }
+                    "final_settings": str(run_context.get_path("resolved_settings.json").resolve()),
+                },
             }
 
             run_context.save_json("ai_forensic_report.json", forensic_report)
@@ -207,13 +209,7 @@ class FailureAnalysisAgent:
             return GenerateResult(text=error_text)
 
     def _build_prompt(
-        self,
-        *,
-        error: Exception,
-        site: str,
-        html_snippet: str,
-        run_context: RunContext,
-        site_config: Dict[str, Any]
+        self, *, error: Exception, site: str, html_snippet: str, run_context: RunContext, site_config: dict[str, Any]
     ) -> str:
         """根本原因分析のための詳細なプロンプトを生成する"""
         error_type = type(error).__name__

@@ -1,10 +1,13 @@
 from __future__ import annotations
-from datetime import datetime, date
+
+from datetime import datetime
+
 from app.extensions import db
 
 
 class PopularityTracker(db.Model):
     """F11: 人気度トラッキング"""
+
     __tablename__ = "popularity_tracker"
 
     id = db.Column(db.Integer, primary_key=True)
@@ -22,8 +25,9 @@ class PopularityTracker(db.Model):
     product = db.relationship("Product", backref=db.backref("popularity_records", lazy=True))
 
     def calc_score(self) -> float:
-        return (self.views or 0) * 0.1 + (self.favorites or 0) * 2 + \
-               (self.inquiries or 0) * 3 + (self.sold_count or 0) * 5
+        return (
+            (self.views or 0) * 0.1 + (self.favorites or 0) * 2 + (self.inquiries or 0) * 3 + (self.sold_count or 0) * 5
+        )
 
     def score_label(self) -> str:
         s = self.popularity_score or 0

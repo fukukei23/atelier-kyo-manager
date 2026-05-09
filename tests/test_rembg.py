@@ -3,14 +3,17 @@
 # ---------------------------------------------------------------
 # 事前準備:  pip install rembg pillow
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 from PIL import Image
 
 # ★★ テストしたい JPEG フルパスをここに貼り付ける ★★
 # Windows環境でのみ実行
-TARGET = Path(r"D:\catalog_images\GUCCI\80910\catalog_80910\93b42ae4-302b-4efb-bd8e-712e7c78b6e5_20250516022114122640.jpg")
+TARGET = Path(
+    r"D:\catalog_images\GUCCI\80910\catalog_80910\93b42ae4-302b-4efb-bd8e-712e7c78b6e5_20250516022114122640.jpg"
+)
 
 
 @pytest.mark.skip(reason="rembgは画像処理用途であり、WSL/Linux CI環境では実行不可のため常時スキップ")
@@ -31,8 +34,8 @@ def test_rembg_background_removal():
     print(f"[INFO] サイズ: {TARGET.stat().st_size // 1024} KB")
 
     # 背景除去
-    img_in   = Image.open(TARGET).convert("RGBA")   # CMYK 画像対策で convert
-    img_out  = remove(img_in)
+    img_in = Image.open(TARGET).convert("RGBA")  # CMYK 画像対策で convert
+    img_out = remove(img_in)
 
     # 出力ファイル名 例: REMBG_93b42ae4-....png
     OUT = TARGET.parent / f"REMBG_{TARGET.stem}.png"

@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ==============================================================================
 # File: app/agents/browser/navigation_driver.py
 # Version: 1.0.4 (Stage 3A-2-1: _collect_pdp_links の移行)
@@ -18,45 +17,56 @@ Stage 3A-2-1 では、BrowserUseAgent._collect_pdp_links のロジックをこ�
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
 import re
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Set, TYPE_CHECKING
-from urllib.parse import urljoin, urlsplit, urlunsplit, urlparse, parse_qsl, quote_plus
+from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qsl, quote_plus, urljoin, urlparse, urlsplit, urlunsplit
 
-from playwright.async_api import ElementHandle, Locator, Page, BrowserContext
+from playwright.async_api import BrowserContext, ElementHandle, Locator, Page
 
 if TYPE_CHECKING:
-    from app.agents.browser.telemetry import TelemetryClient, TelemetryContext
+    from app.agents.browser.telemetry import TelemetryClient
 
 # Stage 3A-2-1: extractor モジュールから looks_like_product_url を import
 try:
     from app.agents.browser.extractor import (
-        looks_like_product_url,
         VISIBLE_PRICE_SELECTORS,
         extract_moncler_pdp_links,
+        looks_like_product_url,
     )
 except ImportError:
     # フォールバック: モジュールが見つからない場合の処理
     def looks_like_product_url(url: str) -> bool:
         """フォールバック実装"""
         return True
+
     VISIBLE_PRICE_SELECTORS = ["[itemprop=price]", "[class*=price]", "[data-testid*=price]"]
 
 # 責務分割: UI 操作・URL 正規化は ui_helpers / navigation_helpers に委譲
 try:
-    from app.agents.browser.ui_helpers import (
-        safe_wait_selector as ui_safe_wait_selector,
-        accept_cookies_if_present as ui_accept_cookies_if_present,
-        click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
-        kill_overlays as ui_kill_overlays,
+    from app.agents.browser.navigation_helpers import (
+        normalize_abs_url as nav_normalize_abs_url,
     )
     from app.agents.browser.navigation_helpers import (
         normalize_url as nav_normalize_url,
-        normalize_abs_url as nav_normalize_abs_url,
+    )
+    from app.agents.browser.ui_helpers import (
+        accept_cookies_if_present as ui_accept_cookies_if_present,
+    )
+    from app.agents.browser.ui_helpers import (
+        click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
+    )
+    from app.agents.browser.ui_helpers import (
+        kill_overlays as ui_kill_overlays,
+    )
+    from app.agents.browser.ui_helpers import (
+        safe_wait_selector as ui_safe_wait_selector,
     )
 except ImportError:
     ui_safe_wait_selector = None
@@ -71,9 +81,11 @@ logger = logging.getLogger(__name__)
 # Stage 3A-2-2: ロケールセグメント判定用の正規表現
 _LOCALE_SEG_RE = re.compile(r"^[a-z]{2}-[a-z]{2}$", re.IGNORECASE)
 
+
 # CR-E2E-003: reject理由の列挙型
 class RejectReason(str, Enum):
     """PDPリンク候補のreject理由"""
+
     NO_HREF = "no_href"
     DIFFERENT_ORIGIN = "different_origin"
     DIFFERENT_DOMAIN = "different_domain"  # CR-E2E-003A拡張: eTLD+1が異なる
@@ -91,19 +103,22 @@ class RejectReason(str, Enum):
 @dataclass
 class LinkCandidate:
     """PDPリンク候補（CR-E2E-003/003A/003B）"""
+
     url: str  # raw_href
     phase: str  # "1a", "1b", "2", "moncler"
     normalized_url: str  # resolved_url
-    reject_reasons: List[str] = field(default_factory=list)
+    reject_reasons: list[str] = field(default_factory=list)
     accepted: bool = False
-    source_selector: Optional[str] = None  # CR-E2E-003A: セレクタ情報
-    origin: Optional[str] = None  # CR-E2E-003A: origin情報
-    notes: Optional[str] = None  # CR-E2E-003A: 補足情報
-    product_url_rules: Optional[Dict[str, Any]] = None  # CR-E2E-003B: 判定根拠
+    source_selector: str | None = None  # CR-E2E-003A: セレクタ情報
+    origin: str | None = None  # CR-E2E-003A: origin情報
+    notes: str | None = None  # CR-E2E-003A: 補足情報
+    product_url_rules: dict[str, Any] | None = None  # CR-E2E-003B: 判定根拠
+
 
 # CR-ATELIER-002 Step 1: Trap ページ検出用の例外クラス
 class TrapPageDetected(Exception):
     """PLP ではなく trap ページ（404 / location gate / 想定外ロケール）が検出されたことを示す例外"""
+
     def __init__(self, trap_type: str, reason: str, url: str):
         self.trap_type = trap_type  # "404", "location_gate", "unexpected_locale_search"
         self.reason = reason
@@ -111,20 +126,24 @@ class TrapPageDetected(Exception):
         message = f"Trap page detected: {trap_type} - {reason} (URL: {url})"
         super().__init__(message)
 
+
 # Stage 3A-2-1: ヘルパー関数（BrowserUseAgent から移植）
 def is_same_origin(url: str, base: str) -> bool:
     """URL が同じオリジンかどうかを判定する"""
     try:
         from urllib.parse import urlparse
+
         u = urlparse(url)
         b = urlparse(base)
         return (u.scheme, u.netloc) == (b.scheme, b.netloc)
     except Exception:
         return False
 
-def _dedupe_keep_order(items: List[str]) -> List[str]:
+
+def _dedupe_keep_order(items: list[str]) -> list[str]:
     """重複を削除しつつ順序を保持する"""
     return list(dict.fromkeys([i for i in (items or []) if i]))
+
 
 # Stage 3A-3: trap 判定関数の型定義
 TrapCheckerFn = Callable[[str], bool]  # URL を受けて trap かどうか判定
@@ -133,32 +152,36 @@ TrapCheckerFn = Callable[[str], bool]  # URL を受けて trap かどうか判�
 @dataclass
 class NavigationContext:
     """ナビゲーション実行時のコンテキスト情報"""
+
     site: str
     query: str
-    site_config: Dict[str, Any]
-    settings: Dict[str, Any]
+    site_config: dict[str, Any]
+    settings: dict[str, Any]
     run_context: Any  # RunContext を直接 import しない（循環回避）
     start_t: float
     budget_ms: int
-    entry_url: Optional[str] = None
+    entry_url: str | None = None
     context: Any = None  # Stage 3A-2-4: BrowserContext（fallback で必要、click_first_card_or_link で使用）
-    link_collection_summary: Optional[Dict[str, Any]] = None  # CR-E2E-003: リンク収集のサマリ
-    link_collection_summary: Optional[Dict[str, Any]] = None  # CR-E2E-003: リンク収集のサマリ
+    link_collection_summary: dict[str, Any] | None = None  # CR-E2E-003: リンク収集のサマリ
+    link_collection_summary: dict[str, Any] | None = None  # CR-E2E-003: リンク収集のサマリ
 
 
 @dataclass
 class NavigationOutcome:
     """ナビゲーション実行結果"""
+
     entry_url: str
     plp_materialized: bool = False
     trap_detected: bool = False
-    trap_reason: Optional[str] = None
+    trap_reason: str | None = None
     recovered: bool = False
-    pdp_links: List[str] = None  # Stage 3A-2-4: PDP リンクのリスト（BrowserUseAgent で使用）
-    fallback_used: Optional[str] = None  # Stage 3A-2-4: 使用した fallback の種類（"header_search" または "click_first_card"、BrowserUseAgent で使用）
+    pdp_links: list[str] = None  # Stage 3A-2-4: PDP リンクのリスト（BrowserUseAgent で使用）
+    fallback_used: str | None = (
+        None  # Stage 3A-2-4: 使用した fallback の種類（"header_search" または "click_first_card"、BrowserUseAgent で使用）
+    )
     locale_corrections: int = 0  # CR-ATELIER-002 Step 6: Locale補正の回数
-    moncler_outcome: Optional[Dict[str, Any]] = None  # CR-ATELIER-002 Step 6: Moncler抽出結果の詳細情報
-    
+    moncler_outcome: dict[str, Any] | None = None  # CR-ATELIER-002 Step 6: Moncler抽出結果の詳細情報
+
     def __post_init__(self):
         """pdp_links のデフォルト値を設定"""
         if self.pdp_links is None:
@@ -169,7 +192,7 @@ class NavigationDriver:
     """
     Stage 3A-1: 骨組みのみ
     Stage 3A-3: trap 判定の観測フック追加
-    
+
     PLP ナビゲーションロジックを BrowserUseAgent から分離するためのクラス。
     このステップでは、メソッドシグネチャのみを定義し、実際のロジックは Stage 3A-2 で移行します。
     Stage 3A-3 では、trap 判定の観測フックを追加します（挙動は変更しない）。
@@ -179,13 +202,13 @@ class NavigationDriver:
         self,
         page: Page,
         *,
-        trap_checker: Optional[TrapCheckerFn] = None,
-        telemetry: Optional["TelemetryClient"] = None,
+        trap_checker: TrapCheckerFn | None = None,
+        telemetry: TelemetryClient | None = None,
         strategy: Any = None,
     ) -> None:
         """
         NavigationDriver を初期化
-        
+
         Args:
             page: SessionManager から渡される Page オブジェクト
             trap_checker: trap 判定関数（オプション、Stage 3A-3: 観測用）
@@ -200,31 +223,31 @@ class NavigationDriver:
     async def run_plp_flow(self, ctx: NavigationContext) -> NavigationOutcome:
         """
         PLP フローを実行する
-        
+
         Stage 3A-1: このステップでは、ctx をそのまま返すだけのスタブ実装。
         Stage 3A-2-2: ensure_plp_materialized を呼び出して materialize を実行。
         Stage 3A-2-3: trap 判定・復旧ロジックを実行。
         Stage 3A-3: trap 判定の観測フックを追加（挙動は変更しない）。
-        
+
         CR-ATELIER-002 Step 4: 実ブラウザ検証と最終修正
         - URLバリデーションとロケール制御の実DOMベース調整
         - Telemetry/ログの実データに合わせた具体化
         - 成功基準（Acceptance Criteria）の充足確認ロジック
-        
+
         Args:
             ctx: ナビゲーションコンテキスト
-            
+
         Returns:
             NavigationOutcome: ナビゲーション結果
         """
         entry = ctx.entry_url or self.page.url
         outcome = NavigationOutcome(entry_url=entry)
         locale_correction_count = 0  # CR-ATELIER-002 Step 6: Locale補正の回数をカウント（初期化）
-        
+
         # --- Stage 3A-2-3: trap 判定・復旧ロジック ---
         url = self.page.url or entry
         attempted_recover = False
-        
+
         # trap_checker が提供されている場合はそれを使用、なければ内部メソッドを使用
         # Stage 3A-2-5: _looks_like_trap_or_legal の場合は site_config を渡す
         if self.trap_checker:
@@ -233,20 +256,21 @@ class NavigationDriver:
             # 内部メソッドを使用する場合、site_config を渡すラッパーを作成
             def trap_check_with_config(url: str) -> bool:
                 return self._looks_like_trap_or_legal(url, ctx.site_config)
+
             trap_check_fn = trap_check_with_config
-        
+
         if trap_check_fn and url:
             try:
                 if trap_check_fn(url):
                     outcome.trap_detected = True
                     outcome.trap_reason = f"initial_url={url}"
                     logger.warning("[NavigationDriver] trap-like url detected: %s", url)
-                    
+
                     # 復旧を試みる
                     attempted_recover = True
                     recovered = await self.recover_plp(ctx)
                     outcome.recovered = recovered
-                    
+
                     # CR-ATELIER-002 Step 2: Recovery 後のロケールチェック
                     # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
                     if recovered:
@@ -254,7 +278,7 @@ class NavigationDriver:
                             await self._ensure_expected_locale(ctx)
                         except Exception as e:
                             logger.warning(f"[NavigationDriver] Locale Guard after recovery failed: {e}", exc_info=True)
-                    
+
                     if recovered:
                         # 回復後に再度 trap 判定
                         # Stage 3A-2-5: trap_check_fn が内部メソッドの場合は site_config を渡す
@@ -270,16 +294,14 @@ class NavigationDriver:
                         logger.info("[NavigationDriver] Recovery navigation seems successful.")
                     else:
                         # 回復に失敗した場合
-                        raise ValueError(
-                            f"Landing page looks like legal/trap (recovery failed): {url}"
-                        )
+                        raise ValueError(f"Landing page looks like legal/trap (recovery failed): {url}")
             except ValueError:
                 # ValueError はそのまま再スロー
                 raise
             except Exception as e:
                 # その他のエラーはログに記録して続行
                 logger.debug("[NavigationDriver] trap_checker/recover failed: %s", e)
-        
+
         # --- CR-ATELIER-002 Step 2: Locale Guard - ロケール一貫性チェックと自動修正 ---
         # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
         # 初回PLPナビゲーション直後（home_urlからPLPへ飛んだ直後）にロケールチェック
@@ -294,7 +316,7 @@ class NavigationDriver:
         except Exception as e:
             logger.warning(f"[NavigationDriver] Locale Guard failed: {e}", exc_info=True)
             # Locale Guard は失敗しても続行（Guard なので壊さない）
-        
+
         # --- Stage 3A-2-2: ensure_plp_materialized を呼び出し ---
         materialized = False
         tiles_detected = False
@@ -306,18 +328,18 @@ class NavigationDriver:
         except Exception as e:
             logger.error(f"[NavigationDriver] ensure_plp_materialized failed: {e}")
             outcome.plp_materialized = False
-        
+
         # materialized == False の場合（例外または False 返却）でも、タイルが検出されているか確認
         if not materialized:
             try:
                 # ensure_plp_materialized 内で使用されているのと同じロジックで tile_selector_str を構築
-                settings = ctx.settings or {}
                 plp_cfg = (ctx.site_config.get("selectors", {}) or {}).get("plp", {}) or {}
                 pdp_cfg = (ctx.site_config.get("selectors", {}) or {}).get("pdp", {}) or {}
                 tile_selectors = _dedupe_keep_order(
-                    (plp_cfg.get("tile_selectors", []) or []) +
-                    (plp_cfg.get("pdp_link_selectors", []) or []) +
-                    (pdp_cfg.get("pdp_link_selectors", []) or []) + [
+                    (plp_cfg.get("tile_selectors", []) or [])
+                    + (plp_cfg.get("pdp_link_selectors", []) or [])
+                    + (pdp_cfg.get("pdp_link_selectors", []) or [])
+                    + [
                         # Moncler 用フォールバック（.html で終わるリンク）
                         "a[href$='.html']",
                         "[data-testid='product-card']",
@@ -332,21 +354,20 @@ class NavigationDriver:
                     if tile_count > 0:
                         tiles_detected = True
                         logger.info(f"[NavigationDriver] Tiles detected ({tile_count}) despite materialization failure")
-                        logger.info(f"[NavigationDriver] tiles_detected set to True, will attempt to record PLP state")
+                        logger.info("[NavigationDriver] tiles_detected set to True, will attempt to record PLP state")
             except Exception as check_e:
                 logger.warning(f"[NavigationDriver] Failed to check tile count: {check_e}")
-        
+
         # PLP materialization が成功した場合、または例外で失敗したがタイルが検出された場合に DOM snapshot を保存
         condition_result = materialized or tiles_detected
         if condition_result and self.telemetry:
             try:
                 # site_config からセレクタを取得
                 pdp_cfg = (ctx.site_config.get("selectors") or {}).get("pdp", {}) or {}
-                selectors = (
-                    (pdp_cfg.get("pdp_link_selectors") or []) +
-                    (pdp_cfg.get("plp_container_selectors") or [])
+                selectors = (pdp_cfg.get("pdp_link_selectors") or []) + (pdp_cfg.get("plp_container_selectors") or [])
+                logger.info(
+                    f"[NavigationDriver] Recording PLP state: materialized={materialized}, tiles_detected={tiles_detected}"
                 )
-                logger.info(f"[NavigationDriver] Recording PLP state: materialized={materialized}, tiles_detected={tiles_detected}")
                 await self.telemetry.record_plp_state(
                     self.page,
                     name="plp_dom_initial_materialized",
@@ -357,10 +378,12 @@ class NavigationDriver:
             except Exception as e:
                 logger.warning(f"[NavigationDriver] Failed to record PLP state: {e}", exc_info=True)
         elif not condition_result:
-            logger.debug(f"[NavigationDriver] Skipping PLP state recording: materialized={materialized}, tiles_detected={tiles_detected}")
+            logger.debug(
+                f"[NavigationDriver] Skipping PLP state recording: materialized={materialized}, tiles_detected={tiles_detected}"
+            )
         elif not self.telemetry:
             logger.warning("[NavigationDriver] Telemetry not available, skipping PLP state recording")
-        
+
         # --- Stage 3A-2-3: materialize 後の trap 再チェック ---
         if outcome.plp_materialized and trap_check_fn:
             try:
@@ -381,7 +404,10 @@ class NavigationDriver:
                                 if locale_correction_before_recovery_post != locale_correction_after_recovery_post:
                                     locale_correction_count += 1
                             except Exception as e:
-                                logger.warning(f"[NavigationDriver] Locale Guard after recovery (post-materialize) failed: {e}", exc_info=True)
+                                logger.warning(
+                                    f"[NavigationDriver] Locale Guard after recovery (post-materialize) failed: {e}",
+                                    exc_info=True,
+                                )
                         if recovered:
                             if trap_check_fn(self.page.url):
                                 raise ValueError(
@@ -394,15 +420,13 @@ class NavigationDriver:
                             )
                     else:
                         # 既に回復試行済みで、materialize したらまた trap に戻った場合
-                        raise ValueError(
-                            f"After materialize, bounced back to legal/trap page: {self.page.url}"
-                        )
+                        raise ValueError(f"After materialize, bounced back to legal/trap page: {self.page.url}")
             except ValueError:
                 # ValueError はそのまま再スロー
                 raise
             except Exception as e:
                 logger.debug("[NavigationDriver] post-materialize trap check failed: %s", e)
-        
+
         # --- CR-ATELIER-002 Step 1: Trap ページ検出（DOM ベース） ---
         trap_info = await self._detect_trap_page(ctx)
         if trap_info is not None:
@@ -424,30 +448,30 @@ class NavigationDriver:
                     logger.warning(f"[TrapDetector] Failed to record trap-page PLP state: {e}", exc_info=True)
             else:
                 logger.warning("[TrapDetector] Telemetry not available, skipping trap page recording")
-            
+
             # 専用例外を投げる（上位の Self-Healing ロジックで扱えるようにする）
             raise TrapPageDetected(
                 trap_type=trap_info["type"],
                 reason=trap_info["reason"],
                 url=self.page.url,
             )
-        
+
         # --- Stage 3A-2-4: PDP リンク収集と fallback ロジック ---
-        pdp_links: List[str] = []
-        
+        pdp_links: list[str] = []
+
         try:
             pdp_links = await self.collect_pdp_links(ctx)
             outcome.pdp_links = pdp_links
-            
+
             # CR-ATELIER-002 Step 6: Moncler専用のoutcome情報を取得
             moncler_outcome_info = None
             if hasattr(ctx, "moncler_outcome"):
                 moncler_outcome_info = ctx.moncler_outcome
             elif isinstance(ctx, dict) and "moncler_outcome" in ctx:
                 moncler_outcome_info = ctx["moncler_outcome"]
-            
+
             outcome.moncler_outcome = moncler_outcome_info
-            
+
             logger.info(f"[NavigationDriver] Collected {len(pdp_links)} PDP links")
         except Exception as e:
             logger.error(f"[NavigationDriver] collect_pdp_links failed: {e}")
@@ -466,7 +490,7 @@ class NavigationDriver:
                 logger.error(f"[NavigationDriver] Full error log available at: {log_file_path}")
             elif ctx.run_context:
                 logger.error(f"[NavigationDriver] Error log will be saved to: {ctx.run_context.get_path('system.log')}")
-            
+
             # Fallback 1: ヘッダ検索
             try:
                 did_search = await self.header_search_fallback(ctx)
@@ -483,7 +507,9 @@ class NavigationDriver:
                         if locale_correction_before_header != locale_correction_after_header:
                             locale_correction_count += 1
                     except Exception as e:
-                        logger.warning(f"[NavigationDriver] Locale Guard after header search failed: {e}", exc_info=True)
+                        logger.warning(
+                            f"[NavigationDriver] Locale Guard after header search failed: {e}", exc_info=True
+                        )
                     try:
                         pdp_links = await self.collect_pdp_links(ctx)
                         outcome.pdp_links = pdp_links
@@ -512,13 +538,13 @@ class NavigationDriver:
         # - run.ok == True（TrapPageDetectedではなく正常終了）
         # - PLPのURLは /en-int/women/outerwear/all-down-jackets/ + shipToCountry=GB
         # - 抽出されたPDP URLは、すべて /en-int/.../products/... を指し、404/検索/ロケールゲートではない
-        
+
         # 最終的に PDP リンクが 0 件の場合、例外を投げる（旧 _run_plp_flow と同じ条件）
         if not outcome.pdp_links:
             raise ValueError(
                 f"No PDP links found after all phases (materialize, collect, fallbacks). URL={self.page.url}"
             )
-        
+
         # CR-ATELIER-002 Step 4-4: 抽出されたPDP URLの検証
         # すべてのPDP URLが /en-int/.../products/... を指し、404/検索/ロケールゲートではないことを確認
         valid_pdp_count = 0
@@ -526,41 +552,42 @@ class NavigationDriver:
         for pdp_url in outcome.pdp_links:
             try:
                 from urllib.parse import urlparse
+
                 parsed = urlparse(pdp_url)
                 path = parsed.path or ""
-                
+
                 # /en-int/ で始まるか
                 if not path.startswith("/en-int/"):
                     invalid_pdp_reasons.append(f"{pdp_url}: no /en-int/ path")
                     continue
-                
+
                 # /products/ を含むか
                 if "/products/" not in path and "/product/" not in path:
                     invalid_pdp_reasons.append(f"{pdp_url}: no /products/ path")
                     continue
-                
+
                 # trapページパターンを含まないか
                 trap_patterns = ["/404", "/not-found", "/search", "/client-service"]
                 if any(trap in path.lower() for trap in trap_patterns):
                     invalid_pdp_reasons.append(f"{pdp_url}: trap pattern detected")
                     continue
-                
+
                 # 二重ロケールパターンを含まないか
                 double_locale_pattern = re.compile(r"/en-[a-z]{2}/en-int/", re.I)
                 if double_locale_pattern.search(path):
                     invalid_pdp_reasons.append(f"{pdp_url}: double locale pattern")
                     continue
-                
+
                 valid_pdp_count += 1
             except Exception as e:
                 invalid_pdp_reasons.append(f"{pdp_url}: validation error: {e}")
-        
+
         if invalid_pdp_reasons:
             logger.warning(
                 f"[PLP→PDP][Moncler] Found {len(invalid_pdp_reasons)} invalid PDP URLs: "
                 f"{invalid_pdp_reasons[:5]}"  # 最初の5件のみ表示
             )
-        
+
         # 成功基準のログ出力
         logger.info(
             f"[PLP→PDP][Moncler] Acceptance Criteria check: "
@@ -569,14 +596,9 @@ class NavigationDriver:
             f"trap_detected={outcome.trap_detected}, "
             f"plp_materialized={outcome.plp_materialized}"
         )
-        
+
         # CR-ATELIER-002 Step 6-3: Telemetry に moncler_plp_pdp_outcome を保存
-        site_code = (
-            ctx.site_config.get("site_code") or 
-            ctx.site_config.get("site") or 
-            ctx.site or 
-            ""
-        )
+        site_code = ctx.site_config.get("site_code") or ctx.site_config.get("site") or ctx.site or ""
         if site_code == "MONCLER_OFFICIAL" and self.telemetry and outcome.moncler_outcome:
             try:
                 # tiles_detected を取得（materialized または tiles_detected が True の場合）
@@ -590,7 +612,7 @@ class NavigationDriver:
                             tiles_detected_count = await self.page.locator(tile_selector_str).count()
                     except Exception:
                         pass
-                
+
                 # outcome dict を構築
                 outcome_dict = {
                     "plp_materialized": outcome.plp_materialized or tiles_detected,
@@ -604,32 +626,33 @@ class NavigationDriver:
                     "current_url": self.page.url or entry,
                     "run_id": getattr(ctx.run_context, "run_id", None) if ctx.run_context else None,
                 }
-                
+
                 # TelemetryClient に保存
                 if hasattr(self.telemetry, "_service"):
                     await self.telemetry._service.record_moncler_plp_pdp_outcome(outcome_dict)
                 else:
                     # TelemetryClient の場合、直接 save_json を使用
                     from app.agents.browser.telemetry import TelemetryContext
+
                     tctx = TelemetryContext(
                         site=site_code,
                         query=ctx.query,
                         run_id=getattr(ctx.run_context, "run_id", None) if ctx.run_context else None,
-                        stage="plp"
+                        stage="plp",
                     )
                     await self.telemetry.save_json("moncler_plp_pdp_outcome", outcome_dict, tctx)
-                
+
                 logger.info(
                     f"[Telemetry][Moncler] Saved PLP→PDP outcome: "
                     f"raw={outcome_dict['pdp_links_raw']}, "
                     f"accepted={outcome_dict['pdp_links_accepted']}, "
                     f"layers={outcome_dict['selector_layers_used']}"
                 )
-                
+
                 # CR-ATELIER-002 Step 6-3: Self-Healing / Selector Discovery のトリガー判定
                 should_trigger_self_healing = False
                 failure_reason = None
-                
+
                 # トリガ条件をチェック
                 if outcome_dict["pdp_links_raw"] == 0:
                     should_trigger_self_healing = True
@@ -637,7 +660,10 @@ class NavigationDriver:
                 elif outcome_dict["pdp_links_accepted"] == 0:
                     should_trigger_self_healing = True
                     failure_reason = "rejected_all"
-                elif "secondary" in outcome_dict["selector_layers_used"] or "tertiary" in outcome_dict["selector_layers_used"]:
+                elif (
+                    "secondary" in outcome_dict["selector_layers_used"]
+                    or "tertiary" in outcome_dict["selector_layers_used"]
+                ):
                     should_trigger_self_healing = True
                     failure_reason = "secondary_or_tertiary_used"
                 elif outcome_dict["trap_detected"]:
@@ -646,7 +672,7 @@ class NavigationDriver:
                 elif outcome_dict["locale_corrections"] >= 3:  # 閾値は設定可能にする
                     should_trigger_self_healing = True
                     failure_reason = "locale_corrections_exceeded"
-                
+
                 if should_trigger_self_healing:
                     logger.warning(
                         f"[SelfHealing][Moncler] Triggered because reason={failure_reason}, "
@@ -654,7 +680,7 @@ class NavigationDriver:
                         f"accepted={outcome_dict['pdp_links_accepted']}, "
                         f"layers={outcome_dict['selector_layers_used']}"
                     )
-                    
+
                     # Self-Healing Agent と Selector Discovery Agent を呼び出す
                     try:
                         await self._trigger_moncler_self_healing(
@@ -663,10 +689,7 @@ class NavigationDriver:
                             outcome_dict=outcome_dict,
                         )
                     except Exception as e:
-                        logger.warning(
-                            f"[SelfHealing][Moncler] Failed to trigger self-healing: {e}",
-                            exc_info=True
-                        )
+                        logger.warning(f"[SelfHealing][Moncler] Failed to trigger self-healing: {e}", exc_info=True)
                 else:
                     logger.debug(
                         f"[SelfHealing][Moncler] No trigger conditions met: "
@@ -676,10 +699,9 @@ class NavigationDriver:
                     )
             except Exception as e:
                 logger.warning(
-                    f"[Telemetry][Moncler] Failed to save PLP→PDP outcome or trigger self-healing: {e}",
-                    exc_info=True
+                    f"[Telemetry][Moncler] Failed to save PLP→PDP outcome or trigger self-healing: {e}", exc_info=True
                 )
-        
+
         outcome.locale_corrections = locale_correction_count
 
         logger.debug(
@@ -687,9 +709,9 @@ class NavigationDriver:
             f"plp_materialized={outcome.plp_materialized}, recovered={outcome.recovered}, "
             f"pdp_links={len(outcome.pdp_links)}, fallback_used={outcome.fallback_used}"
         )
-        
+
         # CR-ATELIER-002 Step 4-5: テストと検証手順（人間が実行）
-        # 
+        #
         # pytest 実行:
         #   python -m pytest tests/test_moncler_pdp_url.py -q -v
         #
@@ -701,16 +723,16 @@ class NavigationDriver:
         #   - nav_outcome.collected_pdp_links >= 1
         #   - 抽出された PDP URL が想定のパターンに一致している
         #     （すべて /en-int/.../products/... を指し、404/検索/ロケールゲートではない）
-        
+
         return outcome
 
-    def _extract_etld_plus_one(self, hostname: str) -> Optional[str]:
+    def _extract_etld_plus_one(self, hostname: str) -> str | None:
         """
         CR-E2E-003A拡張: eTLD+1を抽出（例: www.moncler.com -> moncler.com）
-        
+
         Args:
             hostname: ホスト名
-        
+
         Returns:
             Optional[str]: eTLD+1またはNone
         """
@@ -723,15 +745,15 @@ class NavigationDriver:
         if len(parts) >= 2:
             return ".".join(parts[-2:])
         return hostname
-    
+
     def _is_same_site(self, url1: str, url2: str) -> bool:
         """
         CR-E2E-003A拡張: 2つのURLが同じサイト（eTLD+1）か判定
-        
+
         Args:
             url1: URL1
             url2: URL2
-        
+
         Returns:
             bool: 同じサイトの場合True
         """
@@ -743,21 +765,21 @@ class NavigationDriver:
             return etld1 and etld2 and etld1 == etld2
         except Exception:
             return False
-    
+
     def _check_origin_allowed(
         self,
         url: str,
         base_url: str,
-        site_config: Optional[Dict[str, Any]] = None,
-    ) -> tuple[bool, Optional[str]]:
+        site_config: dict[str, Any] | None = None,
+    ) -> tuple[bool, str | None]:
         """
         CR-E2E-003/003A拡張: originが許可されているかチェック（eTLD+1判定対応）
-        
+
         Args:
             url: 検証対象URL
             base_url: ベースURL
             site_config: サイト設定（任意）
-        
+
         Returns:
             (is_allowed, reject_reason): 許可されている場合True、拒否理由（拒否時）
         """
@@ -766,18 +788,18 @@ class NavigationDriver:
             base_parsed = urlparse(base_url)
             url_origin = (parsed.scheme, parsed.netloc)
             base_origin = (base_parsed.scheme, base_parsed.netloc)
-            
+
             # 同一originの場合は許可
             if url_origin == base_origin:
                 return True, None
-            
+
             # CR-E2E-003A拡張: eTLD+1判定（same-site）
             if self._is_same_site(url, base_url):
                 # サブドメインが異なる場合は警告付きで許可
                 if parsed.netloc.lower() != base_parsed.netloc.lower():
                     return True, None  # 許可（reject理由は記録しない）
                 return True, None
-            
+
             # site_configから設定を取得（Missing-safe）
             if site_config:
                 allowed_origins = site_config.get("allowed_origins", [])
@@ -794,13 +816,13 @@ class NavigationDriver:
                 blocked_origins = []
                 allowed_host_suffixes = []
                 allowed_domains = []
-            
+
             # blocked_originsチェック
             if blocked_origins:
                 for blocked in blocked_origins:
                     if blocked in parsed.netloc.lower():
                         return False, RejectReason.BLOCKED_ORIGIN.value
-            
+
             # CR-E2E-003A拡張: allowed_domainsチェック（eTLD+1判定）
             if allowed_domains:
                 url_etld = self._extract_etld_plus_one(parsed.netloc)
@@ -808,19 +830,19 @@ class NavigationDriver:
                     allowed_etld = self._extract_etld_plus_one(allowed_domain)
                     if url_etld and allowed_etld and url_etld == allowed_etld:
                         return True, None
-            
+
             # allowed_originsチェック
             if allowed_origins:
                 for allowed in allowed_origins:
                     if allowed in parsed.netloc.lower():
                         return True, None
-            
+
             # allowed_host_suffixesチェック
             if allowed_host_suffixes:
                 for suffix in allowed_host_suffixes:
                     if parsed.netloc.lower().endswith(suffix):
                         return True, None
-            
+
             # CR-E2E-003A拡張: reject理由を分解
             # eTLD+1が異なる場合はdifferent_domain、サブドメインのみ異なる場合はdifferent_subdomain
             url_etld = self._extract_etld_plus_one(parsed.netloc)
@@ -829,19 +851,19 @@ class NavigationDriver:
                 return False, RejectReason.DIFFERENT_DOMAIN.value
             elif parsed.netloc.lower() != base_parsed.netloc.lower():
                 return False, RejectReason.DIFFERENT_SUBDOMAIN.value
-            
+
             # デフォルト: 外部originは拒否（ただし候補として残す）
             return False, RejectReason.DIFFERENT_ORIGIN.value
         except Exception:
             return False, RejectReason.VALIDATION_ERROR.value
-    
-    def _extract_origin(self, url: str) -> Optional[str]:
+
+    def _extract_origin(self, url: str) -> str | None:
         """
         CR-E2E-003A: URLからoriginを抽出
-        
+
         Args:
             url: URL
-        
+
         Returns:
             Optional[str]: origin（scheme://netloc）またはNone
         """
@@ -852,21 +874,21 @@ class NavigationDriver:
         except Exception:
             pass
         return None
-    
+
     def _normalize_candidate_url(
         self,
         url: str,
         base_url: str,
-        site_config: Optional[Dict[str, Any]] = None,
-    ) -> tuple[str, Dict[str, Any]]:
+        site_config: dict[str, Any] | None = None,
+    ) -> tuple[str, dict[str, Any]]:
         """
         CR-E2E-003B: 候補URLを正規化（相対URL、クエリ、フラグメント、末尾スラッシュ、localeパラメータ等を統一）
-        
+
         Args:
             url: 正規化対象URL
             base_url: ベースURL（相対URL解決用）
             site_config: サイト設定（任意）
-        
+
         Returns:
             (normalized_url, normalization_info): 正規化されたURLと正規化情報
         """
@@ -877,7 +899,7 @@ class NavigationDriver:
             "removed_fragment": False,
             "normalized": url,
         }
-        
+
         try:
             # プロトコル相対URL（//example.com/path）の処理
             if url.startswith("//"):
@@ -890,15 +912,16 @@ class NavigationDriver:
                 normalization_info["was_relative"] = True
             else:
                 normalized = url
-            
+
             parsed = urlparse(normalized)
-            
+
             # クエリパラメータの処理
             query_params = {}
             if parsed.query:
                 from urllib.parse import parse_qs
+
                 query_dict = parse_qs(parsed.query)
-                
+
                 # site_configから削除すべきクエリパラメータを取得
                 remove_params = []
                 if site_config:
@@ -907,14 +930,14 @@ class NavigationDriver:
                         normalize_rules = url_rules.get("normalize_rules", {})
                         if isinstance(normalize_rules, dict):
                             remove_params = normalize_rules.get("remove_query_params", [])
-                
+
                 # 削除対象以外のパラメータを保持
                 for key, values in query_dict.items():
                     if key not in remove_params:
                         query_params[key] = values
                     else:
                         normalization_info["removed_query_params"].append(key)
-            
+
             # フラグメントの処理
             fragment = ""
             if site_config:
@@ -925,42 +948,38 @@ class NavigationDriver:
                         fragment = parsed.fragment
                     else:
                         normalization_info["removed_fragment"] = True
-            
+
             # URLを再構築
             from urllib.parse import urlencode, urlunparse
+
             normalized_query = urlencode(query_params, doseq=True) if query_params else ""
-            normalized = urlunparse((
-                parsed.scheme,
-                parsed.netloc,
-                parsed.path,
-                parsed.params,
-                normalized_query,
-                fragment
-            ))
-            
+            normalized = urlunparse(
+                (parsed.scheme, parsed.netloc, parsed.path, parsed.params, normalized_query, fragment)
+            )
+
             normalization_info["normalized"] = normalized
             return normalized, normalization_info
         except Exception as e:
             logger.debug(f"[URL Normalize] Failed to normalize URL: {e}")
             normalization_info["error"] = str(e)
             return url, normalization_info
-    
+
     def _validate_candidate_url(
         self,
         url: str,
         normalized_url: str,
         base_url: str,
-        site_config: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        site_config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         """
         CR-E2E-003B: 候補URLを検証し、判定根拠を返す
-        
+
         Args:
             url: 元のURL（raw_href）
             normalized_url: 正規化済みURL
             base_url: ベースURL
             site_config: サイト設定（任意）
-        
+
         Returns:
             Dict[str, Any]: 検証結果と判定根拠
             {
@@ -986,12 +1005,12 @@ class NavigationDriver:
             "reject_reasons": [],
             "product_url_rules": {},
         }
-        
+
         try:
             parsed = urlparse(normalized_url)
             path = parsed.path or ""
             host = parsed.netloc.lower() if parsed.netloc else ""
-            
+
             # 1. ドメイン許可チェック
             if site_config:
                 allowed_domains = site_config.get("allowed_domains", [])
@@ -999,7 +1018,7 @@ class NavigationDriver:
                     allowed_domain = site_config.get("allowed_domain")
                     if allowed_domain:
                         allowed_domains = [allowed_domain]
-                
+
                 domain_allowed = False
                 if allowed_domains:
                     url_etld = self._extract_etld_plus_one(host)
@@ -1008,9 +1027,9 @@ class NavigationDriver:
                         if url_etld and allowed_etld and url_etld == allowed_etld:
                             domain_allowed = True
                             break
-                
+
                 result["domain_allowed"] = domain_allowed
-                
+
                 if not domain_allowed:
                     result["reject_reasons"].append(RejectReason.DIFFERENT_DOMAIN.value)
                     result["final_decision"] = "reject"
@@ -1029,7 +1048,7 @@ class NavigationDriver:
                         return result
                 else:
                     result["domain_allowed"] = True  # デフォルトで許可
-            
+
             # 2. forbidden_path_patternsチェック（優先）
             if site_config:
                 url_rules = site_config.get("url_rules", {})
@@ -1042,7 +1061,7 @@ class NavigationDriver:
                             result["reject_reasons"].append(RejectReason.NOISE_PATTERN.value)
                             result["final_decision"] = "reject"
                             return result
-                    
+
                     # 3. allow_path_patternsチェック
                     allow_path_patterns = url_rules.get("allow_path_patterns", [])
                     if allow_path_patterns:
@@ -1051,7 +1070,7 @@ class NavigationDriver:
                                 result["allow_path_matched"] = True
                                 result["allow_path_pattern"] = pattern
                                 break
-                    
+
                     # allow_path_patternsが設定されていてマッチしない場合
                     if allow_path_patterns and not result["allow_path_matched"]:
                         result["reject_reasons"].append(RejectReason.NO_PRODUCTS_PATH.value)
@@ -1077,11 +1096,11 @@ class NavigationDriver:
                     return result
                 else:
                     result["allow_path_matched"] = True
-            
+
             # 4. locale_okチェック（LocaleGuardの結果を参照）
             # 簡易チェック: /en-int/で始まるか
             result["locale_ok"] = path.lower().startswith("/en-int/")
-            
+
             # 5. looks_like_product_urlチェック（allow_path_matchedがTrueの場合はスキップ）
             if not result["allow_path_matched"]:
                 looks_like_product = looks_like_product_url(normalized_url)
@@ -1089,11 +1108,11 @@ class NavigationDriver:
                     result["reject_reasons"].append(RejectReason.NOT_PRODUCT_URL.value)
                     result["final_decision"] = "reject"
                     return result
-            
+
             # 6. すべてのチェックをパスした場合
             if not result["reject_reasons"]:
                 result["final_decision"] = "accept"
-            
+
             # product_url_rulesを構築
             result["product_url_rules"] = {
                 "domain_allowed": result["domain_allowed"],
@@ -1105,7 +1124,7 @@ class NavigationDriver:
                 "final_decision": result["final_decision"],
                 "reject_reasons": result["reject_reasons"],
             }
-            
+
             return result
         except Exception as e:
             logger.warning(f"[Validate Candidate URL] Failed to validate URL: {e}", exc_info=True)
@@ -1113,30 +1132,30 @@ class NavigationDriver:
             result["final_decision"] = "reject"
             result["error"] = str(e)
             return result
-    
+
     def _classify_candidate(
         self,
         candidate: LinkCandidate,
         base_url: str,
-        site_config: Optional[Dict[str, Any]] = None,
+        site_config: dict[str, Any] | None = None,
     ) -> LinkCandidate:
         """
         CR-E2E-003/003A/003B: 候補を分類し、reject理由を記録
-        
+
         CR-E2E-003B拡張: _validate_candidate_urlを使用して体系的な検証を行う
-        
+
         Args:
             candidate: リンク候補
             base_url: ベースURL
             site_config: サイト設定（任意）
-        
+
         Returns:
             LinkCandidate: reject理由が記録された候補
         """
         # CR-E2E-003A: origin情報を記録
         if candidate.normalized_url:
             candidate.origin = self._extract_origin(candidate.normalized_url)
-        
+
         # CR-E2E-003A拡張: スキーム除外チェック（javascript:, mailto:, tel:など）
         parsed_url = urlparse(candidate.normalized_url)
         if parsed_url.scheme and parsed_url.scheme.lower() not in ("http", "https", ""):
@@ -1152,7 +1171,7 @@ class NavigationDriver:
                 "error": "invalid scheme",
             }
             return candidate
-        
+
         # OneTrustドメイン除外（早期チェック）
         if "onetrust.com" in parsed_url.netloc.lower():
             candidate.reject_reasons.append(RejectReason.BLOCKED_DOMAIN.value)
@@ -1166,7 +1185,7 @@ class NavigationDriver:
                 "reject_reasons": [RejectReason.BLOCKED_DOMAIN.value],
             }
             return candidate
-        
+
         # CR-E2E-003B: _validate_candidate_urlを使用して検証
         validation_result = self._validate_candidate_url(
             url=candidate.url,
@@ -1174,68 +1193,62 @@ class NavigationDriver:
             base_url=base_url,
             site_config=site_config,
         )
-        
+
         # 検証結果を候補に反映
         candidate.reject_reasons.extend(validation_result["reject_reasons"])
         candidate.product_url_rules = validation_result.get("product_url_rules", {})
-        
+
         # notesに詳細を記録
         if validation_result["forbidden_path_matched"]:
             candidate.notes = f"forbidden path pattern: {validation_result.get('forbidden_path_pattern', 'unknown')}"
         elif not validation_result["domain_allowed"]:
             candidate.notes = f"different domain (eTLD+1): {candidate.origin}"
         elif not validation_result["allow_path_matched"]:
-            candidate.notes = f"path did not match allow_path_patterns"
+            candidate.notes = "path did not match allow_path_patterns"
         elif not validation_result["locale_ok"]:
             candidate.notes = "locale mismatch"
-        
+
         # すべてのチェックをパスした場合のみaccept
         if validation_result["final_decision"] == "accept":
             candidate.accepted = True
-        
+
         return candidate
-    
+
     async def collect_pdp_links(
         self,
         ctx: NavigationContext,
-    ) -> List[str]:
+    ) -> list[str]:
         """
         Stage 3A-2-1:
         旧 BrowserUseAgent._collect_pdp_links のロジックをここに移行。
         挙動・ログ・例外の流れはそのまま維持されている。
-        
+
         Phase 1a: Global <a href> sweep + Regex Filter
         Phase 1b: Selector-based補完
         Phase 2: Deep Extraction Fallback (only if Phase 1 failed)
         Phase 3: Noise Filtering & Saving
-        
+
         CR-ATELIER-002 Step 3: Moncler専用のPDP抽出ロジックを追加
         CR-E2E-003: 候補収集とreject理由の記録
-        
+
         Args:
             ctx: ナビゲーションコンテキスト
-            
+
         Returns:
             List[str]: PDP リンクのリスト
         """
         page = self.page
         site_config = ctx.site_config
-        settings = ctx.settings
         run_context = ctx.run_context
         target_url = page.url
-        found_links: Set[str] = set()
-        
+        found_links: set[str] = set()
+
         # CR-E2E-003: 候補を段階的に収集
-        all_candidates: List[LinkCandidate] = []
-        
+        all_candidates: list[LinkCandidate] = []
+
         # CR-ATELIER-002 Step 4: Moncler専用のPDP抽出ロジック（実ブラウザ検証版）
         # site_config のキーまたは ctx.site から site_code を取得
-        site_code = (
-            site_config.get("site_code") or 
-            site_config.get("site") or 
-            ctx.site or 
-            ""
-        )
+        (site_config.get("site_code") or site_config.get("site") or ctx.site or "")
         # CR-ATELIER-003 Phase B: Moncler 専用処理は MonclerPdpHandler に移行
         # NavigationDriver はブランド非依存の低レイヤとして維持
         # Moncler の処理は MonclerPlpHandler 経由で MonclerPdpHandler に委譲される
@@ -1243,7 +1256,9 @@ class NavigationDriver:
         # Phase 1a: Global <a href> sweep + Regex Filter
         # CR-E2E-003: 候補を収集（origin判定は後で分類）
         try:
-            raw_hrefs: List[str] = await page.evaluate("() => Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(Boolean)")
+            raw_hrefs: list[str] = await page.evaluate(
+                "() => Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(Boolean)"
+            )
         except Exception as e:
             logger.warning(f"[PLP→PDP][1a] Sweep failed: {e}")
             raw_hrefs = []
@@ -1251,7 +1266,7 @@ class NavigationDriver:
         pdp_rx = re.compile(r"/(products?|p)/", re.I)
         # .html形式のPDPパターン（/en-int/.../...html または /en-jp/en-int/.../...html）
         html_pdp_rx = re.compile(r"/(?:en-int|en-jp/en-int)/[^/]+/[^/]+/[^/]+\.html", re.I)
-        phase1a_candidates: List[LinkCandidate] = []
+        phase1a_candidates: list[LinkCandidate] = []
         for href in raw_hrefs:
             # OneTrustドメインのhrefを除外（ノイズ除去）
             if "onetrust.com" in href.lower():
@@ -1281,13 +1296,12 @@ class NavigationDriver:
         # Stage 3A-2-5: site_config["selectors"]["plp"] から取得（pdp ではなく plp を使用）
         plp_selectors = (site_config.get("selectors", {}) or {}).get("plp", {}) or {}
         pdp_selectors = (site_config.get("selectors", {}) or {}).get("pdp", {}) or {}
-        
+
         # plp.pdp_link_selectors を優先、なければ pdp.pdp_link_selectors を使用
         pdp_link_selectors = _dedupe_keep_order(
-            (plp_selectors.get("pdp_link_selectors", []) or []) +
-            (pdp_selectors.get("pdp_link_selectors", []) or [])
+            (plp_selectors.get("pdp_link_selectors", []) or []) + (pdp_selectors.get("pdp_link_selectors", []) or [])
         )
-        
+
         # フォールバック: 空の場合はデフォルトセレクタを使用
         if not pdp_link_selectors:
             pdp_link_selectors = [
@@ -1302,9 +1316,9 @@ class NavigationDriver:
                 "a[data-product-url]",
                 "[data-qa='product-tile'] a[href]",
             ]
-        
+
         PLP_PDP_LINK_SELECTORS = pdp_link_selectors
-        phase1b_candidates: List[LinkCandidate] = []
+        phase1b_candidates: list[LinkCandidate] = []
         for sel in PLP_PDP_LINK_SELECTORS:
             try:
                 nodes = await page.query_selector_all(sel)
@@ -1313,7 +1327,12 @@ class NavigationDriver:
                 matched_count = 0
                 rejected_count = 0
                 for n in nodes:
-                    href = await n.get_attribute("href") or await n.get_attribute("data-href") or await n.get_attribute("data-product-url") or await n.get_attribute("data-url")
+                    href = (
+                        await n.get_attribute("href")
+                        or await n.get_attribute("data-href")
+                        or await n.get_attribute("data-product-url")
+                        or await n.get_attribute("data-url")
+                    )
                     if not href:
                         # CR-E2E-003A: 候補として記録（reject理由付き）
                         candidate = LinkCandidate(
@@ -1362,7 +1381,7 @@ class NavigationDriver:
                 logger.warning(f"[PLP→PDP][1b] selector='{sel}' failed: {e}")
 
         # Phase 2: Deep Extraction Fallback (only if Phase 1 failed)
-        phase2_candidates: List[LinkCandidate] = []
+        phase2_candidates: list[LinkCandidate] = []
         if not found_links:
             logger.warning("[PLP→PDP] Phase 1a/1b found no links. Falling back to Phase 2 (Deep Extraction)...")
             try:
@@ -1399,7 +1418,7 @@ class NavigationDriver:
                     f"[PLP→PDP][Refilter] {len(all_candidates)} candidates found but all rejected. "
                     "Attempting evidence-based relaxed filtering..."
                 )
-                
+
                 # CR-E2E-003B: 根拠のある緩和の順序
                 # 1. forbidden_pathに当たってない候補を残す
                 for candidate in all_candidates:
@@ -1418,14 +1437,15 @@ class NavigationDriver:
                                     found_links.add(candidate.normalized_url)
                                     candidate.accepted = True
                                     candidate.reject_reasons = [
-                                        r for r in candidate.reject_reasons
+                                        r
+                                        for r in candidate.reject_reasons
                                         if r not in (RejectReason.NO_PRODUCTS_PATH.value,)
                                     ]
                                     candidate.notes = (candidate.notes or "") + " [Refilter: product card source]"
                                     logger.debug(
                                         f"[PLP→PDP][Refilter] Accepted candidate (product card source): {candidate.normalized_url}"
                                     )
-                
+
                 # 2. same-siteのみ許可（forbidden_pathに当たってない場合）
                 if not found_links and refilter_config.get("allow_same_site_only", False):
                     for candidate in all_candidates:
@@ -1434,11 +1454,15 @@ class NavigationDriver:
                         # same-site判定
                         if self._is_same_site(candidate.normalized_url, target_url):
                             # forbidden_pathに当たっていない場合のみ
-                            if candidate.product_url_rules and not candidate.product_url_rules.get("forbidden_path_matched", False):
+                            if candidate.product_url_rules and not candidate.product_url_rules.get(
+                                "forbidden_path_matched", False
+                            ):
                                 # same-siteの場合は、domain/subdomain rejectを無視
                                 relaxed_reasons = [
-                                    r for r in candidate.reject_reasons
-                                    if r not in (
+                                    r
+                                    for r in candidate.reject_reasons
+                                    if r
+                                    not in (
                                         RejectReason.DIFFERENT_DOMAIN.value,
                                         RejectReason.DIFFERENT_SUBDOMAIN.value,
                                         RejectReason.DIFFERENT_ORIGIN.value,
@@ -1453,7 +1477,7 @@ class NavigationDriver:
                                     logger.debug(
                                         f"[PLP→PDP][Refilter] Accepted same-site candidate: {candidate.normalized_url}"
                                     )
-                
+
                 # 3. 特定のreject理由を無視（forbidden_pathに当たってない場合）
                 if not found_links:
                     ignore_reasons = refilter_config.get("ignore_reject_reasons", [])
@@ -1462,12 +1486,11 @@ class NavigationDriver:
                             if not candidate.normalized_url:
                                 continue
                             # forbidden_pathに当たっていない場合のみ
-                            if candidate.product_url_rules and not candidate.product_url_rules.get("forbidden_path_matched", False):
+                            if candidate.product_url_rules and not candidate.product_url_rules.get(
+                                "forbidden_path_matched", False
+                            ):
                                 # 無視するreject理由を除外
-                                filtered_reasons = [
-                                    r for r in candidate.reject_reasons
-                                    if r not in ignore_reasons
-                                ]
+                                filtered_reasons = [r for r in candidate.reject_reasons if r not in ignore_reasons]
                                 # 残りのreject理由がなければ採用
                                 if not filtered_reasons:
                                     found_links.add(candidate.normalized_url)
@@ -1477,17 +1500,17 @@ class NavigationDriver:
                                     logger.debug(
                                         f"[PLP→PDP][Refilter] Accepted candidate (ignored {ignore_reasons}): {candidate.normalized_url}"
                                     )
-                
+
                 if found_links:
                     logger.info(
                         f"[PLP→PDP][Refilter] Evidence-based relaxed filtering accepted {len(found_links)} links."
                     )
                 else:
                     logger.warning(
-                        f"[PLP→PDP][Refilter] No candidates accepted after relaxed filtering. "
-                        f"Consider click fallback or selector adjustment."
+                        "[PLP→PDP][Refilter] No candidates accepted after relaxed filtering. "
+                        "Consider click fallback or selector adjustment."
                     )
-        
+
         links = sorted(list(found_links))
         if not links:
             # 詳細な診断情報をログに出力
@@ -1522,9 +1545,7 @@ class NavigationDriver:
                                     "data-product-url": await sample_node.get_attribute("data-product-url"),
                                     "class": await sample_node.get_attribute("class"),
                                 }
-                                logger.debug(
-                                    f"[PLP→PDP] Sample element from selector '{sel}': {sample_attrs}"
-                                )
+                                logger.debug(f"[PLP→PDP] Sample element from selector '{sel}': {sample_attrs}")
                     except Exception:
                         pass
                 if total_elements_found > 0:
@@ -1536,13 +1557,13 @@ class NavigationDriver:
                 logger.debug(f"[PLP→PDP] Diagnostic info collection failed: {e}")
 
         # Phase 3: Noise Filtering & Saving
-        cleaned: List[str] = []
+        cleaned: list[str] = []
         noise_rx = re.compile(r"/(collections?|seasons?|client-service|login|legal|cart|wishlist|search)/", re.I)
         for u in links:
             if not noise_rx.search(u):
                 cleaned.append(u)
         logger.info(f"[PLP→PDP] collected {len(cleaned)} PDP-like links (raw={len(links)})")
-        
+
         # CR-E2E-003: 候補収集の証跡を保存
         link_collection_summary = await self._save_link_collection_evidence(
             all_candidates=all_candidates,
@@ -1550,21 +1571,19 @@ class NavigationDriver:
             run_context=run_context,
             ctx=ctx,
         )
-        
+
         # CR-E2E-003: NavigationContextにサマリを保存（後でBrowserOrchestratorでevidenceに追加）
         ctx.link_collection_summary = link_collection_summary
-        
+
         try:
             sample = cleaned[:20]
             logger.debug(f"[PLP→PDP] sample={sample}")
             # Stage 3B: TelemetryClient を使用して JSON を保存
             if self.telemetry and ctx.run_context:
                 from app.agents.browser.telemetry import TelemetryContext
+
                 tctx = TelemetryContext(
-                    site=ctx.site,
-                    query=ctx.query,
-                    run_id=getattr(ctx.run_context, "run_id", None),
-                    stage="plp"
+                    site=ctx.site, query=ctx.query, run_id=getattr(ctx.run_context, "run_id", None), stage="plp"
                 )
                 await self.telemetry.save_json("raw_pdp_links_v85.5", {"links": cleaned, "sample": sample}, tctx)
                 await self.telemetry._service.save_raw_hrefs(cleaned, name="raw_hrefs_final_cleaned")
@@ -1573,6 +1592,7 @@ class NavigationDriver:
                 ctx.run_context.save_json("raw_pdp_links_v85.5.json", {"links": cleaned, "sample": sample})
                 # フォールバック: 既存のobservability.py関数を使用
                 from app.utils.observability import save_raw_hrefs
+
                 if callable(save_raw_hrefs):
                     res = save_raw_hrefs(ctx.run_context, cleaned, name="raw_hrefs_final_cleaned")
                     if asyncio.iscoroutine(res):
@@ -1583,26 +1603,25 @@ class NavigationDriver:
             pass
         return cleaned
 
-    async def _collect_moncler_pdp_links(self, ctx: NavigationContext) -> Set[str]:
+    async def _collect_moncler_pdp_links(self, ctx: NavigationContext) -> set[str]:
         """
         CR-ATELIER-002 Step 3: Moncler専用のPDP抽出ロジック
-        
+
         Monclerの実際のDOM構造に合わせたセレクタを使用してPDPリンクを抽出する。
         - /products/ パターンを含むURLを優先
         - 外部ドメイン（onetrust.com等）を明示的に除外
         - Moncler本体のドメイン（moncler.com）のみを対象とする
-        
+
         Args:
             ctx: ナビゲーションコンテキスト
-            
+
         Returns:
             Set[str]: 抽出されたPDPリンクのセット
         """
         page = self.page
-        site_config = ctx.site_config
         target_url = page.url
-        found_links: Set[str] = set()
-        
+        found_links: set[str] = set()
+
         # Moncler専用のセレクタ（/products/ パターンを含む）
         moncler_selectors = [
             # ProductCardコンポーネント内のリンク
@@ -1626,9 +1645,9 @@ class NavigationDriver:
             "[data-qa='product-tile'] a[href*='/products/']",
             "[data-qa*='product'] a[href*='/products/']",
         ]
-        
+
         logger.info(f"[PLP→PDP][Moncler] Starting Moncler-specific PDP extraction from URL: {target_url}")
-        
+
         # Phase 1: Moncler専用セレクタで抽出
         for sel in moncler_selectors:
             try:
@@ -1638,23 +1657,23 @@ class NavigationDriver:
                 matched_count = 0
                 rejected_count = 0
                 rejection_reasons = []
-                
+
                 for n in nodes:
                     href = (
-                        await n.get_attribute("href") or 
-                        await n.get_attribute("data-href") or 
-                        await n.get_attribute("data-product-url") or 
-                        await n.get_attribute("data-url")
+                        await n.get_attribute("href")
+                        or await n.get_attribute("data-href")
+                        or await n.get_attribute("data-product-url")
+                        or await n.get_attribute("data-url")
                     )
                     if not href:
                         rejected_count += 1
                         if rejected_count == 1:
                             rejection_reasons.append("no href attribute")
                         continue
-                    
+
                     # URLを正規化
                     norm_url = self._normalize_abs_url(target_url, href)
-                    
+
                     # Moncler専用のURLバリデーション
                     if not self._is_valid_moncler_pdp_url(norm_url, target_url):
                         rejected_count += 1
@@ -1662,10 +1681,10 @@ class NavigationDriver:
                             reason = self._get_moncler_rejection_reason(norm_url, target_url)
                             rejection_reasons.append(f"{reason}: {norm_url}")
                         continue
-                    
+
                     found_links.add(norm_url)
                     matched_count += 1
-                
+
                 if matched_count > 0:
                     logger.info(f"[PLP→PDP][Moncler] selector='{sel}' added {matched_count} links")
                 elif nodes and rejected_count > 0:
@@ -1676,12 +1695,12 @@ class NavigationDriver:
                     )
             except Exception as e:
                 logger.debug(f"[PLP→PDP][Moncler] selector='{sel}' failed: {e}")
-        
+
         # Phase 2: グローバルsweep（Moncler専用フィルタリング）
         if not found_links:
             logger.debug("[PLP→PDP][Moncler] Selector-based extraction found no links, trying global sweep...")
             try:
-                raw_hrefs: List[str] = await page.evaluate(
+                raw_hrefs: list[str] = await page.evaluate(
                     "() => Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(Boolean)"
                 )
                 pdp_rx = re.compile(r"/products?/", re.I)
@@ -1697,41 +1716,41 @@ class NavigationDriver:
                     logger.info(f"[PLP→PDP][Moncler] Global sweep found {len(found_links)} links")
             except Exception as e:
                 logger.warning(f"[PLP→PDP][Moncler] Global sweep failed: {e}")
-        
+
         # デバッグ用ログ
         if found_links:
             sample_urls = list(found_links)[:5]
             logger.debug(f"[PLP→PDP][Moncler] Sample PDP URLs: {sample_urls}")
         else:
-            logger.warning(f"[PLP→PDP][Moncler] No valid PDP links found after Moncler-specific extraction")
-        
+            logger.warning("[PLP→PDP][Moncler] No valid PDP links found after Moncler-specific extraction")
+
         return found_links
-    
+
     def _is_valid_moncler_pdp_url(self, url: str, base_url: str) -> bool:
         """
         CR-ATELIER-002 Step 3: Moncler専用のURLバリデーション
-        
+
         MonclerのPDP URLとして有効かどうかを判定する。
-        
+
         Args:
             url: 検証対象のURL
             base_url: ベースURL（同一オリジン判定用）
-            
+
         Returns:
             bool: 有効なMoncler PDP URLの場合True
         """
         try:
             parsed = urlparse(url)
-            
+
             # スキームチェック
             if parsed.scheme not in ("http", "https"):
                 return False
-            
+
             # ホストチェック（Moncler本体のドメインのみ）
             host = parsed.netloc.lower()
             if not host.endswith("moncler.com"):
                 return False
-            
+
             # 外部ドメインの明示的な除外（onetrust.com等）
             blocked_domains = [
                 "onetrust.com",
@@ -1744,12 +1763,12 @@ class NavigationDriver:
             for blocked in blocked_domains:
                 if blocked in host:
                     return False
-            
+
             # パスチェック（/products/ または /product/ を含む）
             path = parsed.path or ""
             if not re.search(r"/products?/", path, re.I):
                 return False
-            
+
             # 404やtrapページのパターンを除外
             trap_patterns = [
                 r"/404",
@@ -1761,28 +1780,25 @@ class NavigationDriver:
             for pattern in trap_patterns:
                 if re.search(pattern, path, re.I):
                     return False
-            
+
             # 同一オリジン判定
             if not is_same_origin(url, base_url):
                 return False
-            
+
             # looks_like_product_url のチェックも実行
-            if not looks_like_product_url(url):
-                return False
-            
-            return True
+            return looks_like_product_url(url)
         except Exception as e:
             logger.debug(f"[PLP→PDP][Moncler] URL validation failed for {url}: {e}")
             return False
-    
+
     def _get_moncler_rejection_reason(self, url: str, base_url: str) -> str:
         """
         Moncler URLバリデーションでrejectされた理由を取得
-        
+
         Args:
             url: 検証対象のURL
             base_url: ベースURL
-            
+
         Returns:
             str: reject理由
         """
@@ -1790,73 +1806,73 @@ class NavigationDriver:
             parsed = urlparse(url)
             host = parsed.netloc.lower()
             path = parsed.path or ""
-            
+
             # ホストチェック
             if not host.endswith("moncler.com"):
                 return "external_domain"
-            
+
             # ブロックドメイン
             if "onetrust.com" in host:
                 return "blocked_domain_onetrust"
             if "monclergroup.com" in host:
                 return "blocked_domain_monclergroup"
-            
+
             # パスチェック
             if not re.search(r"/products?/", path, re.I):
                 return "no_products_path"
-            
+
             # 同一オリジン
             if not is_same_origin(url, base_url):
                 return "different_origin"
-            
+
             # looks_like_product_url
             if not looks_like_product_url(url):
                 return "not_product_url_pattern"
-            
+
             return "unknown"
         except Exception:
             return "validation_error"
-    
+
     async def _save_link_collection_evidence(
         self,
-        all_candidates: List[LinkCandidate],
-        accepted_links: List[str],
-        run_context: Optional[Any],
+        all_candidates: list[LinkCandidate],
+        accepted_links: list[str],
+        run_context: Any | None,
         ctx: NavigationContext,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         CR-E2E-003A: リンク収集の証跡を保存し、サマリを返す
-        
+
         Phase別のJSONファイルを保存し、検証レポートを生成する。
-        
+
         Args:
             all_candidates: すべての候補リスト
             accepted_links: 受け入れられたリンクリスト
             run_context: RunContext（任意）
             ctx: NavigationContext
-        
+
         Returns:
             Dict[str, Any]: サマリデータ（evidence.link_collectionに追加する用）
         """
-        summary: Dict[str, Any] = {
+        summary: dict[str, Any] = {
             "total_candidates": len(all_candidates),
             "total_valid": len(accepted_links),
             "top_reject_reasons": {},
             "sample_candidates": [],
         }
-        
+
         if not run_context or not hasattr(run_context, "save_json"):
             return summary
-        
+
         # CR-E2E-003B拡張: validation_reportを初期化（finallyブロックで確実に保存するため）
-        validation_report: Optional[Dict[str, Any]] = None
-        
+        validation_report: dict[str, Any] | None = None
+
         try:
             # CR-E2E-003A: 候補をphase別に分類（最大200件まで）
-            phase1_candidates: List[Dict[str, Any]] = []
-            phase2_candidates: List[Dict[str, Any]] = []
-            phase3_candidates: List[Dict[str, Any]] = []
-            
+            phase1_candidates: list[dict[str, Any]] = []
+            phase2_candidates: list[dict[str, Any]] = []
+            phase3_candidates: list[dict[str, Any]] = []
+
             for candidate in all_candidates[:200]:  # 上限200件
                 candidate_dict = {
                     "phase": candidate.phase,
@@ -1870,56 +1886,61 @@ class NavigationDriver:
                     # CR-E2E-003B: product_url_rulesを追加
                     "product_url_rules": candidate.product_url_rules if candidate.product_url_rules else {},
                 }
-                
+
                 if candidate.phase in ("1a", "1b"):
                     phase1_candidates.append(candidate_dict)
                 elif candidate.phase == "2":
                     phase2_candidates.append(candidate_dict)
                 elif candidate.phase == "3":
                     phase3_candidates.append(candidate_dict)
-            
+
             # CR-E2E-003A: Phase別JSONファイルを保存
-            run_context.save_json("pdp_link_candidates_phase1.json", {
-                "phase": "1a/1b",
-                "candidates": phase1_candidates,
-                "total": len(phase1_candidates),
-            })
-            
-            run_context.save_json("pdp_link_candidates_phase2.json", {
-                "phase": "2",
-                "candidates": phase2_candidates,
-                "total": len(phase2_candidates),
-            })
-            
+            run_context.save_json(
+                "pdp_link_candidates_phase1.json",
+                {
+                    "phase": "1a/1b",
+                    "candidates": phase1_candidates,
+                    "total": len(phase1_candidates),
+                },
+            )
+
+            run_context.save_json(
+                "pdp_link_candidates_phase2.json",
+                {
+                    "phase": "2",
+                    "candidates": phase2_candidates,
+                    "total": len(phase2_candidates),
+                },
+            )
+
             # CR-E2E-003B拡張: Phase 3 (HAR/Network) のJSONファイルを保存
             if phase3_candidates:
-                run_context.save_json("pdp_link_candidates_phase3.json", {
-                    "phase": "3",
-                    "candidates": phase3_candidates,
-                    "total": len(phase3_candidates),
-                })
-            
+                run_context.save_json(
+                    "pdp_link_candidates_phase3.json",
+                    {
+                        "phase": "3",
+                        "candidates": phase3_candidates,
+                        "total": len(phase3_candidates),
+                    },
+                )
+
             # CR-E2E-003A: reject理由の集計
-            reject_reason_counts: Dict[str, int] = {}
+            reject_reason_counts: dict[str, int] = {}
             for candidate in all_candidates:
                 for reason in candidate.reject_reasons:
                     reject_reason_counts[reason] = reject_reason_counts.get(reason, 0) + 1
-            
+
             # 上位のreject理由を取得（最大10件）
-            top_reject_reasons = dict(sorted(
-                reject_reason_counts.items(),
-                key=lambda x: x[1],
-                reverse=True
-            )[:10])
-            
+            top_reject_reasons = dict(sorted(reject_reason_counts.items(), key=lambda x: x[1], reverse=True)[:10])
+
             # CR-E2E-003B: domain/path別の内訳を集計
             domain_rejected_count = 0
             path_rejected_count = 0
             allow_path_matched_count = 0
             forbidden_path_matched_count = 0
-            allow_path_pattern_counts: Dict[str, int] = {}
-            forbidden_path_pattern_counts: Dict[str, int] = {}
-            
+            allow_path_pattern_counts: dict[str, int] = {}
+            forbidden_path_pattern_counts: dict[str, int] = {}
+
             for candidate in all_candidates:
                 if candidate.product_url_rules:
                     rules = candidate.product_url_rules
@@ -1937,7 +1958,7 @@ class NavigationDriver:
                             allow_path_pattern_counts[pattern] = allow_path_pattern_counts.get(pattern, 0) + 1
                     if not rules.get("allow_path_matched", False) and not rules.get("forbidden_path_matched", False):
                         path_rejected_count += 1
-            
+
             # CR-E2E-003A: 検証レポートを生成（CR-E2E-003B拡張: 候補URL全件のreject reasonを必ず出す）
             validation_report = {
                 "total_candidates": len(all_candidates),
@@ -1950,16 +1971,12 @@ class NavigationDriver:
                 "path_rejected_count": path_rejected_count,
                 "allow_path_matched_count": allow_path_matched_count,
                 "forbidden_path_matched_count": forbidden_path_matched_count,
-                "allow_path_pattern_counts": dict(sorted(
-                    allow_path_pattern_counts.items(),
-                    key=lambda x: x[1],
-                    reverse=True
-                )[:10]),
-                "forbidden_path_pattern_counts": dict(sorted(
-                    forbidden_path_pattern_counts.items(),
-                    key=lambda x: x[1],
-                    reverse=True
-                )[:10]),
+                "allow_path_pattern_counts": dict(
+                    sorted(allow_path_pattern_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+                ),
+                "forbidden_path_pattern_counts": dict(
+                    sorted(forbidden_path_pattern_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+                ),
                 # CR-E2E-003B拡張: 候補URL全件のreject reason（最大200件）
                 "all_rejected_candidates": [
                     {
@@ -1972,7 +1989,8 @@ class NavigationDriver:
                         "notes": c.notes or "",
                         "product_url_rules": c.product_url_rules if c.product_url_rules else {},
                     }
-                    for c in all_candidates if not c.accepted
+                    for c in all_candidates
+                    if not c.accepted
                 ][:200],  # 最大200件
                 "sample_rejected": [
                     {
@@ -1985,10 +2003,11 @@ class NavigationDriver:
                         "notes": c.notes or "",
                         "product_url_rules": c.product_url_rules if c.product_url_rules else {},
                     }
-                    for c in all_candidates if not c.accepted
+                    for c in all_candidates
+                    if not c.accepted
                 ][:10],  # 最大10件（サンプル）
             }
-            
+
             # CR-E2E-003B拡張: finallyでflush（ファイルが空にならないように）
             try:
                 run_context.save_json("pdp_link_validation_report.json", validation_report)
@@ -2001,7 +2020,7 @@ class NavigationDriver:
                         json.dump(validation_report, f, indent=2, ensure_ascii=False)
                 except Exception as e2:
                     logger.error(f"[PLP→PDP] Failed to write validation report directly: {e2}", exc_info=True)
-            
+
             # CR-E2E-003A: サマリを更新（evidence.link_collection用）
             summary["total_candidates"] = len(all_candidates)
             summary["total_valid"] = len(accepted_links)
@@ -2018,7 +2037,7 @@ class NavigationDriver:
                 }
                 for c in all_candidates[:10]  # 最大10件
             ]
-            
+
             logger.info(
                 f"[PLP→PDP][CR-E2E-003A] Collected {len(all_candidates)} candidates, "
                 f"accepted {len(accepted_links)}, rejected {len(all_candidates) - len(accepted_links)}"
@@ -2037,7 +2056,7 @@ class NavigationDriver:
                     logger.info(f"[PLP→PDP] Saved validation report (finally) to: {report_path}")
                 except Exception as e:
                     logger.error(f"[PLP→PDP] Failed to save validation report in finally: {e}", exc_info=True)
-        
+
         return summary
 
     # ==============================================================================
@@ -2111,18 +2130,18 @@ class NavigationDriver:
     async def run_deep_extraction(
         self,
         page: Page,
-        site_config: Dict[str, Any],
-    ) -> List[str]:
+        site_config: dict[str, Any],
+    ) -> list[str]:
         """
         深い抽出を実行する（骨組みのみ）
-        
+
         Stage 3A-1: このステップでは、メソッドシグネチャのみ定義。
         実際のロジック移動は Stage 3A-2 で行います。
-        
+
         Args:
             page: Playwright Page オブジェクト
             site_config: サイト設定
-            
+
         Returns:
             List[str]: 抽出されたリンクのリスト（現時点では空リストを返す）
         """
@@ -2135,7 +2154,7 @@ class NavigationDriver:
         Stage 3A-2-3:
         旧 BrowserUseAgent._force_plp_recover のロジックをここに移行。
         挙動・ログ・例外の流れはそのまま維持すること。
-        
+
         PLP を回復する（強制的に PLP URL にナビゲート）。
         成功したら True / 失敗したら False を返す。
         """
@@ -2155,22 +2174,22 @@ class NavigationDriver:
             logger.debug(f"[recover_plp] Recovery failed: {e}")
         return False
 
-    async def _detect_trap_page(self, ctx: NavigationContext) -> Optional[Dict[str, str]]:
+    async def _detect_trap_page(self, ctx: NavigationContext) -> dict[str, str] | None:
         """
         CR-ATELIER-002 Step 1: Trap ページ検出（DOM ベース）
-        
+
         PLP ではない状態（404 / location gate / 想定外ロケール＋検索ページ）を検出する。
-        
+
         Args:
             ctx: ナビゲーションコンテキスト
-            
+
         Returns:
             trap を検出した場合は dict（type, reason を含む）、検出されなければ None
         """
         page = self.page
         site_config = ctx.site_config
         current_url = page.url or ""
-        
+
         try:
             # 1. 404 ページの検出
             # h1 要素に "It's not here" が含まれるかチェック
@@ -2183,7 +2202,7 @@ class NavigationDriver:
                     }
             except Exception:
                 pass
-            
+
             # URL パターンに `/404` や `not-found` が含まれるかチェック
             url_lower = current_url.lower()
             if "/404" in url_lower or "not-found" in url_lower:
@@ -2191,7 +2210,7 @@ class NavigationDriver:
                     "type": "404",
                     "reason": f"URL contains /404 or not-found: {current_url}",
                 }
-            
+
             # 2. Location gate の検出
             # 本文に "Select your location" が含まれるかチェック
             try:
@@ -2201,7 +2220,7 @@ class NavigationDriver:
                     # Moncler の product card セレクタを確認
                     plp_cfg = (site_config.get("selectors", {}) or {}).get("plp", {}) or {}
                     pdp_cfg = (site_config.get("selectors", {}) or {}).get("pdp", {}) or {}
-                    
+
                     # 商品カードのセレクタ候補
                     product_selectors = [
                         "[data-component='ProductCard']",
@@ -2213,10 +2232,9 @@ class NavigationDriver:
                     ]
                     # site_config からも取得
                     product_selectors.extend(
-                        (plp_cfg.get("tile_selectors", []) or []) +
-                        (pdp_cfg.get("pdp_link_selectors", []) or [])
+                        (plp_cfg.get("tile_selectors", []) or []) + (pdp_cfg.get("pdp_link_selectors", []) or [])
                     )
-                    
+
                     product_found = False
                     for sel in product_selectors[:5]:  # 最初の5つだけチェック（パフォーマンス）
                         try:
@@ -2226,7 +2244,7 @@ class NavigationDriver:
                                 break
                         except Exception:
                             continue
-                    
+
                     if not product_found:
                         return {
                             "type": "location_gate",
@@ -2234,14 +2252,14 @@ class NavigationDriver:
                         }
             except Exception:
                 pass
-            
+
             # 3. 想定外ロケール＋検索ページの検出
             # URL パスに `/en-lt/` や `/en-de/` など、`/en-int/` 以外のロケールが含まれるかチェック
             # かつ URL パスに `/search` が含まれるかチェック
-            locale_cfg = (site_config.get("locale", {}) or {})
+            locale_cfg = site_config.get("locale", {}) or {}
             prefer_locale = locale_cfg.get("prefer", "en-int")
             target_locale_path = f"/{prefer_locale}/"
-            
+
             # 想定外ロケールパターン（/en-int/ 以外のロケールセグメント）
             unexpected_locale_patterns = [
                 "/en-lt/",
@@ -2250,7 +2268,7 @@ class NavigationDriver:
                 "/en-jp/",
                 "/en-us/",
             ]
-            
+
             # URL に想定外ロケールが含まれ、かつ /search が含まれる場合
             if "/search" in url_lower:
                 for pattern in unexpected_locale_patterns:
@@ -2259,7 +2277,7 @@ class NavigationDriver:
                             "type": "unexpected_locale_search",
                             "reason": f"URL contains unexpected locale '{pattern}' and '/search': {current_url}",
                         }
-            
+
             # 二重ロケールパターン（例: /en-lt/en-int/search）
             if target_locale_path in url_lower and "/search" in url_lower:
                 # 二重ロケールが含まれているかチェック
@@ -2269,9 +2287,9 @@ class NavigationDriver:
                             "type": "unexpected_locale_search",
                             "reason": f"URL contains double locale pattern '{pattern}' and '/search': {current_url}",
                         }
-            
+
             return None
-            
+
         except Exception as e:
             logger.debug(f"[TrapDetector] Error during trap page detection: {e}", exc_info=True)
             return None
@@ -2279,15 +2297,15 @@ class NavigationDriver:
     def is_expected_locale_path(self, path: str, expected_locale: str) -> bool:
         """
         CR-E2E-003B拡張: Locale判定の共通化
-        
+
         パスが期待ロケールで始まるか判定する。
         - ^/{expected_locale}(/|$) をTrueとする
         - ^/en-[a-z]{2}/{expected_locale}(/|$) をTrueとする（国コードprefix付き）
-        
+
         Args:
             path: 検証対象パス
             expected_locale: 期待ロケール（例: "en-int"）
-        
+
         Returns:
             bool: 期待ロケールで始まる場合True
         """
@@ -2295,30 +2313,27 @@ class NavigationDriver:
             return False
         path_lower = path.lower()
         expected_lower = expected_locale.lower()
-        
+
         # パターン1: ^/{expected_locale}(/|$)
         if path_lower.startswith(f"/{expected_lower}/") or path_lower == f"/{expected_lower}":
             return True
-        
+
         # パターン2: ^/en-[a-z]{2}/{expected_locale}(/|$)
         locale_prefix_pattern = re.compile(rf"^/en-[a-z]{{2}}/{expected_lower}(/|$)", re.I)
-        if locale_prefix_pattern.match(path_lower):
-            return True
-        
-        return False
-    
+        return bool(locale_prefix_pattern.match(path_lower))
+
     def _is_locale_stable(
         self,
         url: str,
-        site_config: Optional[Dict[str, Any]] = None,
-    ) -> tuple[bool, Dict[str, Any]]:
+        site_config: dict[str, Any] | None = None,
+    ) -> tuple[bool, dict[str, Any]]:
         """
         CR-E2E-003B拡張: ロケールが安定しているか判定
-        
+
         Args:
             url: 検証対象URL
             site_config: サイト設定（任意）
-        
+
         Returns:
             (is_stable, diagnostics): 安定している場合True、診断情報
         """
@@ -2330,29 +2345,29 @@ class NavigationDriver:
             "trap_pattern_matched": False,
             "stable": False,
         }
-        
+
         try:
-            from urllib.parse import urlparse, parse_qs
-            
+            from urllib.parse import parse_qs, urlparse
+
             parsed = urlparse(url)
             path = parsed.path or ""
             query_params = parse_qs(parsed.query)
-            
+
             # locale_policyから設定を取得
             locale_policy = {}
             if site_config:
                 nav_cfg = site_config.get("navigation", {}) or {}
                 locale_policy = nav_cfg.get("locale_policy", {}) or {}
-            
+
             target_locale = locale_policy.get("target_locale", "en-int")
             target_country = locale_policy.get("target_country", "GB")
             reject_path_prefixes = locale_policy.get("reject_path_prefixes", [])
             trap_url_patterns = (nav_cfg.get("trap_url_patterns", []) if site_config else []) or []
-            
+
             # パスチェック（CR-E2E-003B拡張: 共通関数を使用）
             path_ok = self.is_expected_locale_path(path, target_locale)
             diagnostics["path_ok"] = path_ok
-            
+
             # 国チェック（CR-E2E-003B拡張: パスが/en-jp/で始まる場合はcountry_okを緩和）
             ship_to_country = query_params.get("shipToCountry", [])
             # パスが/en-jp/で始まる場合は、shipToCountryがJPでも許容
@@ -2363,7 +2378,7 @@ class NavigationDriver:
             else:
                 country_ok = target_country in ship_to_country if ship_to_country else False
             diagnostics["country_ok"] = country_ok
-            
+
             # reject_path_prefixesチェック
             reject_path_matched = False
             for prefix in reject_path_prefixes:
@@ -2371,7 +2386,7 @@ class NavigationDriver:
                     reject_path_matched = True
                     break
             diagnostics["reject_path_matched"] = reject_path_matched
-            
+
             # trap_url_patternsチェック（CR-E2E-003B拡張: /en-xx/{expected_locale}/ を例外化）
             trap_pattern_matched = False
             for pattern in trap_url_patterns:
@@ -2385,46 +2400,46 @@ class NavigationDriver:
                     trap_pattern_matched = True
                     break
             diagnostics["trap_pattern_matched"] = trap_pattern_matched
-            
+
             # 安定判定
             stable = path_ok and country_ok and not reject_path_matched and not trap_pattern_matched
             diagnostics["stable"] = stable
-            
+
             return stable, diagnostics
         except Exception as e:
             logger.warning(f"[LocaleGuard] _is_locale_stable failed: {e}", exc_info=True)
             diagnostics["error"] = str(e)
             return False, diagnostics
-    
+
     async def _ensure_expected_locale(self, ctx: NavigationContext) -> None:
         """
         CR-ATELIER-002 Step 2: Locale Guard - ロケール一貫性チェックと自動修正
         CR-ATELIER-002 Step 5-3: Redirect / Locale 挙動の扱い整理
         CR-E2E-003B拡張: モーダル検出→国/言語選択→再矯正→再判定（最大3回）
-        
+
         【責務】:
         - Pre-condition: Moncler の PLP/検索 URL
         - Post-condition:
           - page.url が /en-int/... で始まる
           - 「明らかな Trap（検索トップ / ロケールゲート / 404）」でないこと
           - 二重ロケールパターン（/en-lt/en-int/...）を検出して修正
-        
+
         【Search ページの扱い】:
         - /en-int/search であっても、DOM 上に product tile が並んでいるなら PLP 同等として扱う
         - ただし、明らかな検索トップページ（検索ボックスのみ）は Trap として扱う
-        
+
         【役割分担】:
         - LocaleGuard: 現在のページ自体を /en-int/...&shipToCountry=GB に揃える
         - TrapDetector: 明らかな Trap ページ（404、ロケールゲート、検索トップ）を検出
         - URL バリデーション: PDP 候補リンクをフィルタする
-        
+
         Args:
             ctx: ナビゲーションコンテキスト
         """
         page = self.page
         site_config = ctx.site_config
         run_context = ctx.run_context
-        
+
         # 診断情報を収集
         diagnostics = {
             "attempts": [],
@@ -2432,46 +2447,44 @@ class NavigationDriver:
             "final_url": None,
             "final_stable": False,
         }
-        
+
         # HTTPレスポンスエラーを記録
         http_errors = []
+
         async def on_response(response):
             if response.status in [404, 410]:
-                http_errors.append({
-                    "url": response.url,
-                    "status": response.status,
-                    "timestamp": time.time(),
-                })
-        
+                http_errors.append(
+                    {
+                        "url": response.url,
+                        "status": response.status,
+                        "timestamp": time.time(),
+                    }
+                )
+
         page.on("response", on_response)
-        
+
         current_url = page.url or ""
-        
+
         # MONCLER_OFFICIAL のみを対象とする
         # site_config のキーまたは ctx.site から site_code を取得
-        site_code = (
-            site_config.get("site_code") or 
-            site_config.get("site") or 
-            ctx.site or 
-            ""
-        )
+        site_code = site_config.get("site_code") or site_config.get("site") or ctx.site or ""
         if site_code != "MONCLER_OFFICIAL":
             logger.debug(f"[LocaleGuard] Skipping locale check for site: {site_code}")
             return
-        
+
         # locale_policyから設定を取得
         nav_cfg = (site_config.get("navigation", {}) or {}) if site_config else {}
         locale_policy = nav_cfg.get("locale_policy", {}) or {}
         location_modal_cfg = nav_cfg.get("location_modal", {}) or {}
-        
+
         target_locale = locale_policy.get("target_locale", "en-int")
         target_country = locale_policy.get("target_country", "GB")
         max_attempts = locale_policy.get("max_correction_attempts", 3)
         stability_check_delay_ms = locale_policy.get("stability_check_delay_ms", 2000)
         require_stable = locale_policy.get("require_stable_before_proceed", True)
-        
+
         # スクリーンショット保存用のヘルパー
-        async def save_screenshot(stage: str) -> Optional[str]:
+        async def save_screenshot(stage: str) -> str | None:
             """段階スクショを保存"""
             if not run_context:
                 return None
@@ -2486,29 +2499,31 @@ class NavigationDriver:
             except Exception as e:
                 logger.debug(f"[LocaleGuard] Failed to save screenshot {stage}: {e}")
                 return None
-        
+
         try:
-            from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-            
+            from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+
             parsed = urlparse(current_url)
             path = parsed.path or ""
             query_params = parse_qs(parsed.query)
-            
+
             # 期待値のチェック（CR-E2E-003B拡張: 共通関数を使用）
             expected_country = target_country
-            
+
             # パスチェック（共通関数を使用）
             path_ok = self.is_expected_locale_path(path, target_locale)
-            
+
             # クエリに `shipToCountry=GB` が含まれているかチェック（/en-jp/の場合は緩和）
             ship_to_country = query_params.get("shipToCountry", [])
             path_starts_with_jp = path.lower().startswith("/en-jp/")
             if path_starts_with_jp:
                 # /en-jp/の場合は、shipToCountryがJPまたはGBのどちらでもOK
-                country_ok = (expected_country in ship_to_country or "JP" in ship_to_country) if ship_to_country else True
+                country_ok = (
+                    (expected_country in ship_to_country or "JP" in ship_to_country) if ship_to_country else True
+                )
             else:
                 country_ok = expected_country in ship_to_country if ship_to_country else False
-            
+
             # CR-ATELIER-002 Step2: LocaleGuard - ensure Moncler stays on /en-int + shipToCountry=GB
             # 両方満たされている場合は何もしないが、INFOログを必ず出す
             if path_ok and country_ok:
@@ -2518,14 +2533,16 @@ class NavigationDriver:
                 diagnostics["final_url"] = current_url
                 diagnostics["final_stable"] = final_stable
                 diagnostics["http_errors"] = http_errors
-                diagnostics["attempts"] = [{
-                    "attempt": 0,
-                    "url_before": current_url,
-                    "url_after": current_url,
-                    "stable_after": final_stable,
-                    "stability_diagnostics": final_diag,
-                    "note": "Locale already stable, no correction needed"
-                }]
+                diagnostics["attempts"] = [
+                    {
+                        "attempt": 0,
+                        "url_before": current_url,
+                        "url_after": current_url,
+                        "stable_after": final_stable,
+                        "stability_diagnostics": final_diag,
+                        "note": "Locale already stable, no correction needed",
+                    }
+                ]
                 if run_context:
                     try:
                         # RunContextはrun_path属性を持つ
@@ -2539,35 +2556,34 @@ class NavigationDriver:
                 else:
                     logger.warning("[LocaleGuard] run_context is None, cannot save locale diagnostics")
                 return
-            
+
             # ロケールがずれている場合、修正を試みる
             logger.warning(
-                f"[LocaleGuard] Locale mismatch detected: path_ok={path_ok}, country_ok={country_ok}, "
-                f"URL={current_url}"
+                f"[LocaleGuard] Locale mismatch detected: path_ok={path_ok}, country_ok={country_ok}, URL={current_url}"
             )
-            
+
             # 正しいPLP URLを取得
             # MonclerPLPStrategy の _HARD_PLP_URL を優先、なければ site_config から取得
             corrected_url = None
-            
+
             # StrategyPlugin から取得を試みる
             if self.strategy and hasattr(self.strategy, "_HARD_PLP_URL"):
                 corrected_url = self.strategy._HARD_PLP_URL
                 logger.debug(f"[LocaleGuard] Using strategy _HARD_PLP_URL: {corrected_url}")
-            
+
             # site_config から取得
             if not corrected_url:
                 # plp_recovery の plp_hard_nav を確認
-                nav_cfg = (site_config.get("navigation", {}) or {})
+                nav_cfg = site_config.get("navigation", {}) or {}
                 plp_recovery_cfg = nav_cfg.get("plp_recovery", {}) or {}
                 corrected_url = (
-                    plp_recovery_cfg.get("plp_hard_nav") or
-                    site_config.get("seed_plp_url") or
-                    site_config.get("fallback_url") or
-                    (site_config.get("discovery_settings", {}) or {}).get("fallback_url") or
-                    site_config.get("home_url")
+                    plp_recovery_cfg.get("plp_hard_nav")
+                    or site_config.get("seed_plp_url")
+                    or site_config.get("fallback_url")
+                    or (site_config.get("discovery_settings", {}) or {}).get("fallback_url")
+                    or site_config.get("home_url")
                 )
-            
+
             # それでも取得できない場合は、現在のURLを修正
             # CR-E2E-003B拡張: path_ok==Trueの場合は矯正URL生成をスキップ
             if not corrected_url and not path_ok:
@@ -2590,7 +2606,7 @@ class NavigationDriver:
                 else:
                     # 既に期待ロケールで始まっている場合は変更しない
                     normalized_path = path
-                
+
                 # クエリパラメータを修正（冪等性を確保：既に設定されている場合は追加しない）
                 if "forceLocale" not in query_params or target_locale not in query_params.get("forceLocale", []):
                     query_params["forceLocale"] = [target_locale]
@@ -2598,17 +2614,12 @@ class NavigationDriver:
                     query_params["shipToCountry"] = [expected_country]
                 # 既存のクエリパラメータも保持
                 normalized_query = urlencode(query_params, doseq=True)
-                
-                corrected_url = urlunparse((
-                    parsed.scheme,
-                    parsed.netloc,
-                    normalized_path,
-                    parsed.params,
-                    normalized_query,
-                    parsed.fragment
-                ))
+
+                corrected_url = urlunparse(
+                    (parsed.scheme, parsed.netloc, normalized_path, parsed.params, normalized_query, parsed.fragment)
+                )
                 logger.debug(f"[LocaleGuard] Constructed corrected URL from current URL: {corrected_url}")
-            
+
             # CR-E2E-003B拡張: モーダル検出→国/言語選択→再矯正→再判定（最大3回）
             attempt_count = 0
             while attempt_count < max_attempts:
@@ -2622,14 +2633,13 @@ class NavigationDriver:
                     "url_after": None,
                     "stable_after": False,
                 }
-                
+
                 # beforeスクショを保存
                 screenshot_before = await save_screenshot(f"before_attempt_{attempt_count}")
                 if screenshot_before:
                     attempt_info["screenshot_before"] = screenshot_before
-                
+
                 # モーダル検出
-                modal_detected = False
                 if location_modal_cfg.get("enabled", True):
                     detection_selectors = location_modal_cfg.get("detection_selectors", [])
                     for sel in detection_selectors:
@@ -2646,15 +2656,14 @@ class NavigationDriver:
                                     logger.debug(f"[LocaleGuard] Modal detection selector '{sel}' failed: {e}")
                                 continue
                                 if is_visible:
-                                    modal_detected = True
                                     attempt_info["modal_detected"] = True
                                     logger.info(f"[LocaleGuard] Location modal detected (attempt {attempt_count})")
-                                    
+
                                     # modalスクショを保存
                                     screenshot_modal = await save_screenshot(f"modal_attempt_{attempt_count}")
                                     if screenshot_modal:
                                         attempt_info["screenshot_modal"] = screenshot_modal
-                                    
+
                                     # 国/言語選択
                                     country_selectors = location_modal_cfg.get("country_selectors", [])
                                     location_selected = False
@@ -2666,7 +2675,9 @@ class NavigationDriver:
                                                 country_visible = await country_locator.is_visible(timeout=1000)
                                             except (asyncio.CancelledError, Exception) as e:
                                                 if isinstance(e, asyncio.CancelledError):
-                                                    logger.debug(f"[LocaleGuard] Country selection cancelled for selector '{country_sel}'")
+                                                    logger.debug(
+                                                        f"[LocaleGuard] Country selection cancelled for selector '{country_sel}'"
+                                                    )
                                                 continue
                                                 if country_visible:
                                                     await country_locator.click(timeout=3000)
@@ -2674,13 +2685,15 @@ class NavigationDriver:
                                                     await page.wait_for_timeout(wait_after)
                                                     location_selected = True
                                                     attempt_info["modal_handled"] = True
-                                                    logger.info(f"[LocaleGuard] Selected location using selector: {country_sel}")
+                                                    logger.info(
+                                                        f"[LocaleGuard] Selected location using selector: {country_sel}"
+                                                    )
                                                     break
                                             except Exception:
                                                 continue
                                         except Exception:
                                             continue
-                                    
+
                                     if not location_selected:
                                         # モーダルを閉じる試行
                                         close_selectors = location_modal_cfg.get("close_selectors", [])
@@ -2692,7 +2705,9 @@ class NavigationDriver:
                                                     close_visible = await close_locator.is_visible(timeout=1000)
                                                 except (asyncio.CancelledError, Exception) as e:
                                                     if isinstance(e, asyncio.CancelledError):
-                                                        logger.debug(f"[LocaleGuard] Close modal cancelled for selector '{close_sel}'")
+                                                        logger.debug(
+                                                            f"[LocaleGuard] Close modal cancelled for selector '{close_sel}'"
+                                                        )
                                                     continue
                                                     if close_visible:
                                                         await close_locator.click(timeout=2000)
@@ -2710,14 +2725,14 @@ class NavigationDriver:
                         except Exception as e:
                             logger.debug(f"[LocaleGuard] Modal detection failed for selector '{sel}': {e}")
                             continue
-                
+
                 # ロケール安定性チェック
                 current_url_check = page.url or ""
                 is_stable, stability_diag = self._is_locale_stable(current_url_check, site_config)
                 attempt_info["url_after"] = current_url_check
                 attempt_info["stable_after"] = is_stable
                 attempt_info["stability_diagnostics"] = stability_diag
-                
+
                 if is_stable and require_stable:
                     logger.info(f"[LocaleGuard] Locale is stable after attempt {attempt_count}: {current_url_check}")
                     # afterスクショを保存
@@ -2728,25 +2743,27 @@ class NavigationDriver:
                     diagnostics["final_url"] = current_url_check
                     diagnostics["final_stable"] = True
                     break
-                
+
                 # まだ安定していない場合、再矯正を試みる（CR-E2E-003B拡張: path_ok==Trueの場合はスキップ）
                 if attempt_count < max_attempts:
                     # 現在のURLのpath_okをチェック
                     parsed_current_check = urlparse(current_url_check)
                     path_current_check = parsed_current_check.path or ""
                     path_ok_current = self.is_expected_locale_path(path_current_check, target_locale)
-                    
+
                     # path_ok==Trueの場合は矯正URL生成・navigateを実行しない
                     if path_ok_current:
-                        logger.info(f"[LocaleGuard] Attempt {attempt_count}: path_ok=True, skipping correction: {current_url_check}")
+                        logger.info(
+                            f"[LocaleGuard] Attempt {attempt_count}: path_ok=True, skipping correction: {current_url_check}"
+                        )
                         diagnostics["attempts"].append(attempt_info)
                         continue
-                    
+
                     # 再矯正URLを構築
                     parsed_current = urlparse(current_url_check)
                     path_current = parsed_current.path or ""
                     query_current = parse_qs(parsed_current.query)
-                    
+
                     # パスを正規化（冪等性を確保：既に期待ロケールが含まれる場合は二重挿入しない）
                     if not self.is_expected_locale_path(path_current, target_locale):
                         # ロケールが異なる場合のみ補正
@@ -2763,25 +2780,31 @@ class NavigationDriver:
                     else:
                         # 既に期待ロケールの場合は変更しない
                         normalized_path = path_current
-                    
+
                     # クエリパラメータを修正（冪等性を確保：既に設定されている場合は追加しない）
                     if "forceLocale" not in query_current or target_locale not in query_current.get("forceLocale", []):
                         query_current["forceLocale"] = [target_locale]
-                    if "shipToCountry" not in query_current or target_country not in query_current.get("shipToCountry", []):
+                    if "shipToCountry" not in query_current or target_country not in query_current.get(
+                        "shipToCountry", []
+                    ):
                         query_current["shipToCountry"] = [target_country]
                     normalized_query = urlencode(query_current, doseq=True)
-                    
-                    corrected_url = urlunparse((
-                        parsed_current.scheme,
-                        parsed_current.netloc,
-                        normalized_path,
-                        parsed_current.params,
-                        normalized_query,
-                        parsed_current.fragment
-                    ))
-                    
+
+                    corrected_url = urlunparse(
+                        (
+                            parsed_current.scheme,
+                            parsed_current.netloc,
+                            normalized_path,
+                            parsed_current.params,
+                            normalized_query,
+                            parsed_current.fragment,
+                        )
+                    )
+
                     if corrected_url != current_url_check:
-                        logger.warning(f"[LocaleGuard] Attempt {attempt_count}: Navigating to corrected URL: {corrected_url}")
+                        logger.warning(
+                            f"[LocaleGuard] Attempt {attempt_count}: Navigating to corrected URL: {corrected_url}"
+                        )
                         try:
                             await page.goto(corrected_url, wait_until="domcontentloaded", timeout=30000)
                             await page.wait_for_timeout(stability_check_delay_ms)
@@ -2789,16 +2812,16 @@ class NavigationDriver:
                         except Exception as e:
                             logger.warning(f"[LocaleGuard] Navigation failed on attempt {attempt_count}: {e}")
                             attempt_info["navigation_error"] = str(e)
-                
+
                 diagnostics["attempts"].append(attempt_info)
-            
+
             # 最終的な安定性チェック
             final_url = page.url or ""
             final_stable, final_diag = self._is_locale_stable(final_url, site_config)
             diagnostics["final_url"] = final_url
             diagnostics["final_stable"] = final_stable
             diagnostics["http_errors"] = http_errors
-            
+
             # locale_diagnostics.jsonを保存
             if run_context:
                 try:
@@ -2810,12 +2833,12 @@ class NavigationDriver:
                     logger.info(f"[LocaleGuard] Saved locale diagnostics to: {diagnostics_path}")
                 except Exception as e:
                     logger.warning(f"[LocaleGuard] Failed to save locale diagnostics: {e}", exc_info=True)
-            
+
             if not final_stable and require_stable:
                 logger.warning(f"[LocaleGuard] Locale is not stable after {max_attempts} attempts: {final_url}")
-            
+
             # 旧コードの残り部分は削除（上記のwhileループで実装済み）
-                
+
         except (asyncio.CancelledError, Exception) as e:
             # CR-E2E-003B拡張: 例外安全化（CancelledErrorとTimeoutErrorを捕捉）
             if isinstance(e, asyncio.CancelledError):
@@ -2823,7 +2846,7 @@ class NavigationDriver:
             else:
                 logger.warning(f"[LocaleGuard] Failed to normalize locale: {e}", exc_info=True)
             # 例外発生時でも診断情報を保存
-            diagnostics["final_url"] = page.url if hasattr(self, 'page') and self.page else current_url
+            diagnostics["final_url"] = page.url if hasattr(self, "page") and self.page else current_url
             diagnostics["final_stable"] = False
             diagnostics["error"] = str(e)
         finally:
@@ -2844,17 +2867,17 @@ class NavigationDriver:
     async def _click_first_card(
         self,
         page: Page,
-        site_config: Dict[str, Any],
-    ) -> Optional[Page]:
+        site_config: dict[str, Any],
+    ) -> Page | None:
         """
         最初のカードをクリックする（骨組みのみ）
-        
+
         Stage 3A-1: このステップでは、メソッドシグネチャのみ定義。
-        
+
         Args:
             page: Playwright Page オブジェクト
             site_config: サイト設定
-            
+
         Returns:
             Optional[Page]: クリック後の新しい Page（存在する場合）、または None
         """
@@ -2862,26 +2885,26 @@ class NavigationDriver:
         logger.debug("[NavigationDriver] _click_first_card (stub): returning None")
         return None
 
-    def _looks_like_trap_or_legal(self, url: str, site_config: Optional[Dict[str, Any]] = None) -> bool:
+    def _looks_like_trap_or_legal(self, url: str, site_config: dict[str, Any] | None = None) -> bool:
         """
         Stage 3A-2-3:
         旧 BrowserUseAgent._looks_like_trap_or_legal のロジックをここに移行。
         挙動・ログ・例外の流れはそのまま維持すること。
-        
+
         明らかに商品一覧ではなく、法務/クッキー/ヘルプ系に飛ばされてると判断したら True。
         こういうページに張り付いてもPDPは取れないので、早期abortさせる。
-        
+
         ★ V88.5.9: 先に軽量正規化を行ってから判定する。
         - /en-jp/en-int/ を /en-int/ に置換
         - #product-information-panel 等のハッシュを除去
-        
+
         Stage 3A-2-5: site_config から trap_url_patterns と legal_url_patterns を取得
         """
         try:
             # Stage 4: 二重ロケールの早期修正（site_configに基づく）
             locale_cfg = (site_config or {}).get("locale", {}) or {}
             normalize_double_locale = locale_cfg.get("normalize_double_locale", False)
-            
+
             if normalize_double_locale:
                 sp = urlsplit(url)
                 path = sp.path or ""
@@ -2907,25 +2930,22 @@ class NavigationDriver:
             nav_cfg = (site_config or {}).get("navigation", {}) or {}
             trap_patterns = nav_cfg.get("trap_url_patterns", [])
             legal_patterns = nav_cfg.get("legal_url_patterns", [])
-            
+
             # Stage 4: site_config から trap パターンをチェック（Moncler固有ロジックを削除）
-            if trap_patterns:
-                if any(pattern.lower() in full_lower for pattern in trap_patterns):
-                    logger.warning(f"[_looks_like_trap] Detected trap pattern: {url}")
-                    return True
-            
-            if legal_patterns:
-                if any(pattern.lower() in path_lower for pattern in legal_patterns):
-                    logger.warning(f"[_looks_like_trap] Detected legal pattern: {url}")
-                    return True
-            
+            if trap_patterns and any(pattern.lower() in full_lower for pattern in trap_patterns):
+                logger.warning(f"[_looks_like_trap] Detected trap pattern: {url}")
+                return True
+
+            if legal_patterns and any(pattern.lower() in path_lower for pattern in legal_patterns):
+                logger.warning(f"[_looks_like_trap] Detected legal pattern: {url}")
+                return True
+
             # trap_domains をチェック
             trap_domains = nav_cfg.get("trap_domains", [])
-            if trap_domains:
-                if any(domain.lower() in host for domain in trap_domains):
-                    logger.warning(f"[_looks_like_trap] Detected trap domain: {url}")
-                    return True
-            
+            if trap_domains and any(domain.lower() in host for domain in trap_domains):
+                logger.warning(f"[_looks_like_trap] Detected trap domain: {url}")
+                return True
+
             # locale_gate_detection をチェック
             locale_gate_cfg = nav_cfg.get("locale_gate_detection", {}) or {}
             if locale_gate_cfg.get("enabled", False):
@@ -2938,7 +2958,7 @@ class NavigationDriver:
                         if path_lower in [p.lower() for p in gate_paths]:
                             logger.warning(f"[_looks_like_trap] Detected locale gate: {url}")
                             return True
-            
+
             # デフォルトのリーガルキーワード（site_configに定義がない場合のフォールバック）
             # ただし、これは最小限に抑える
             default_legal_keywords = ["/cookie-policy", "/privacy", "/legal", "/help", "/account", "/login"]
@@ -2980,8 +3000,8 @@ class NavigationDriver:
             if parsed.scheme and parsed.scheme.lower() not in ("http", "https"):
                 return href
             parts = list(urlsplit(absu))
-            if parts[2].endswith('/'):
-                parts[2] = parts[2].rstrip('/')
+            if parts[2].endswith("/"):
+                parts[2] = parts[2].rstrip("/")
             parts[3] = ""
             parts[4] = ""
             return urlunsplit(parts)
@@ -2996,8 +3016,7 @@ class NavigationDriver:
             return False
         try:
             await asyncio.wait_for(
-                page.wait_for_selector(selector, state=state, timeout=timeout_ms),
-                timeout=(timeout_ms / 1000.0) + 0.5
+                page.wait_for_selector(selector, state=state, timeout=timeout_ms), timeout=(timeout_ms / 1000.0) + 0.5
             )
             return True
         except asyncio.CancelledError:
@@ -3007,20 +3026,20 @@ class NavigationDriver:
             logger.debug(f"[safe_wait_selector] Timeout/Error for '{selector}': {e}")
             return False
 
-    async def _run_deep_extraction_phase2(self, page: Page, site_config: Dict[str, Any]) -> List[str]:
+    async def _run_deep_extraction_phase2(self, page: Page, site_config: dict[str, Any]) -> list[str]:
         """
         Stage 3A-2-1:
         旧 BrowserUseAgent._run_deep_extraction_phase2 のロジックをここに移す。
         挙動・ログ・例外の流れはそのまま維持すること。
-        
+
         Deep Extraction Phase 2: JSON-LD, onclick, data-* 属性からリンクを抽出する
         """
         logger.debug("[Phase 2] Running deep extraction (JSON-LD, onclick, data-*, ...)")
         # ★ 88.6.2: (BugFix) 括弧が過剰だった SyntaxError を修正
-        container_sels: List[str] = (
-            ((site_config.get("selectors") or {}).get("pdp") or {}).get("plp_container_selectors", []) or []
-        )
-        for cont in (container_sels or []):
+        container_sels: list[str] = ((site_config.get("selectors") or {}).get("pdp") or {}).get(
+            "plp_container_selectors", []
+        ) or []
+        for cont in container_sels or []:
             await self.safe_wait_selector(page, cont, timeout_ms=1000, state="visible")
         try:
             for _ in range(2):
@@ -3032,7 +3051,7 @@ class NavigationDriver:
         # V86.0: Strict mode violation prevention + V88.2: Get ElementHandle
         # Stage 4: タイムアウト処理改善（CancelledErrorを適切に処理）
         scope = page.locator("main, [role='main'], #main, #app")
-        handle: Optional[ElementHandle] = None
+        handle: ElementHandle | None = None
         try:
             # タイムアウトを短くして、CancelledErrorを避ける
             # ただし、asyncio.wait_forでラップすると、タイムアウト時にCancelledErrorが発生する可能性がある
@@ -3045,7 +3064,9 @@ class NavigationDriver:
                 raise
             except Exception as e_handle:
                 # (V88.6.2: ログレベルは warning のまま)
-                logger.warning(f"[Phase 2] Could not get element handle for scope: {e_handle}. Falling back to page evaluate.")
+                logger.warning(
+                    f"[Phase 2] Could not get element handle for scope: {e_handle}. Falling back to page evaluate."
+                )
                 handle = None  # Ensure handle is None if getting it failed
         except asyncio.CancelledError:
             logger.debug("[Phase 2] Cancelled in outer try block")
@@ -3099,7 +3120,7 @@ class NavigationDriver:
           }
         """
 
-        hrefs: List[str] = []
+        hrefs: list[str] = []
         try:
             if handle:
                 # Execute JS within the specific element context
@@ -3164,38 +3185,38 @@ class NavigationDriver:
         used = int((time.monotonic() - start_t) * 1000)
         return max(0, budget_ms - used)
 
-    def _normalize_url(self, url: str, site_config: Dict[str, Any]) -> str:
+    def _normalize_url(self, url: str, site_config: dict[str, Any]) -> str:
         """
         Stage 4: URLを汎用的に正規化する
-        
+
         site_config["locale"]["normalize_rules"] と force_query_params を使用して
         ロケール正規化とクエリパラメータの追加を行う。
         /en-int/ などのハードコードを排除。
         """
         u = urlparse(url)
         path = (u.path or "/").replace("//", "/")
-        
+
         # site_configからロケール設定を取得（既存設定との互換性を確保）
-        locale_cfg = (site_config.get("locale", {}) or {})
-        
+        locale_cfg = site_config.get("locale", {}) or {}
+
         # normalize_rules: locale.normalize_rules を優先、なければルートレベルの normalize_rules を参照
         normalize_rules = locale_cfg.get("normalize_rules", [])
         if not normalize_rules:
             normalize_rules = site_config.get("normalize_rules", [])
-        
+
         # replace_rules も normalize_rules として扱う（既存設定との互換性）
         if not normalize_rules:
             replace_rules = locale_cfg.get("replace_rules", [])
             if replace_rules:
                 normalize_rules = [{"from": r.get("from", ""), "to": r.get("to", "")} for r in replace_rules]
-        
+
         prefer_locale = locale_cfg.get("prefer", None)
-        
+
         # normalize_double_locale: フラグがない場合は replace_rules の存在で判断
         normalize_double_locale = locale_cfg.get("normalize_double_locale", False)
         if not normalize_double_locale and locale_cfg.get("replace_rules"):
             normalize_double_locale = True
-        
+
         # 二重ロケールの正規化（例: /en-jp/en-int/ → /en-int/）
         if normalize_double_locale:
             double_locale_patterns = locale_cfg.get("double_locale_patterns", [])
@@ -3204,13 +3225,13 @@ class NavigationDriver:
                 replace_rules = locale_cfg.get("replace_rules", [])
                 if replace_rules:
                     double_locale_patterns = [{"from": r.get("from", ""), "to": r.get("to", "")} for r in replace_rules]
-            
+
             for pattern in double_locale_patterns:
                 from_pattern = pattern.get("from", "")
                 to_pattern = pattern.get("to", "")
                 if from_pattern and to_pattern:
                     path = path.replace(from_pattern, to_pattern)
-        
+
         # normalize_rules を適用
         for rule in normalize_rules:
             # 既存の normalize_rules 形式（if_url_contains/replace）にも対応
@@ -3226,7 +3247,7 @@ class NavigationDriver:
                 to_pattern = rule.get("to", "")
                 if from_pattern and to_pattern:
                     path = path.replace(from_pattern, to_pattern)
-        
+
         # ロケールセグメントの処理
         if prefer_locale:
             seg = [s for s in path.split("/") if s]
@@ -3239,50 +3260,51 @@ class NavigationDriver:
             norm = f"/{prefer_locale}/" + "/".join(seg)
         else:
             norm = path
-        
+
         if not norm.endswith("/") and norm != "/":
             norm += "/"
-        
+
         # クエリパラメータの処理
         q = dict(parse_qsl(u.query))
-        
+
         # force_query_params を追加（既存設定との互換性を確保）
         force_params = locale_cfg.get("force_query_params", {})
         # discovery_settings.force_query_params も参照（既存設定との互換性）
         if not force_params:
-            ds = (site_config.get("discovery_settings", {}) or {})
+            ds = site_config.get("discovery_settings", {}) or {}
             force_params = ds.get("force_query_params", {})
         if force_params:
             q.update(force_params)
-        
+
         # ensure_params の処理（normalize_rules内のensure_params）
         for rule in normalize_rules:
             ensure_params = rule.get("ensure_params", {})
             if ensure_params:
                 q.update(ensure_params)
-        
+
         # URLを再構築
         if q:
             from urllib.parse import urlencode
+
             norm += "?" + urlencode(q)
-        
+
         return f"{u.scheme}://{u.netloc}{norm}"
 
-    async def _accept_cookies_if_present(self, page: Page, site_config: Dict[str, Any]) -> bool:
+    async def _accept_cookies_if_present(self, page: Page, site_config: dict[str, Any]) -> bool:
         """Cookie 同意バナーがあればクリックする。ui_helpers に委譲。"""
         if ui_accept_cookies_if_present is not None:
             return await ui_accept_cookies_if_present(page, site_config)
         return False
 
-    async def _dismiss_geo_modal(self, page: Page, site_config: Optional[Dict[str, Any]] = None) -> None:
+    async def _dismiss_geo_modal(self, page: Page, site_config: dict[str, Any] | None = None) -> None:
         """ジオ / ロケール関係のモーダルを潰す"""
         # Stage 3A-2-5: site_config["navigation"]["overlays"]["geo_modal_selectors"] から取得
         geo_selectors = []
         if site_config:
-            nav_cfg = (site_config.get("navigation", {}) or {})
+            nav_cfg = site_config.get("navigation", {}) or {}
             overlays_cfg = nav_cfg.get("overlays", {}) or {}
             geo_selectors = overlays_cfg.get("geo_modal_selectors", [])
-        
+
         # フォールバック: 空の場合はデフォルトセレクタを使用
         if not geo_selectors:
             geo_selectors = [
@@ -3292,7 +3314,7 @@ class NavigationDriver:
                 "text=CONTINUE SHOPPING",
                 "text=ショッピングを続ける",
             ]
-        
+
         for sel in geo_selectors:
             try:
                 el = page.locator(sel).first
@@ -3328,11 +3350,11 @@ class NavigationDriver:
             """Stage 4: ターゲットロケールへの遷移を待つ（汎用化）"""
             locale_cfg = (site_config or {}).get("locale", {}) or {}
             prefer_locale = locale_cfg.get("prefer", "")
-            
+
             if not prefer_locale:
                 # ロケール設定がない場合は常にTrueを返す
                 return True
-            
+
             try:
                 # ターゲットロケールがURLに含まれているかチェック
                 locale_path = f"/{prefer_locale}/"
@@ -3355,7 +3377,7 @@ class NavigationDriver:
             geo_modal_preferred_locale = overlays_cfg.get("geo_modal_preferred_locale", "")
             locale_cfg = (site_config or {}).get("locale", {}) or {}
             prefer_locale = locale_cfg.get("prefer", geo_modal_preferred_locale)
-            
+
             # 優先ロケールに基づく候補セレクタ（デフォルトはen-gb）
             if prefer_locale and "gb" in prefer_locale.lower():
                 # United Kingdom / English の候補
@@ -3378,7 +3400,7 @@ class NavigationDriver:
                         preferred_candidates.append(page.locator(sel).first)
                     except Exception:
                         continue
-            
+
             for loc in preferred_candidates:
                 if await _click_first(loc, f"Preferred locale selector ({prefer_locale})"):
                     if await _wait_for_target_locale():
@@ -3400,12 +3422,12 @@ class NavigationDriver:
         except Exception as e:
             logger.warning(f"[GeoModal] Locale gate handling failed: {e}")
 
-    async def _kill_overlays(self, page: Page, site_config: Optional[Dict[str, Any]] = None) -> None:
+    async def _kill_overlays(self, page: Page, site_config: dict[str, Any] | None = None) -> None:
         """オーバーレイを削除する。ui_helpers に委譲。"""
         if ui_kill_overlays is not None:
             await ui_kill_overlays(page)
             return
-        try:
+        with contextlib.suppress(Exception):
             await page.evaluate("""
               (() => {
                 const sels = ['.overlay','.backdrop','.modal-backdrop','#onetrust-banner-sdk','.cookie-banner','[aria-modal="true"]','.cmp-ui-overlay','.cmp-modal','.drawer--open'];
@@ -3414,24 +3436,22 @@ class NavigationDriver:
                 const html=document.documentElement; if (html) { html.style.overflow=''; html.classList.remove('no-scroll','overflow-hidden'); }
               })();
             """)
-        except Exception:
-            pass
 
-    async def _force_plp_recover(self, page: Page, site_config: Dict[str, Any], target_url: Optional[str]) -> None:
+    async def _force_plp_recover(self, page: Page, site_config: dict[str, Any], target_url: str | None) -> None:
         """
         Stage 4: PLP 回復（汎用化）
         site_config["navigation"]["plp_recovery"] と discovery_settings.fallback_url を使用
         """
         try:
             # site_configからPLP回復設定を取得
-            nav_cfg = (site_config.get("navigation", {}) or {})
+            nav_cfg = site_config.get("navigation", {}) or {}
             plp_recovery_cfg = nav_cfg.get("plp_recovery", {}) or {}
             recovery_enabled = plp_recovery_cfg.get("enabled", True)
-            
+
             if not recovery_enabled:
                 logger.debug("[recover] PLP recovery is disabled in site_config")
                 return
-            
+
             # PLP URL候補の取得（優先順位: target_url > plp_hard_nav > seed_plp_url > fallback_url > discovery_settings.fallback_url > home_url）
             plp = (
                 target_url
@@ -3442,16 +3462,16 @@ class NavigationDriver:
                 or plp_recovery_cfg.get("fallback_url")
                 or site_config.get("home_url")
             )
-            
+
             if not plp:
                 logger.debug("[recover] no PLP candidate found; skip")
                 return
-            
+
             # ロケール正規化（site_configに基づく）
             normalize_locale = plp_recovery_cfg.get("normalize_locale", True)
             if normalize_locale:
                 plp = self._normalize_url(plp, site_config)
-            
+
             logger.info("[recover] Forcing PLP navigation: %s", plp)
             await page.goto(url=plp, wait_until="domcontentloaded")
         except Exception as e:
@@ -3462,7 +3482,7 @@ class NavigationDriver:
         Stage 3A-2-2:
         旧 BrowserUseAgent._ensure_plp_materialized のロジックをここに移行。
         挙動・ログ・例外の流れはそのまま維持すること。
-        
+
         PLP をスクロールしてタイルが十分に出るまで待つ処理。
         """
         page = self.page
@@ -3475,11 +3495,11 @@ class NavigationDriver:
         # Stage 3A-2-5: site_config から tile_selectors を取得（優先順位: plp.tile_selectors > pdp.pdp_link_selectors）
         plp_cfg = (site_config.get("selectors", {}) or {}).get("plp", {}) or {}
         pdp_cfg = (site_config.get("selectors", {}) or {}).get("pdp", {}) or {}
-        
+
         tile_selectors = _dedupe_keep_order(
-            (plp_cfg.get("tile_selectors", []) or []) +  # 新規: plp.tile_selectors を優先
-            (plp_cfg.get("pdp_link_selectors", []) or []) +  # plp.pdp_link_selectors も使用
-            (pdp_cfg.get("pdp_link_selectors", []) or [])
+            (plp_cfg.get("tile_selectors", []) or [])  # 新規: plp.tile_selectors を優先
+            + (plp_cfg.get("pdp_link_selectors", []) or [])  # plp.pdp_link_selectors も使用
+            + (pdp_cfg.get("pdp_link_selectors", []) or [])
             + (pdp_cfg.get("plp_container_selectors", []) or [])
             + [
                 "a[data-product-url]",
@@ -3517,15 +3537,14 @@ class NavigationDriver:
                 except Exception as e:
                     logger.debug(f"[Materialize] Cookie banner handling failed: {e}")
             else:
-                try:
+                with contextlib.suppress(Exception):
                     await self._accept_cookies_if_present(page, site_config)
-                except Exception:
-                    pass
-            
+
             try:
                 # Stage 3A-2-5: site_config を渡す
                 # タイムアウトを避けるため、asyncio.wait_for でラップ
                 import asyncio
+
                 try:
                     await asyncio.wait_for(self._dismiss_geo_modal(page, site_config), timeout=10.0)
                 except asyncio.TimeoutError:
@@ -3543,10 +3562,10 @@ class NavigationDriver:
 
             # Stage 4: ロケールリダイレクトの検出（汎用化）
             current_url = (page.url or "").lower()
-            locale_cfg = (site_config.get("locale", {}) or {})
+            locale_cfg = site_config.get("locale", {}) or {}
             prefer_locale = locale_cfg.get("prefer", "")
             allowed_domain = site_config.get("allowed_domain", "")
-            
+
             # ターゲットロケール以外のロケールにリダイレクトされた場合を検出
             if prefer_locale and allowed_domain:
                 # 現在のURLがターゲットロケールを含まない場合
@@ -3554,7 +3573,9 @@ class NavigationDriver:
                 if allowed_domain.lower() in current_url and target_locale_path not in current_url:
                     # ロケールセグメントが含まれているかチェック
                     if _LOCALE_SEG_RE.search(current_url):
-                        logger.warning(f"[Materialize] Detected locale redirect away from {prefer_locale} mid-attempt: {current_url}")
+                        logger.warning(
+                            f"[Materialize] Detected locale redirect away from {prefer_locale} mid-attempt: {current_url}"
+                        )
                         if locale_recover_attempts >= locale_recover_max:
                             logger.error("[Materialize] Locale recovery exceeded max attempts. Aborting.")
                             return False
@@ -3567,15 +3588,15 @@ class NavigationDriver:
                             try:
                                 await self._ensure_expected_locale(ctx)
                             except Exception as locale_e:
-                                logger.warning(f"[Materialize] Locale Guard after locale redirect recovery failed: {locale_e}", exc_info=True)
+                                logger.warning(
+                                    f"[Materialize] Locale Guard after locale redirect recovery failed: {locale_e}",
+                                    exc_info=True,
+                                )
                             continue
 
             if run_ctx is not None and hasattr(run_ctx, "take_screenshot") and attempt < 3:
                 try:
-                    await run_ctx.take_screenshot(
-                        page,
-                        f"30_plp_materialize_attempt_{attempt + 1:02d}"
-                    )
+                    await run_ctx.take_screenshot(page, f"30_plp_materialize_attempt_{attempt + 1:02d}")
                 except Exception as ss_e:
                     logger.warning(f"[Materialize] Screenshot failed on attempt {attempt + 1}: {ss_e}")
 
@@ -3583,10 +3604,8 @@ class NavigationDriver:
                 for _ in range(6):
                     await page.evaluate("window.scrollBy(0, Math.floor(window.innerHeight*0.6))")
                     await page.wait_for_timeout(160)
-                try:
+                with contextlib.suppress(Exception):
                     await page.wait_for_load_state("networkidle", timeout=800)
-                except Exception:
-                    pass
             except Exception as e:
                 logger.warning(f"[Materialize] Scroll failed on attempt {attempt + 1}: {e}")
                 break
@@ -3612,7 +3631,7 @@ class NavigationDriver:
             try:
                 count = await page.locator(tile_selector_str).count()
                 logger.info(f"[Materialize] Attempt {attempt + 1}/{max_scroll_attempts}, found {count} tiles.")
-                
+
                 # Cookie バナーがまだ表示されている場合は、閉じる処理を再試行
                 if count == 0 and attempt < 2:
                     try:
@@ -3620,7 +3639,9 @@ class NavigationDriver:
                         if await banner_container.count() > 0:
                             is_visible = await banner_container.first.is_visible()
                             if is_visible:
-                                logger.warning("[Materialize] Cookie banner still visible, attempting to close again...")
+                                logger.warning(
+                                    "[Materialize] Cookie banner still visible, attempting to close again..."
+                                )
                                 await self._accept_cookies_if_present(page, site_config)
                                 await page.wait_for_timeout(1500)  # バナーを閉じた後、コンテンツが読み込まれるまで待機
                                 # タイル数を再カウント
@@ -3628,12 +3649,14 @@ class NavigationDriver:
                                 logger.info(f"[Materialize] After closing banner, found {count} tiles.")
                     except Exception as e:
                         logger.debug(f"[Materialize] Cookie banner check failed: {e}")
-                
+
                 if count >= target_min_tiles:
                     logger.info(f"[Materialize] Success: Found {count} tiles (>= {target_min_tiles}).")
                     return True
                 if count < 4 and attempt >= 1:
-                    logger.warning(f"[Materialize] Low tiles ({count}) after {attempt+1} attempts, forcing recovery hop.")
+                    logger.warning(
+                        f"[Materialize] Low tiles ({count}) after {attempt + 1} attempts, forcing recovery hop."
+                    )
                     if target_url:
                         try:
                             await self._force_plp_recover(page, site_config, target_url)
@@ -3643,7 +3666,9 @@ class NavigationDriver:
                             try:
                                 await self._ensure_expected_locale(ctx)
                             except Exception as locale_e:
-                                logger.warning(f"[Materialize] Locale Guard after recovery hop failed: {locale_e}", exc_info=True)
+                                logger.warning(
+                                    f"[Materialize] Locale Guard after recovery hop failed: {locale_e}", exc_info=True
+                                )
                             rec_count = await page.locator(tile_selector_str).count()
                             logger.info(f"[Materialize] After recovery hop, tiles={rec_count}")
                             if rec_count >= target_min_tiles:
@@ -3659,12 +3684,14 @@ class NavigationDriver:
 
         final_count = await page.locator(tile_selector_str).count()
         if final_count > 0:
-            logger.warning(f"[Materialize] Finished attempts, found {final_count} tiles (< {target_min_tiles}), but proceeding as non-empty.")
+            logger.warning(
+                f"[Materialize] Finished attempts, found {final_count} tiles (< {target_min_tiles}), but proceeding as non-empty."
+            )
             return True
         logger.error("[Materialize] Failed: No product tiles found after all scroll attempts.")
         return False
 
-    async def _click_continue_shopping_if_present(self, page: Page, site_config: Dict[str, Any]) -> bool:
+    async def _click_continue_shopping_if_present(self, page: Page, site_config: dict[str, Any]) -> bool:
         """CONTINUE SHOPPING ボタンがあればクリックする。ui_helpers に委譲。"""
         if ui_click_continue_shopping_if_present is not None:
             return await ui_click_continue_shopping_if_present(page, site_config)
@@ -3676,10 +3703,10 @@ class NavigationDriver:
         page: Page,
         context: BrowserContext,
         *,
-        url_regex: Optional[re.Pattern] = None,
+        url_regex: re.Pattern | None = None,
         wait_state: str = "domcontentloaded",
         timeout_ms: int = 5000,
-    ) -> Optional[Page]:
+    ) -> Page | None:
         """
         Stage 3A-2-4:
         クリック操作を実行し、ナビゲーション（ポップアップ、SPA遷移など）をキャプチャする。
@@ -3690,7 +3717,11 @@ class NavigationDriver:
         popup_task = asyncio.create_task(context.wait_for_event("page", timeout=timeout_ms))
         same_tab_nav_task = asyncio.create_task(page.wait_for_event("framenavigated", timeout=timeout_ms))
         spa_url_task = asyncio.create_task(page.wait_for_url(url_regex, timeout=timeout_ms)) if url_regex else None
-        sel_spa = ", ".join(VISIBLE_PRICE_SELECTORS) if VISIBLE_PRICE_SELECTORS else "[itemprop=price],[class*=price],[data-testid*=price]"
+        sel_spa = (
+            ", ".join(VISIBLE_PRICE_SELECTORS)
+            if VISIBLE_PRICE_SELECTORS
+            else "[itemprop=price],[class*=price],[data-testid*=price]"
+        )
         spa_price_task = asyncio.create_task(page.wait_for_selector(sel_spa, state="visible", timeout=timeout_ms))
 
         try:
@@ -3728,10 +3759,8 @@ class NavigationDriver:
                     await new_page.wait_for_load_state("domcontentloaded", timeout=1500)
             except Exception as e_blank:
                 logger.debug(f"[_click_and_capture] Wait for about:blank failed: {e_blank}")
-            try:
+            with contextlib.suppress(Exception):
                 await new_page.wait_for_load_state(wait_state, timeout=max(500, timeout_ms // 10))
-            except Exception:
-                pass
             if url_regex:
                 try:
                     await new_page.wait_for_url(url_regex, timeout=max(1000, timeout_ms // 4))
@@ -3755,18 +3784,17 @@ class NavigationDriver:
         """
         page = self.page
         site_config = ctx.site_config
-        settings = ctx.settings
         query = ctx.query
         start_t = ctx.start_t
         budget_ms = ctx.budget_ms
 
         # Stage 3A-2-5: site_config["navigation"]["header_search"] から取得
-        nav_cfg = (site_config.get("navigation", {}) or {})
+        nav_cfg = site_config.get("navigation", {}) or {}
         hs_cfg = nav_cfg.get("header_search", {}) or {}
-        
+
         # フォールバック: 既存の ui 構造もサポート
         ui = (site_config.get("selectors", {}) or {}).get("ui", {}) or {}
-        
+
         # Stage 4: 文字列とリストの両方に対応（site_configで文字列が設定されている場合がある）
         def _ensure_list(value):
             """文字列をリストに変換、リストはそのまま、None/空は空リスト"""
@@ -3777,17 +3805,19 @@ class NavigationDriver:
             if isinstance(value, list):
                 return value
             return []
-        
+
         sel_open = _dedupe_keep_order(
-            _ensure_list(hs_cfg.get("search_open_selector")) +
-            _ensure_list(ui.get("search_open")) + [
+            _ensure_list(hs_cfg.get("search_open_selector"))
+            + _ensure_list(ui.get("search_open"))
+            + [
                 "button[aria-label='Search']",
                 "[aria-label*='Search' i]",
             ]
         )
         sel_input = _dedupe_keep_order(
-            _ensure_list(hs_cfg.get("search_input_selector")) +
-            _ensure_list(ui.get("search_input")) + [
+            _ensure_list(hs_cfg.get("search_input_selector"))
+            + _ensure_list(ui.get("search_input"))
+            + [
                 "form[role='search'] input",
                 "input[type='search']",
                 "input[name='q']",
@@ -3797,9 +3827,9 @@ class NavigationDriver:
             ]
         )
         sel_submit = _dedupe_keep_order(
-            _ensure_list(hs_cfg.get("submit_selector")) +
-            _ensure_list(ui.get("search_submit")) + 
-            ["form[role='search'] button[type='submit']"]
+            _ensure_list(hs_cfg.get("submit_selector"))
+            + _ensure_list(ui.get("search_submit"))
+            + ["form[role='search'] button[type='submit']"]
         )
         clear_before_type = hs_cfg.get("clear_before_type", True)
 
@@ -3813,7 +3843,9 @@ class NavigationDriver:
                     await el.click(timeout=3000)
                     opened = True
                     await asyncio.sleep(0.2)
-                    await self.safe_wait_selector(page, "[role='search'], [data-overlay], dialog[open]", timeout_ms=5000, state="visible")
+                    await self.safe_wait_selector(
+                        page, "[role='search'], [data-overlay], dialog[open]", timeout_ms=5000, state="visible"
+                    )
                     logger.debug(f"[Fallback] opened search with '{s}'")
                     break
             if not opened:
@@ -3861,53 +3893,54 @@ class NavigationDriver:
                 # Stage 4: site_configから検索URLテンプレートを取得（既存設定との互換性を確保）
                 url_template = hs_cfg.get("url_template", "")
                 base_url_key = hs_cfg.get("base_url", "home_url")
-                
+
                 # url_templateがリストの場合は最初の要素を使用
                 if isinstance(url_template, list):
                     url_template = url_template[0] if url_template else ""
-                
+
                 if not url_template:
                     # フォールバック: discovery_settingsから取得（既存設定との互換性）
-                    ds = (site_config.get("discovery_settings", {}) or {})
+                    ds = site_config.get("discovery_settings", {}) or {}
                     url_templates = ds.get("url_templates", {}) or {}
                     url_template = url_templates.get("search", "")
                     # リストの場合は最初の要素を使用
                     if isinstance(url_template, list):
                         url_template = url_template[0] if url_template else ""
-                
+
                 if not url_template or not isinstance(url_template, str):
                     logger.warning("[Fallback] No valid search URL template found in site_config")
                     return False
-                
+
                 # ベースURLを取得
                 if base_url_key == "home_url":
                     base_url = site_config.get("home_url", "")
                 else:
                     base_url = site_config.get(base_url_key, site_config.get("home_url", ""))
-                
+
                 # base_urlがリストの場合は最初の要素を使用
                 if isinstance(base_url, list):
                     base_url = base_url[0] if base_url else ""
-                
+
                 if not base_url or not isinstance(base_url, str):
                     logger.warning("[Fallback] No valid base URL found in site_config")
                     return False
-                
+
                 # URLテンプレートのプレースホルダを置換
                 # {query} を置換
                 search_url = url_template.replace("{query}", quote_plus(query))
-                
+
                 # {locale} を置換（locale.preferを使用）
-                locale_cfg = (site_config.get("locale", {}) or {})
+                locale_cfg = site_config.get("locale", {}) or {}
                 prefer_locale = locale_cfg.get("prefer", "")
                 if "{locale}" in search_url and prefer_locale:
                     search_url = search_url.replace("{locale}", prefer_locale)
-                
+
                 # 相対URLの場合はbase_urlと結合
                 if not search_url.startswith("http"):
                     from urllib.parse import urljoin
+
                     search_url = urljoin(base_url, search_url)
-                
+
                 logger.info(f"[Fallback] Using search URL from site_config: {search_url}")
                 await page.goto(url=search_url, wait_until="domcontentloaded", timeout=30000)
                 await self._click_continue_shopping_if_present(page, site_config)
@@ -3920,7 +3953,7 @@ class NavigationDriver:
                 logger.error(f"[Fallback] Direct search URL failed: {final_e}")
                 return False
 
-    async def click_first_card_or_link(self, ctx: NavigationContext) -> Optional[str]:
+    async def click_first_card_or_link(self, ctx: NavigationContext) -> str | None:
         """
         Stage 3A-2-4:
         旧 BrowserUseAgent._click_first_card_or_link のロジックをここに移行。
@@ -3935,34 +3968,34 @@ class NavigationDriver:
             return None
 
         # Stage 3A-2-5: site_config["navigation"]["fallback"]["click_first_card"] から取得
-        nav_cfg = (site_config.get("navigation", {}) or {})
+        nav_cfg = site_config.get("navigation", {}) or {}
         fb_cfg = nav_cfg.get("fallback", {}) or {}
         click_cfg = fb_cfg.get("click_first_card", {}) or {}
-        
+
         # フォールバック: 既存の pdp 構造もサポート
         pdp = (site_config.get("selectors", {}) or {}).get("pdp", {}) or {}
         plp_selectors = (site_config.get("selectors", {}) or {}).get("plp", {}) or {}
-        
+
         # enabled が False の場合はスキップ
         if not click_cfg.get("enabled", True):
             logger.debug("[Fallback:click-card] click_first_card is disabled in site_config")
             return None
-        
+
         # card_selectors を取得（優先順位: navigation.fallback.click_first_card.card_selectors > selectors.plp.card_selectors > selectors.pdp.pdp_link_selectors）
         link_sel = _dedupe_keep_order(
-            (click_cfg.get("card_selectors", []) or []) +
-            (plp_selectors.get("card_selectors", []) or []) +
-            (pdp.get("pdp_link_selectors", []) or [])
+            (click_cfg.get("card_selectors", []) or [])
+            + (plp_selectors.get("card_selectors", []) or [])
+            + (pdp.get("pdp_link_selectors", []) or [])
         )
-        
+
         plp_boxes = _dedupe_keep_order(
-            (plp_selectors.get("container_selectors", []) or []) +
-            (pdp.get("plp_container_selectors", []) or []) +
-            (["main", "section[role='main']", "#main", "[id*='product' i]", "[class*='product' i]"])
+            (plp_selectors.get("container_selectors", []) or [])
+            + (pdp.get("plp_container_selectors", []) or [])
+            + (["main", "section[role='main']", "#main", "[id*='product' i]", "[class*='product' i]"])
         )
         block_ng = set(
-            (click_cfg.get("blocklist_href_substrings", []) or []) +
-            (pdp.get("blocklist_href_substrings", ["/cart", "/wishlist", "javascript:void"]))
+            (click_cfg.get("blocklist_href_substrings", []) or [])
+            + (pdp.get("blocklist_href_substrings", ["/cart", "/wishlist", "javascript:void"]))
         )
         url_pat = re.compile(r"/product[s]?/|/p/|/pp/", re.I)
 
@@ -4000,7 +4033,7 @@ class NavigationDriver:
         ]
         # 重複を除去
         tile_selectors = _dedupe_keep_order(tile_selectors)
-        
+
         # まず、box スコープなしで直接 tile_selectors を試す
         for tile_sel in tile_selectors:
             try:
@@ -4011,7 +4044,7 @@ class NavigationDriver:
                 except Exception as e:
                     logger.debug(f"[Fallback:click-card] wait_for failed for '{tile_sel}': {e}")
                     continue
-                
+
                 count = await card.count()
                 if count > 0:
                     await card.scroll_into_view_if_needed(timeout=3000)
@@ -4023,7 +4056,7 @@ class NavigationDriver:
             except Exception as e:
                 logger.debug(f"[Fallback:click-card] Selector '{tile_sel}' failed: {e}")
                 continue
-        
+
         # box スコープ付きで試す（フォールバック）
         for box in plp_boxes:
             for tile_sel in tile_selectors:
@@ -4031,7 +4064,7 @@ class NavigationDriver:
                     # セレクタを組み立て
                     selector = f"{box} {tile_sel}".strip()
                     card = page.locator(selector).first
-                    
+
                     # 要素が存在するか確認（タイムアウトを短く設定）
                     # Stage 4: タイムアウトエラーを適切に処理（CancelledErrorを避ける）
                     try:
@@ -4049,7 +4082,7 @@ class NavigationDriver:
                     except Exception as e:
                         logger.debug(f"[Fallback:click-card] wait_for failed for '{tile_sel}': {e}")
                         continue
-                    
+
                     count = await card.count()
                     if count > 0:
                         await card.scroll_into_view_if_needed(timeout=3000)
@@ -4064,17 +4097,17 @@ class NavigationDriver:
 
         logger.warning("[Fallback:click-card] Could not find any clickable link or card.")
         return None
-    
+
     async def _trigger_moncler_self_healing(
         self,
         ctx: NavigationContext,
         failure_reason: str,
-        outcome_dict: Dict[str, Any],
+        outcome_dict: dict[str, Any],
     ) -> None:
         """
         CR-ATELIER-002 Step 6-3: Moncler 専用の Self-Healing / Selector Discovery をトリガー
         CR-ATELIER-002 Step 7-4: パッチ生成モジュールを呼び出してファイル保存
-        
+
         Args:
             ctx: ナビゲーションコンテキスト
             failure_reason: 失敗理由（"raw_zero", "rejected_all", "secondary_or_tertiary_used", "trap_detected", "locale_corrections_exceeded"）
@@ -4082,18 +4115,16 @@ class NavigationDriver:
         """
         try:
             # Self-Healing Agent と Selector Discovery Agent をインポート
-            from app.agents.self_healing_agent import SelfHealingAgent
-            from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
             from app.agents.moncler_patch_builder import process_moncler_self_healing_results
-            
+            from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
+            from app.agents.self_healing_agent import SelfHealingAgent
+
             # DOM スナップショットのパスを取得
             dom_snapshot_path = None
             if ctx.run_context:
-                try:
+                with contextlib.suppress(Exception):
                     dom_snapshot_path = str(ctx.run_context.get_path("failure_dom.html"))
-                except Exception:
-                    pass
-            
+
             # failure_payload を構築
             failure_payload = {
                 "site": "MONCLER_OFFICIAL",
@@ -4106,7 +4137,7 @@ class NavigationDriver:
                 "run_id": getattr(ctx.run_context, "run_id", None) if ctx.run_context else None,
                 "timestamp": outcome_dict.get("timestamp"),
             }
-            
+
             # Self-Healing Agent を呼び出す
             self_healing_result = None
             try:
@@ -4118,15 +4149,10 @@ class NavigationDriver:
                         f"[SelfHealing][Moncler] Self-healing result: {self_healing_result.get('analysis', 'N/A')}"
                     )
                 else:
-                    logger.debug(
-                        "[SelfHealing][Moncler] handle_moncler_failure not implemented, skipping"
-                    )
+                    logger.debug("[SelfHealing][Moncler] handle_moncler_failure not implemented, skipping")
             except Exception as e:
-                logger.warning(
-                    f"[SelfHealing][Moncler] Failed to call self-healing agent: {e}",
-                    exc_info=True
-                )
-            
+                logger.warning(f"[SelfHealing][Moncler] Failed to call self-healing agent: {e}", exc_info=True)
+
             # Selector Discovery Agent を呼び出す
             selector_discovery_result = None
             try:
@@ -4140,27 +4166,26 @@ class NavigationDriver:
                         "rejection_stats": {},  # outcome_dict から取得可能な場合は追加
                         "run_id": getattr(ctx.run_context, "run_id", None) if ctx.run_context else None,
                     }
-                    selector_discovery_result = await selector_discovery_agent.propose_moncler_selectors(discovery_payload)
+                    selector_discovery_result = await selector_discovery_agent.propose_moncler_selectors(
+                        discovery_payload
+                    )
                     logger.info(
                         f"[SelectorDiscovery][Moncler] Proposed {len(selector_discovery_result.get('candidate_selectors', []))} selectors"
                     )
                 else:
-                    logger.debug(
-                        "[SelectorDiscovery][Moncler] propose_moncler_selectors not implemented, skipping"
-                    )
+                    logger.debug("[SelectorDiscovery][Moncler] propose_moncler_selectors not implemented, skipping")
             except Exception as e:
                 logger.warning(
-                    f"[SelectorDiscovery][Moncler] Failed to call selector discovery agent: {e}",
-                    exc_info=True
+                    f"[SelectorDiscovery][Moncler] Failed to call selector discovery agent: {e}", exc_info=True
                 )
-            
+
             # CR-ATELIER-002 Step 7-4: パッチ生成モジュールを呼び出してファイル保存
             if ctx.run_context and (self_healing_result or selector_discovery_result):
                 try:
                     run_id = getattr(ctx.run_context, "run_id", None) or "unknown"
                     site = ctx.site_config.get("site_code") or ctx.site_config.get("site") or "MONCLER_OFFICIAL"
                     current_url = self.page.url or ctx.entry_url or ""
-                    
+
                     # moncler_outcome を構築（outcome_dict から）
                     moncler_outcome = {
                         "plp_materialized": outcome_dict.get("plp_materialized", False),
@@ -4172,7 +4197,7 @@ class NavigationDriver:
                         "locale_corrections": outcome_dict.get("locale_corrections", 0),
                         "trap_detected": outcome_dict.get("trap_detected", False),
                     }
-                    
+
                     # パッチ生成モジュールを呼び出す
                     saved_paths = await process_moncler_self_healing_results(
                         run_context=ctx.run_context,
@@ -4185,7 +4210,7 @@ class NavigationDriver:
                         current_site_config=ctx.site_config,
                         generate_markdown=True,  # Markdown レポートも生成
                     )
-                    
+
                     if saved_paths:
                         logger.info(
                             f"[PatchBuilder][Moncler] Generated patch files: "
@@ -4193,12 +4218,8 @@ class NavigationDriver:
                             f"patch={saved_paths.get('patch_candidate')}"
                         )
                 except Exception as e:
-                    logger.warning(
-                        f"[PatchBuilder][Moncler] Failed to generate patch files: {e}",
-                        exc_info=True
-                    )
+                    logger.warning(f"[PatchBuilder][Moncler] Failed to generate patch files: {e}", exc_info=True)
         except Exception as e:
             logger.warning(
-                f"[SelfHealing][Moncler] Failed to trigger self-healing/selector discovery: {e}",
-                exc_info=True
+                f"[SelfHealing][Moncler] Failed to trigger self-healing/selector discovery: {e}", exc_info=True
             )

@@ -1,6 +1,4 @@
 """Tests for sourcing_csv_adapter module."""
-import csv
-from pathlib import Path
 
 import pytest
 
@@ -166,9 +164,7 @@ class TestParseCsvRowToSourcingInput:
 
     def test_bom_encoded_csv(self, tmp_path):
         csv_file = tmp_path / "test.csv"
-        csv_file.write_bytes(
-            b"\xef\xbb\xbf" + "purchase_price,selling_price\n100,200\n".encode("utf-8")
-        )
+        csv_file.write_bytes(b"\xef\xbb\xbf" + b"purchase_price,selling_price\n100,200\n")
         result = parse_csv_row_to_sourcing_input(csv_file, row_index=0)
         assert result["status"] == "valid"
 

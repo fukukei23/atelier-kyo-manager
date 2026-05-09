@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-from typing import Optional
-
-from .schemas import PricingInput, PricingResult
 from .rules import PricingConfig, load_pricing_config, resolve_customs_rate
+from .schemas import PricingInput, PricingResult
 
 
 def calculate_pricing(
     inp: PricingInput,
-    config: Optional[PricingConfig] = None,
+    config: PricingConfig | None = None,
     source_type: str = "domestic",
 ) -> PricingResult:
     """

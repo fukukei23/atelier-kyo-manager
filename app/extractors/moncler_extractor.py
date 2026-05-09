@@ -1,9 +1,8 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 import json
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from playwright.async_api import BrowserContext, Page
 
@@ -19,10 +18,10 @@ class MonclerPDPExtractor:
         self,
         *,
         page: Page,
-        context: Optional[BrowserContext],
+        context: BrowserContext | None,
         locale: str = "en-jp",
         country: str = "JP",
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         data = await self._extract_from_next_data(page)
         if data:
             return data
@@ -48,7 +47,7 @@ class MonclerPDPExtractor:
 
         return None
 
-    async def _extract_from_next_data(self, page: Page) -> Optional[Dict[str, Any]]:
+    async def _extract_from_next_data(self, page: Page) -> dict[str, Any] | None:
         try:
             script = await page.query_selector("script#__NEXT_DATA__")
             if not script:
@@ -59,17 +58,13 @@ class MonclerPDPExtractor:
             self.logger.debug(f"[MonclerExtractor] NEXT_DATA parse failed: {e}")
             return None
 
-        product = (
-            payload.get("props", {})
-            .get("pageProps", {})
-            .get("product")
-        )
+        product = payload.get("props", {}).get("pageProps", {}).get("product")
         if not isinstance(product, dict):
             return None
 
         return self._build_result_from_product(product, page.url)
 
-    async def _extract_from_ld_json(self, page: Page) -> Optional[Dict[str, Any]]:
+    async def _extract_from_ld_json(self, page: Page) -> dict[str, Any] | None:
         try:
             nodes = await page.query_selector_all("script[type='application/ld+json']")
         except Exception:
@@ -93,7 +88,7 @@ class MonclerPDPExtractor:
                         }
         return None
 
-    async def _extract_from_meta(self, page: Page) -> Optional[Dict[str, Any]]:
+    async def _extract_from_meta(self, page: Page) -> dict[str, Any] | None:
         try:
             price = await page.get_attribute("meta[property='og:price:amount']", "content")
         except Exception:
@@ -103,7 +98,7 @@ class MonclerPDPExtractor:
             return {"price": price.strip(), "currency": currency, "url": page.url}
         return None
 
-    async def _fetch_graphql(self, context: BrowserContext, *, sku: str, locale: str) -> Optional[Dict[str, Any]]:
+    async def _fetch_graphql(self, context: BrowserContext, *, sku: str, locale: str) -> dict[str, Any] | None:
         try:
             payload = {
                 "operationName": "ProductDetail",
@@ -131,17 +126,14 @@ class MonclerPDPExtractor:
             )
             if response.ok:
                 data = await response.json()
-                product = (
-                    data.get("data", {})
-                    .get("product")
-                )
+                product = data.get("data", {}).get("product")
                 if isinstance(product, dict):
                     return self._build_result_from_product(product, None)
         except Exception as e:
             self.logger.debug(f"[MonclerExtractor] GraphQL fallback failed: {e}")
         return None
 
-    async def _fetch_price_api(self, context: BrowserContext, *, sku: str, country: str) -> Optional[Dict[str, Any]]:
+    async def _fetch_price_api(self, context: BrowserContext, *, sku: str, country: str) -> dict[str, Any] | None:
         try:
             response = await context.request.get(
                 f"{self.PRICE_API_ENDPOINT}?sku={sku}&country={country}",
@@ -158,11 +150,11 @@ class MonclerPDPExtractor:
             self.logger.debug(f"[MonclerExtractor] Price API failed: {e}")
         return None
 
-    def _build_result_from_product(self, product: Dict[str, Any], url: Optional[str]) -> Optional[Dict[str, Any]]:
+    def _build_result_from_product(self, product: dict[str, Any], url: str | None) -> dict[str, Any] | None:
         if not product:
             return None
         price_info = (product.get("price") or {}).get("final") or {}
-        gallery = ((product.get("media") or {}).get("gallery") or [])
+        gallery = (product.get("media") or {}).get("gallery") or []
         return {
             "title": product.get("name"),
             "sku": product.get("code"),
@@ -173,7 +165,7 @@ class MonclerPDPExtractor:
             "url": url,
         }
 
-    def _infer_sku_from_url(self, url: str) -> Optional[str]:
+    def _infer_sku_from_url(self, url: str) -> str | None:
         slug = url.rstrip("/").split("/")[-1]
         if not slug:
             return None
@@ -181,4 +173,3 @@ class MonclerPDPExtractor:
         if candidate and re.match(r"^[A-Za-z0-9]+$", candidate):
             return candidate.upper()
         return None
-

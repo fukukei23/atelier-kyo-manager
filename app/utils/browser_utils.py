@@ -12,18 +12,21 @@
 # ==============================================================================
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+
 import logging
 import random
-from typing import Any, Dict, List
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+from typing import Any
 
-from playwright.sync_api import Page, Error as PlaywrightError
+from playwright.sync_api import Error as PlaywrightError
+from playwright.sync_api import Page
 
 logger = logging.getLogger(__name__)
 APP_ROOT = Path(__file__).resolve().parents[2]
 SCREENSHOT_DIR = APP_ROOT / "instance" / "screenshots"
 SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
+
 
 def save_screenshot(page: Page, file_prefix: str, full_page: bool = True) -> str:
     """
@@ -43,7 +46,8 @@ def save_screenshot(page: Page, file_prefix: str, full_page: bool = True) -> str
         logger.error(f"An unexpected critical error occurred during screenshot saving: {e}")
         return ""
 
-def _click_first_visible_element(page: Page, selectors: List[str], purpose: str) -> bool:
+
+def _click_first_visible_element(page: Page, selectors: list[str], purpose: str) -> bool:
     """
     提供されたセレクタのリストを順番に試し、最初に見つかった可視要素を1回だけクリックする。
     """
@@ -57,7 +61,7 @@ def _click_first_visible_element(page: Page, selectors: List[str], purpose: str)
             loc.wait_for(state="visible", timeout=2500)
 
             box = loc.bounding_box()
-            if box and box['width'] > 5 and box['height'] > 5:
+            if box and box["width"] > 5 and box["height"] > 5:
                 logger.info(f"'{purpose}' element found with selector: '{selector}'. Clicking.")
                 loc.click(delay=random.randint(80, 200))
                 page.wait_for_timeout(random.randint(200, 400))
@@ -71,16 +75,19 @@ def _click_first_visible_element(page: Page, selectors: List[str], purpose: str)
     logger.info(f"Finished checking all selectors for '{purpose}'. No clickable element found.")
     return False
 
-def handle_cookie_consent(page: Page, site_config: Dict[str, Any]) -> None:
+
+def handle_cookie_consent(page: Page, site_config: dict[str, Any]) -> None:
     """サイト設定に基づき、Cookie同意モーダルを閉じる。"""
-    selectors: List[str] = site_config.get("selectors", {}).get("pdp", {}).get("cookie_accept_selectors", [])
+    selectors: list[str] = site_config.get("selectors", {}).get("pdp", {}).get("cookie_accept_selectors", [])
     _click_first_visible_element(page, selectors, "Cookie Consent")
 
-def handle_dismissible_popups(page: Page, site_config: Dict[str, Any]) -> None:
+
+def handle_dismissible_popups(page: Page, site_config: dict[str, Any]) -> None:
     """サイト設定に基づき、一般的なポップアップ（メール登録など）を閉じる。"""
-    selectors: List[str] = site_config.get("selectors", {}).get("pdp", {}).get("dismiss_popups", [])
+    selectors: list[str] = site_config.get("selectors", {}).get("pdp", {}).get("dismiss_popups", [])
     _click_first_visible_element(page, selectors, "Dismissible Popup")
 
-def handle_captcha(page: Page, site_config: Dict[str, Any]) -> None:
+
+def handle_captcha(page: Page, site_config: dict[str, Any]) -> None:
     """CAPTCHAを検知し、設定に基づいて対処する。（実装詳細は省略）"""
     pass

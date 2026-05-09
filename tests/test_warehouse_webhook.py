@@ -6,7 +6,7 @@ from __future__ import annotations
 import hmac
 import json
 from hashlib import sha256
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -17,14 +17,17 @@ from app.extensions import db
 @pytest.fixture(scope="function")
 def app():
     app = create_app()
-    app.config.update({
-        "TESTING": True,
-        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-        "WTF_CSRF_ENABLED": False,
-        "SECRET_KEY": "test-secret",
-    })
+    app.config.update(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "WTF_CSRF_ENABLED": False,
+            "SECRET_KEY": "test-secret",
+        }
+    )
     # warehouse_webhook Blueprint を手動登録（create_app に未登録のため）
     from app.routes.warehouse_webhook import router as warehouse_router
+
     try:
         app.register_blueprint(warehouse_router)
     except ValueError:
@@ -119,6 +122,7 @@ class TestForward2meEvents:
 class TestVerifySignature:
     def test_valid_signature(self):
         from app.routes.warehouse_webhook import _verify_signature
+
         secret = "my_secret"
         body = b'{"event": "test"}'
         signature = hmac.new(secret.encode(), body, sha256).hexdigest()
@@ -126,31 +130,40 @@ class TestVerifySignature:
 
     def test_wrong_signature(self):
         from app.routes.warehouse_webhook import _verify_signature
+
         assert _verify_signature(b"body", "wrong_sig", "secret") is False
 
     def test_empty_signature(self):
         from app.routes.warehouse_webhook import _verify_signature
+
         assert _verify_signature(b"body", "", "secret") is False
 
 
 class TestLoadForward2meConfig:
     def test_returns_empty_dict_when_file_not_found(self):
         from app.routes.warehouse_webhook import _load_forward2me_config
+
         with patch("app.routes.warehouse_webhook.Path.exists", return_value=False):
             result = _load_forward2me_config()
         assert result == {}
 
     def test_returns_config_when_file_exists(self):
         from app.routes.warehouse_webhook import _load_forward2me_config
+
         config_data = {"webhook_secret_env": "FWD2ME_SECRET"}
-        with patch("app.routes.warehouse_webhook.Path.exists", return_value=True), \
-             patch("app.routes.warehouse_webhook.Path.read_text", return_value=json.dumps(config_data)):
+        with (
+            patch("app.routes.warehouse_webhook.Path.exists", return_value=True),
+            patch("app.routes.warehouse_webhook.Path.read_text", return_value=json.dumps(config_data)),
+        ):
             result = _load_forward2me_config()
         assert result == config_data
 
     def test_returns_empty_dict_on_json_error(self):
         from app.routes.warehouse_webhook import _load_forward2me_config
-        with patch("app.routes.warehouse_webhook.Path.exists", return_value=True), \
-             patch("app.routes.warehouse_webhook.Path.read_text", return_value="not valid json {{{"):
+
+        with (
+            patch("app.routes.warehouse_webhook.Path.exists", return_value=True),
+            patch("app.routes.warehouse_webhook.Path.read_text", return_value="not valid json {{{"),
+        ):
             result = _load_forward2me_config()
         assert result == {}

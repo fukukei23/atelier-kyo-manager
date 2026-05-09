@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 CR-ATELIER-003 Phase D-5: FailureAnalysisAgent 統合のテスト
 
@@ -6,13 +5,11 @@ BrowserOrchestrator から FailureAnalysisAgent が呼び出され、
 failure_analysis が DiscoveryResult.evidence に含まれることを確認する。
 """
 
-import pytest
 from unittest.mock import AsyncMock, MagicMock, Mock, patch
-from typing import Dict, Any
+
+import pytest
 
 from app.agents.browser_orchestrator import BrowserOrchestrator
-from app.models.result_models import DiscoveryResult
-from app.agents.browser.plp_driver import PlpNavigationResult
 
 
 @pytest.fixture
@@ -37,6 +34,7 @@ def mock_context(mock_page):
 def mock_run_context():
     """モック RunContext オブジェクト"""
     from pathlib import Path
+
     run_context = MagicMock()
     run_context.run_id = "test_run_123"
     run_context.run_path = "/tmp/test_run"
@@ -113,7 +111,6 @@ async def test_run_plp_to_pdp_calls_analysis_agent_on_trap_recovery_failed(
 ):
     """trap_recovery_failed の場合、FailureAnalysisAgent が呼ばれることを確認"""
     with patch("app.agents.browser.orchestrator.NavigationDriver") as mock_nav_driver_class:
-        
         # NavigationDriver のモック（trap_detected=True, recovered=False）
         mock_nav_driver = AsyncMock()
         mock_nav_outcome = MagicMock()
@@ -124,14 +121,14 @@ async def test_run_plp_to_pdp_calls_analysis_agent_on_trap_recovery_failed(
         mock_nav_outcome.trap_reason = "Trap page detected"
         mock_nav_driver.run_plp_flow = AsyncMock(return_value=mock_nav_outcome)
         mock_nav_driver_class.return_value = mock_nav_driver
-        
+
         # TelemetryClient のモック
         with patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class:
             mock_telemetry = AsyncMock()
             mock_telemetry.record_plp_state = AsyncMock()
             mock_telemetry.save_json = AsyncMock()
             mock_telemetry_class.return_value = mock_telemetry
-            
+
             # run_plp_to_pdp を実行
             result = await orchestrator.run_plp_to_pdp(
                 page=mock_page,
@@ -145,15 +142,15 @@ async def test_run_plp_to_pdp_calls_analysis_agent_on_trap_recovery_failed(
                 start_t=0.0,
                 budget_ms=60000,
             )
-            
+
             # FailureAnalysisAgent が呼ばれたことを確認
             assert mock_analysis_agent.analyze_failure_context.called
-            
+
             # failure_analysis が evidence に含まれていることを確認
             assert result.ok is False
             assert "failure_context" in result.evidence
             assert "failure_analysis" in result.evidence
-            
+
             failure_analysis = result.evidence["failure_analysis"]
             assert "summary" in failure_analysis
             assert "root_causes" in failure_analysis
@@ -172,10 +169,11 @@ async def test_run_plp_to_pdp_calls_analysis_agent_on_plp_driver_failed(
     mock_analysis_agent,
 ):
     """PlpDriver 失敗の場合、FailureAnalysisAgent が呼ばれることを確認"""
-    with patch("app.agents.browser.orchestrator.NavigationDriver") as mock_nav_driver_class, \
-         patch("app.agents.browser.orchestrator.PlpDriver") as mock_plp_driver_class, \
-         patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class:
-        
+    with (
+        patch("app.agents.browser.orchestrator.NavigationDriver") as mock_nav_driver_class,
+        patch("app.agents.browser.orchestrator.PlpDriver") as mock_plp_driver_class,
+        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
+    ):
         # NavigationDriver のモック（pdp_links が空）
         mock_nav_driver = AsyncMock()
         mock_nav_outcome = MagicMock()
@@ -185,17 +183,17 @@ async def test_run_plp_to_pdp_calls_analysis_agent_on_plp_driver_failed(
         mock_nav_outcome.recovered = False
         mock_nav_driver.run_plp_flow = AsyncMock(return_value=mock_nav_outcome)
         mock_nav_driver_class.return_value = mock_nav_driver
-        
+
         # PlpDriver のモック（例外を投げる）
         mock_plp_driver = AsyncMock()
         mock_plp_driver.navigate_to_pdp = AsyncMock(side_effect=Exception("PlpDriver failed"))
         mock_plp_driver_class.return_value = mock_plp_driver
-        
+
         # TelemetryClient のモック
         mock_telemetry = AsyncMock()
         mock_telemetry.save_json = AsyncMock()
         mock_telemetry_class.return_value = mock_telemetry
-        
+
         # run_plp_to_pdp を実行
         result = await orchestrator.run_plp_to_pdp(
             page=mock_page,
@@ -209,10 +207,10 @@ async def test_run_plp_to_pdp_calls_analysis_agent_on_plp_driver_failed(
             start_t=0.0,
             budget_ms=60000,
         )
-        
+
         # FailureAnalysisAgent が呼ばれたことを確認
         assert mock_analysis_agent.analyze_failure_context.called
-        
+
         # failure_analysis が evidence に含まれていることを確認
         assert result.ok is False
         assert "failure_context" in result.evidence
@@ -230,21 +228,20 @@ async def test_run_pdp_calls_analysis_agent_on_extraction_failed(
     mock_analysis_agent,
 ):
     """PDP 抽出失敗の場合、FailureAnalysisAgent が呼ばれることを確認"""
-    with patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class, \
-         patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class:
-        
+    with (
+        patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class,
+        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
+    ):
         # BrowserExtractionService のモック（ValueError を投げる）
         mock_extraction_service = AsyncMock()
-        mock_extraction_service.extract_single_pdp = AsyncMock(
-            side_effect=ValueError("Price not found on PDP.")
-        )
+        mock_extraction_service.extract_single_pdp = AsyncMock(side_effect=ValueError("Price not found on PDP."))
         mock_extraction_service_class.return_value = mock_extraction_service
-        
+
         # TelemetryClient のモック
         mock_telemetry = AsyncMock()
         mock_telemetry.record_plp_state = AsyncMock()
         mock_telemetry_class.return_value = mock_telemetry
-        
+
         # run_pdp を実行
         result = await orchestrator.run_pdp(
             page=mock_page,
@@ -256,15 +253,15 @@ async def test_run_pdp_calls_analysis_agent_on_extraction_failed(
             run_context=mock_run_context,
             target_url="https://example.com/product/1",
         )
-        
+
         # FailureAnalysisAgent が呼ばれたことを確認
         assert mock_analysis_agent.analyze_failure_context.called
-        
+
         # failure_analysis が evidence に含まれていることを確認
         assert result.ok is False
         assert "failure_context" in result.evidence
         assert "failure_analysis" in result.evidence
-        
+
         failure_analysis = result.evidence["failure_analysis"]
         assert "summary" in failure_analysis
         assert "root_causes" in failure_analysis
@@ -284,27 +281,24 @@ async def test_analysis_agent_exception_does_not_break_flow(
     """FailureAnalysisAgent が例外を投げた場合でも、メインフローが正常に動作することを確認"""
     # FailureAnalysisAgent が例外を投げるように設定
     mock_analysis_agent = AsyncMock()
-    mock_analysis_agent.analyze_failure_context = AsyncMock(
-        side_effect=Exception("Analysis failed")
-    )
-    
+    mock_analysis_agent.analyze_failure_context = AsyncMock(side_effect=Exception("Analysis failed"))
+
     orchestrator.analysis_agent = mock_analysis_agent
-    
-    with patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class, \
-         patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class:
-        
+
+    with (
+        patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class,
+        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
+    ):
         # BrowserExtractionService のモック（ValueError を投げる）
         mock_extraction_service = AsyncMock()
-        mock_extraction_service.extract_single_pdp = AsyncMock(
-            side_effect=ValueError("Price not found on PDP.")
-        )
+        mock_extraction_service.extract_single_pdp = AsyncMock(side_effect=ValueError("Price not found on PDP."))
         mock_extraction_service_class.return_value = mock_extraction_service
-        
+
         # TelemetryClient のモック
         mock_telemetry = AsyncMock()
         mock_telemetry.record_plp_state = AsyncMock()
         mock_telemetry_class.return_value = mock_telemetry
-        
+
         # run_pdp を実行
         result = await orchestrator.run_pdp(
             page=mock_page,
@@ -316,10 +310,10 @@ async def test_analysis_agent_exception_does_not_break_flow(
             run_context=mock_run_context,
             target_url="https://example.com/product/1",
         )
-        
+
         # FailureAnalysisAgent が呼ばれたことを確認
         assert mock_analysis_agent.analyze_failure_context.called
-        
+
         # failure_analysis が evidence に含まれていないことを確認（例外が発生したため）
         assert result.ok is False
         assert "failure_context" in result.evidence
@@ -347,22 +341,21 @@ async def test_no_analysis_agent_does_not_break_flow(
     )
     # __init__ 後に明示的に None を設定（自動生成を防ぐため）
     orchestrator.analysis_agent = None
-    
-    with patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class, \
-         patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class:
-        
+
+    with (
+        patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class,
+        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
+    ):
         # BrowserExtractionService のモック（ValueError を投げる）
         mock_extraction_service = AsyncMock()
-        mock_extraction_service.extract_single_pdp = AsyncMock(
-            side_effect=ValueError("Price not found on PDP.")
-        )
+        mock_extraction_service.extract_single_pdp = AsyncMock(side_effect=ValueError("Price not found on PDP."))
         mock_extraction_service_class.return_value = mock_extraction_service
-        
+
         # TelemetryClient のモック
         mock_telemetry = AsyncMock()
         mock_telemetry.record_plp_state = AsyncMock()
         mock_telemetry_class.return_value = mock_telemetry
-        
+
         # run_pdp を実行
         result = await orchestrator.run_pdp(
             page=mock_page,
@@ -374,7 +367,7 @@ async def test_no_analysis_agent_does_not_break_flow(
             run_context=mock_run_context,
             target_url="https://example.com/product/1",
         )
-        
+
         # failure_analysis が evidence に含まれていないことを確認（analysis_agent が None のため）
         assert result.ok is False
         assert "failure_context" in result.evidence

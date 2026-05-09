@@ -3,9 +3,9 @@
 import pytest
 
 from app.utils.fx_utils import (
-    parse_fx_rates_str,
-    build_jpy_table_from_eur,
     _ecb_xml_to_eur_table,
+    build_jpy_table_from_eur,
+    parse_fx_rates_str,
 )
 
 

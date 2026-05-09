@@ -22,12 +22,13 @@
 # ==============================================================================
 # -*- coding: utf-8 -*-
 from __future__ import annotations
-import logging
+
 import json
-from pathlib import Path
-from datetime import datetime
-from typing import List, Any
+import logging
 import sys
+from datetime import datetime
+from pathlib import Path
+from typing import Any
 
 # --- プロジェクトルートをPythonの検索パスに追加 ---
 APP_ROOT = Path(__file__).resolve().parents[2]
@@ -38,17 +39,19 @@ from app.models.result_models import DiscoveryResult
 
 logger = logging.getLogger(__name__)
 
+
 class ReportingAgent:
     """
     作戦結果を集約・分析し、人間が意思決定を行うためのレポートを生成する情報将校。
     """
+
     def __init__(self, use_db: bool = False, input_dir: Path = Path("output")):
-        self.use_db = use_db # NOTE: DB関連のロジックは今回変更なし
+        self.use_db = use_db  # NOTE: DB関連のロジックは今回変更なし
         self.input_dir = input_dir
         self.output_dir = Path("output/reports")
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-    def build_run_summary_report(self, results: List[Any]) -> Path:
+    def build_run_summary_report(self, results: list[Any]) -> Path:
         """
         単一の作戦実行結果(results)から、概要をまとめたHTMLレポートを生成する。
         """
@@ -58,7 +61,7 @@ class ReportingAgent:
                 run_id = r.evidence.get("run_id")
                 break
 
-        start_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         successful_runs = [r for r in results if isinstance(r, DiscoveryResult) and r.ok]
         failed_runs = [r for r in results if isinstance(r, DiscoveryResult) and not r.ok]
@@ -101,8 +104,9 @@ class ReportingAgent:
         report_path.write_text(html, encoding="utf-8")
         return report_path
 
-    def _render_success_details(self, successful_runs: List[DiscoveryResult]) -> str:
-        if not successful_runs: return "<h2>成功した任務 (0件)</h2>"
+    def _render_success_details(self, successful_runs: list[DiscoveryResult]) -> str:
+        if not successful_runs:
+            return "<h2>成功した任務 (0件)</h2>"
         items_html = ""
         for r in successful_runs:
             items_html += f"""
@@ -112,8 +116,9 @@ class ReportingAgent:
             </div>"""
         return f"<h2>成功した任務 ({len(successful_runs)}件)</h2>{items_html}"
 
-    def _render_failure_details(self, failed_runs: List[DiscoveryResult]) -> str:
-        if not failed_runs: return "<h2>失敗した任務 (0件)</h2>"
+    def _render_failure_details(self, failed_runs: list[DiscoveryResult]) -> str:
+        if not failed_runs:
+            return "<h2>失敗した任務 (0件)</h2>"
         items_html = ""
         for r in failed_runs:
             run_id = (r.evidence or {}).get("run_id", "")
@@ -132,7 +137,8 @@ class ReportingAgent:
 
     def _get_ai_analysis_html(self, run_id: str) -> str:
         """指定されたrun_idのAI科学捜査レポートを読み込み、HTMLを生成する。"""
-        if not run_id: return ""
+        if not run_id:
+            return ""
         try:
             forensic_report_path = Path(f"instance/runs/{run_id}/ai_forensic_report.json")
             if forensic_report_path.exists():
@@ -142,9 +148,9 @@ class ReportingAgent:
                     return f"""
                     <div class="ai-analysis">
                         <dl>
-                            <dt>AIによる診断:</dt><dd>{ai_analysis.get('diagnosis', 'N/A')}</dd>
-                            <dt>根本原因の推測:</dt><dd>{ai_analysis.get('root_cause', 'N/A')}</dd>
-                            <dt>推奨される対策:</dt><dd>{ai_analysis.get('recommended_action', 'N/A')}</dd>
+                            <dt>AIによる診断:</dt><dd>{ai_analysis.get("diagnosis", "N/A")}</dd>
+                            <dt>根本原因の推測:</dt><dd>{ai_analysis.get("root_cause", "N/A")}</dd>
+                            <dt>推奨される対策:</dt><dd>{ai_analysis.get("recommended_action", "N/A")}</dd>
                         </dl>
                     </div>"""
         except Exception as e:

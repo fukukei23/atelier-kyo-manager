@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 診断スクリプトを実行して結果をファイルに保存
 """
+
 import subprocess
 import sys
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 
 project_root = Path(__file__).parent
 
@@ -26,7 +26,8 @@ print()
 cmd = [
     sys.executable,
     "scripts/run_moncler_drission_diagnostics.py",
-    "--query", "down jacket",
+    "--query",
+    "down jacket",
     "--headless",
 ]
 
@@ -41,7 +42,7 @@ try:
         text=True,
         timeout=300,  # 5分のタイムアウト
     )
-    
+
     # 結果をファイルに保存
     with open(output_file, "w", encoding="utf-8") as f:
         f.write("=" * 80 + "\n")
@@ -50,38 +51,38 @@ try:
         f.write(f"実行日時: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"コマンド: {' '.join(cmd)}\n")
         f.write("=" * 80 + "\n\n")
-        
+
         f.write("STDOUT:\n")
         f.write("=" * 80 + "\n")
         f.write(result.stdout)
         f.write("\n")
-        
+
         if result.stderr:
             f.write("\nSTDERR:\n")
             f.write("=" * 80 + "\n")
             f.write(result.stderr)
             f.write("\n")
-        
+
         f.write("\n" + "=" * 80 + "\n")
         f.write(f"終了コード: {result.returncode}\n")
         f.write("=" * 80 + "\n")
-    
+
     # コンソールにも出力
     print("STDOUT:")
     print("=" * 80)
     print(result.stdout)
-    
+
     if result.stderr:
         print("\nSTDERR:")
         print("=" * 80)
         print(result.stderr)
-    
+
     print()
     print("=" * 80)
     print(f"終了コード: {result.returncode}")
     print(f"結果ファイル: {output_file.relative_to(project_root)}")
     print("=" * 80)
-    
+
     # 生成された診断ディレクトリを確認
     artifacts_dir = project_root / "artifacts" / "moncler_drission"
     if artifacts_dir.exists():
@@ -93,15 +94,15 @@ try:
             print(f"ファイル数: {len(files)}")
             for f in files[:10]:  # 最初の10個を表示
                 print(f"  - {f.name}")
-    
+
     sys.exit(result.returncode)
-    
+
 except subprocess.TimeoutExpired:
     print("❌ タイムアウト: 5分以内に完了しませんでした")
     sys.exit(1)
 except Exception as e:
     print(f"❌ 実行エラー: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
-

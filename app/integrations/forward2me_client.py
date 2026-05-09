@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import httpx
 
@@ -14,7 +14,7 @@ class Forward2meClient:
         self.api_key = api_key
         self.timeout = timeout
 
-    def _headers(self) -> Dict[str, str]:
+    def _headers(self) -> dict[str, str]:
         return {
             "Authorization": f"Bearer {self.api_key}",
             "Content-Type": "application/json",
@@ -25,9 +25,9 @@ class Forward2meClient:
         self,
         *,
         status: str = "in_warehouse",
-        updated_since: Optional[datetime] = None,
-    ) -> List[Dict[str, Any]]:
-        params: Dict[str, Any] = {"status": status}
+        updated_since: datetime | None = None,
+    ) -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"status": status}
         if updated_since:
             params["updated_since"] = updated_since.isoformat()
 
@@ -41,7 +41,7 @@ class Forward2meClient:
             data = resp.json()
             return data if isinstance(data, list) else []
 
-    async def get_parcel(self, parcel_id: str) -> Dict[str, Any]:
+    async def get_parcel(self, parcel_id: str) -> dict[str, Any]:
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             resp = await client.get(
                 f"{self.api_base}/api/parcels/{parcel_id}",

@@ -1,6 +1,7 @@
 """
 包括テスト: sourcing_tier, fx_utils, pricing_calculator
 """
+
 from __future__ import annotations
 
 import json
@@ -21,8 +22,6 @@ from app.utils.fx_utils import (
     parse_fx_rates_str,
 )
 from app.utils.pricing_calculator import (
-    BUYMA_COMMISSION_RATE,
-    BUYMA_SYSTEM_FEE,
     DEFAULT_EXCHANGE_RATE,
     calculate_profit,
     get_exchange_rate,
@@ -124,9 +123,7 @@ class TestBuildJpyTableFromEur:
 
 class TestEcbXmlToEurTable:
     def _make_xml(self, rates):
-        cubes = "".join(
-            f'<Cube currency="{c}" rate="{r}"/>' for c, r in rates
-        )
+        cubes = "".join(f'<Cube currency="{c}" rate="{r}"/>' for c, r in rates)
         return f'<Envelope><Cube><Cube time="2025-01-01">{cubes}</Cube></Cube></Envelope>'
 
     def test_parse_usd_jpy(self):

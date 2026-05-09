@@ -4,7 +4,7 @@ import json
 import logging
 import time
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     from app.core.run_context import RunContext
@@ -12,6 +12,7 @@ except Exception:  # pragma: no cover - optional import guard
     RunContext = None  # type: ignore
 
 from app.agents.ai_vision_agent import AIVisionAgent
+
 try:
     from app.agents.reporting_agent import ReportingAgent
 except Exception:
@@ -24,7 +25,7 @@ EVENT_LOG_DIR.mkdir(parents=True, exist_ok=True)
 REPORTING_AGENT = ReportingAgent() if ReportingAgent else None
 
 
-def handle_forward2me_event(payload: Dict[str, Any]) -> None:
+def handle_forward2me_event(payload: dict[str, Any]) -> None:
     event_type = payload.get("event_type")
     if event_type == "parcel_received":
         _handle_parcel_received(payload)
@@ -32,10 +33,10 @@ def handle_forward2me_event(payload: Dict[str, Any]) -> None:
         logger.info("[WarehouseEvent] Unsupported event_type=%s", event_type)
 
 
-def _handle_parcel_received(payload: Dict[str, Any]) -> None:
+def _handle_parcel_received(payload: dict[str, Any]) -> None:
     parcel_id = payload.get("parcel_id")
     client_reference = payload.get("client_reference")
-    photos: List[str] = payload.get("photos") or []
+    photos: list[str] = payload.get("photos") or []
     if not parcel_id:
         logger.warning("[WarehouseEvent] parcel_received missing parcel_id")
         return
@@ -66,7 +67,7 @@ def _handle_parcel_received(payload: Dict[str, Any]) -> None:
             logger.warning("[WarehouseEvent] Failed to update status: %s", exc)
 
 
-def _resolve_run_context(client_reference: Optional[str]):
+def _resolve_run_context(client_reference: str | None):
     if not client_reference or RunContext is None:
         return None
     resolver = getattr(RunContext, "load_by_client_reference", None)
@@ -82,7 +83,7 @@ def _resolve_run_context(client_reference: Optional[str]):
     return None
 
 
-def _persist_event(parcel_id: str, record: Dict[str, Any]) -> None:
+def _persist_event(parcel_id: str, record: dict[str, Any]) -> None:
     ts = int(time.time())
     path = EVENT_LOG_DIR / f"{parcel_id}_{ts}.json"
     try:
@@ -92,7 +93,7 @@ def _persist_event(parcel_id: str, record: Dict[str, Any]) -> None:
         logger.error("[WarehouseEvent] Failed to persist event: %s", exc)
 
 
-def _log_reporting_event(record: Dict[str, Any]) -> None:
+def _log_reporting_event(record: dict[str, Any]) -> None:
     if REPORTING_AGENT is None:
         return
     try:

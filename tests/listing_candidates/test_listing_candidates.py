@@ -1,4 +1,5 @@
 """FR-007 出品候補リスト テスト"""
+
 import pytest
 
 from app import create_app
@@ -10,12 +11,14 @@ from app.models.user import User
 @pytest.fixture(scope="function")
 def app():
     _app = create_app()
-    _app.config.update({
-        "TESTING": True,
-        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-        "WTF_CSRF_ENABLED": False,
-        "SECRET_KEY": "test-secret",
-    })
+    _app.config.update(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "WTF_CSRF_ENABLED": False,
+            "SECRET_KEY": "test-secret",
+        }
+    )
     with _app.app_context():
         db.create_all()
         yield _app
@@ -46,18 +49,25 @@ def auth_client(client, test_user):
 
 # ---- listing_candidates() モデルテスト ----
 
+
 def test_listing_candidates_filters_listed(app):
     """listing_status='listed' は除外される"""
     with app.app_context():
         # purchase=1000, selling=1500 → rate=4.3% (手数料引後)
         # min_profit_rate=0 で全件取得
         p1 = Product(
-            name="候補A", purchase_price=1000, selling_price=1500,
-            stock_status=True, listing_status="draft",
+            name="候補A",
+            purchase_price=1000,
+            selling_price=1500,
+            stock_status=True,
+            listing_status="draft",
         )
         p2 = Product(
-            name="出品済", purchase_price=1000, selling_price=1500,
-            stock_status=True, listing_status="listed",
+            name="出品済",
+            purchase_price=1000,
+            selling_price=1500,
+            stock_status=True,
+            listing_status="listed",
         )
         db.session.add_all([p1, p2])
         db.session.commit()
@@ -72,12 +82,18 @@ def test_listing_candidates_filters_no_stock(app):
     """stock_status=False は除外される"""
     with app.app_context():
         p1 = Product(
-            name="在庫あり", purchase_price=1000, selling_price=1500,
-            stock_status=True, listing_status="draft",
+            name="在庫あり",
+            purchase_price=1000,
+            selling_price=1500,
+            stock_status=True,
+            listing_status="draft",
         )
         p2 = Product(
-            name="在庫なし", purchase_price=1000, selling_price=1500,
-            stock_status=False, listing_status="draft",
+            name="在庫なし",
+            purchase_price=1000,
+            selling_price=1500,
+            stock_status=False,
+            listing_status="draft",
         )
         db.session.add_all([p1, p2])
         db.session.commit()
@@ -93,13 +109,19 @@ def test_listing_candidates_filters_by_profit_rate(app):
     with app.app_context():
         # purchase=1000, selling=2000 → rate=26.3%
         p1 = Product(
-            name="高利益", purchase_price=1000, selling_price=2000,
-            stock_status=True, listing_status="draft",
+            name="高利益",
+            purchase_price=1000,
+            selling_price=2000,
+            stock_status=True,
+            listing_status="draft",
         )
         # purchase=1000, selling=1050 → rate=マイナス
         p2 = Product(
-            name="低利益", purchase_price=1000, selling_price=1050,
-            stock_status=True, listing_status="draft",
+            name="低利益",
+            purchase_price=1000,
+            selling_price=1050,
+            stock_status=True,
+            listing_status="draft",
         )
         db.session.add_all([p1, p2])
         db.session.commit()
@@ -115,16 +137,28 @@ def test_listing_candidates_sort_by_tier(app):
     """brand_tier順 (high→medium→low) でソートされる"""
     with app.app_context():
         p_low = Product(
-            name="ロー", purchase_price=1000, selling_price=2000,
-            stock_status=True, listing_status="draft", brand_tier="low",
+            name="ロー",
+            purchase_price=1000,
+            selling_price=2000,
+            stock_status=True,
+            listing_status="draft",
+            brand_tier="low",
         )
         p_high = Product(
-            name="ハイ", purchase_price=1000, selling_price=2000,
-            stock_status=True, listing_status="draft", brand_tier="high",
+            name="ハイ",
+            purchase_price=1000,
+            selling_price=2000,
+            stock_status=True,
+            listing_status="draft",
+            brand_tier="high",
         )
         p_med = Product(
-            name="ミドル", purchase_price=1000, selling_price=2000,
-            stock_status=True, listing_status="draft", brand_tier="medium",
+            name="ミドル",
+            purchase_price=1000,
+            selling_price=2000,
+            stock_status=True,
+            listing_status="draft",
+            brand_tier="medium",
         )
         db.session.add_all([p_low, p_high, p_med])
         db.session.commit()
@@ -139,8 +173,11 @@ def test_listing_candidates_default_min_rate(app):
     with app.app_context():
         # purchase=1000, selling=1500 → rate=4.3% < 10%
         p1 = Product(
-            name="低利益", purchase_price=1000, selling_price=1500,
-            stock_status=True, listing_status="draft",
+            name="低利益",
+            purchase_price=1000,
+            selling_price=1500,
+            stock_status=True,
+            listing_status="draft",
         )
         db.session.add(p1)
         db.session.commit()
@@ -158,12 +195,16 @@ def test_listing_candidates_empty_db(app):
 
 # ---- ルートテスト（認証済み） ----
 
+
 def test_listing_candidates_route(auth_client, app):
     """GET /listing-candidates が200を返す"""
     with app.app_context():
         p = Product(
-            name="候補商品", purchase_price=1000, selling_price=2000,
-            stock_status=True, listing_status="draft",
+            name="候補商品",
+            purchase_price=1000,
+            selling_price=2000,
+            stock_status=True,
+            listing_status="draft",
         )
         db.session.add(p)
         db.session.commit()
@@ -176,8 +217,11 @@ def test_export_listing_candidates_csv(auth_client, app):
     """GET /listing-candidates/export がCSVを返す"""
     with app.app_context():
         p = Product(
-            name="CSV候補", purchase_price=1000, selling_price=2000,
-            stock_status=True, listing_status="draft",
+            name="CSV候補",
+            purchase_price=1000,
+            selling_price=2000,
+            stock_status=True,
+            listing_status="draft",
         )
         db.session.add(p)
         db.session.commit()
@@ -192,8 +236,11 @@ def test_listing_candidates_route_with_filter(auth_client, app):
     """min_profit_rate パラメータでフィルタが動作する"""
     with app.app_context():
         p = Product(
-            name="高利益", purchase_price=1000, selling_price=2000,
-            stock_status=True, listing_status="draft",
+            name="高利益",
+            purchase_price=1000,
+            selling_price=2000,
+            stock_status=True,
+            listing_status="draft",
         )
         db.session.add(p)
         db.session.commit()

@@ -9,26 +9,27 @@
 # - [インテリジェンス・サイクル] これにより、「偵察→報告→記録→分析」
 #   という、自己完結した完全な情報サイクルが確立されました。
 
-import logging
-import json
 import argparse
 import asyncio
-from pathlib import Path
+import logging
 import sys
+from pathlib import Path
 
 # --- プロジェクトのルートパスをsys.pathに追加 ---
 APP_ROOT = Path(__file__).resolve().parents[1]
 if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
-from app.config import loader, config
-from app.agents.supplier_scout_agent import SupplierScoutAgent
 from app.agents.persistence_agent import PersistenceAgent
 from app.agents.reporting_agent import ReportingAgent
+from app.agents.supplier_scout_agent import SupplierScoutAgent
+from app.config import config, loader
 from app.models.result_models import DiscoveryResult
+
 
 class AiResearchOrchestrator:
     """AIマルチエージェントシステム全体の調査プロセスを指揮する最高司令部。"""
+
     def __init__(self):
         config.setup_logging()
         self.sites_config = loader.load_full_config()
@@ -42,13 +43,13 @@ class AiResearchOrchestrator:
         # ... (作戦開始までのロジックは変更なし)
         scout_agent = SupplierScoutAgent(runtime_kwargs=kwargs)
         results = await scout_agent.run(
-            sites_config=self.sites_config,
-            sites=kwargs.get("sites", []),
-            query=kwargs.get("query", "")
+            sites_config=self.sites_config, sites=kwargs.get("sites", []), query=kwargs.get("query", "")
         )
 
         # --- ★★★ 作戦完了後の処理を追加 ★★★ ---
-        successful_results = [r for r in results if isinstance(r, DiscoveryResult) and r.ok and r.evidence.get("extracted_data")]
+        successful_results = [
+            r for r in results if isinstance(r, DiscoveryResult) and r.ok and r.evidence.get("extracted_data")
+        ]
 
         if successful_results:
             logging.info(f"{len(successful_results)}件の成功した偵察結果を記録保管官に引き渡します。")
@@ -69,6 +70,7 @@ class AiResearchOrchestrator:
         # ... (最終報告ロジックは変更なし)
         pass
 
+
 def main():
     # ... (コマンドライン引数の定義は変更なし)
     parser = argparse.ArgumentParser(description="AI Research Orchestrator")
@@ -83,6 +85,7 @@ def main():
 
     orchestrator = AiResearchOrchestrator()
     asyncio.run(orchestrator.run(**runtime_kwargs))
+
 
 if __name__ == "__main__":
     main()

@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
 # File: app/agents/plugins/ssense_plp_v1.py
 # Version: 0.4.0
 # Purpose: SSENSE サイト用スクレイピング戦略プラグイン
 
+import json
 import logging
 import re
-import json
-from typing import List, Dict, Set, Optional
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
+
 from .base import StrategyPlugin, _apply_stealth
 
 logger = logging.getLogger(__name__)
@@ -44,6 +43,7 @@ class SSENSEPLPStrategy(StrategyPlugin):
     注意: SSENSEは高度なBot検出を使用しています。
     完全な回避にはプロキシ/IP回転が必要な場合があります。
     """
+
     site = "SSENSE"
     _DEFAULT_LOCALE = "en-US"
     _DEFAULT_COUNTRY = "US"
@@ -68,16 +68,14 @@ class SSENSEPLPStrategy(StrategyPlugin):
                 logger.info(f"[SSENSE] Risky path detected ({skip}), redirecting to PLP")
                 return self._HARD_PLP_URL
 
-        if re.search(r'/en-(us|gb|de|fr|it|es)/', url, re.IGNORECASE):
-            if '/en-us/' not in url.lower():
-                url = re.sub(r'/en-[a-z]{2}/', '/en-us/', url, flags=re.IGNORECASE)
-                logger.info(f"[SSENSE] Locale corrected: {url}")
+        if re.search(r"/en-(us|gb|de|fr|it|es)/", url, re.IGNORECASE) and "/en-us/" not in url.lower():
+            url = re.sub(r"/en-[a-z]{2}/", "/en-us/", url, flags=re.IGNORECASE)
+            logger.info(f"[SSENSE] Locale corrected: {url}")
 
         path = self._path(url)
-        if path and path.count('/') > 4:
-            if 'outerwear' not in path.lower():
-                url = self._HARD_PLP_URL
-                logger.info("[SSENSE] Deep path detected, redirecting to base PLP")
+        if path and path.count("/") > 4 and "outerwear" not in path.lower():
+            url = self._HARD_PLP_URL
+            logger.info("[SSENSE] Deep path detected, redirecting to base PLP")
 
         return url
 
@@ -104,7 +102,7 @@ class SSENSEPLPStrategy(StrategyPlugin):
             await page.evaluate("window.scrollTo(0, 0)")
             await page.wait_for_timeout(1000)
 
-            all_product_urls: Set[str] = set()
+            all_product_urls: set[str] = set()
 
             # === 手法1: 段階的スクロール ===
             logger.info("[SSENSE] Step 1: Progressive scrolling...")
@@ -186,9 +184,9 @@ class SSENSEPLPStrategy(StrategyPlugin):
             logger.warning(f"[SSENSE] Materialize error: {e}")
             return False
 
-    async def _get_product_urls(self, page) -> Set[str]:
+    async def _get_product_urls(self, page) -> set[str]:
         """ページから商品URLを全て取得"""
-        urls: Set[str] = set()
+        urls: set[str] = set()
         try:
             links = await page.locator("a[href*='/product/']").all()
             for link in links:
@@ -204,9 +202,9 @@ class SSENSEPLPStrategy(StrategyPlugin):
             pass
         return urls
 
-    async def _extract_jsonld_products(self, page) -> List[Dict]:
+    async def _extract_jsonld_products(self, page) -> list[dict]:
         """JSON-LDから製品情報を抽出"""
-        products: List[Dict] = []
+        products: list[dict] = []
         try:
             scripts = await page.query_selector_all('script[type="application/ld+json"]')
             for script in scripts:
@@ -223,12 +221,14 @@ class SSENSEPLPStrategy(StrategyPlugin):
                         items = [data]
 
                     for item in items:
-                        products.append({
-                            "name": item.get("name"),
-                            "url": item.get("url"),
-                            "price": None,
-                            "brand": None,
-                        })
+                        products.append(
+                            {
+                                "name": item.get("name"),
+                                "url": item.get("url"),
+                                "price": None,
+                                "brand": None,
+                            }
+                        )
                 except Exception:
                     pass
         except Exception:

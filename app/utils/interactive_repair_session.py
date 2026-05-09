@@ -58,14 +58,13 @@
 # ==============================================================================
 from __future__ import annotations
 
-import os
+import contextlib
 import json
 import time
-import uuid
 import traceback
-from typing import Any, Dict, List, Optional, Tuple
-
+import uuid
 from pathlib import Path
+from typing import Any
 
 # あなたの既存コード側にあるはずのもの:
 # - AiLlmController: LLMへの統一インターフェース
@@ -88,9 +87,9 @@ class InteractiveRepairSession:
     def __init__(
         self,
         ai_controller: AiLlmController,
-        run_context: Optional[Any] = None,
+        run_context: Any | None = None,
         max_steps: int = 5,
-        snapshot_dir: Optional[str] = None,
+        snapshot_dir: str | None = None,
     ) -> None:
         """
         ai_controller: AiLlmController インスタンス (GPT-5, Gemini, DeepSeekの優先順を持ってるやつ)
@@ -113,14 +112,13 @@ class InteractiveRepairSession:
         self.session_dir = self.snapshot_root / self.session_id
         self.session_dir.mkdir(parents=True, exist_ok=True)
 
-        self.steps_log: List[Dict[str, Any]] = []  # 各ターンの記録
-
+        self.steps_log: list[dict[str, Any]] = []  # 各ターンの記録
 
     async def _save_dom_and_screenshot(
         self,
         page,
         label: str,
-    ) -> Tuple[str, str]:
+    ) -> tuple[str, str]:
         """
         現在のDOMとスクショをローカルに保存してパスを返す。
         page: PlaywrightのPage
@@ -139,7 +137,7 @@ class InteractiveRepairSession:
 
         try:
             await page.screenshot(path=str(png_path), full_page=True)
-        except Exception as e:
+        except Exception:
             # スクショ取れない場合もある (クロスオリジンpopupなど)
             with open(png_path, "wb") as f:
                 f.write(b"")  # 空ファイルでも一応確保
@@ -150,16 +148,15 @@ class InteractiveRepairSession:
 
         return str(html_path), str(png_path)
 
-
     def _build_llm_prompt_for_next_action(
         self,
         site_key: str,
         intent: str,
         current_url: str,
         recent_dom_text: str,
-        last_error: Optional[str],
-        tried_selectors: Dict[str, Any],
-        steps_so_far: List[Dict[str, Any]],
+        last_error: str | None,
+        tried_selectors: dict[str, Any],
+        steps_so_far: list[dict[str, Any]],
     ) -> str:
         """
         LLM (GPT-5優先) に「次の一手」を聞くためのプロンプト文字列を組み立てる。
@@ -215,12 +212,11 @@ HTML_END\"\"\"
 """
         return prompt.strip()
 
-
     async def _execute_action_step(
         self,
         page,
-        action: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        action: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         LLMから返された1手(action)をPlaywrightで実行する。
         サポートする action_type:
@@ -233,7 +229,7 @@ HTML_END\"\"\"
         """
         action_type = action.get("action_type")
         selector = action.get("selector", "")
-        rationale = action.get("rationale", "")
+        action.get("rationale", "")
 
         exec_error = None
 
@@ -270,15 +266,10 @@ HTML_END\"\"\"
         except Exception:
             current_url = "UNKNOWN_URL_AFTER_ACTION"
 
-        dom_html = ""
-        try:
-            dom_html = await page.content()
-        except Exception as e:
-            dom_html = f"<!DOCTYPE html><body>DOM_FETCH_ERROR_AFTER_ACTION: {e}</body>"
+        with contextlib.suppress(Exception):
+            await page.content()
 
-        html_path, screenshot_path = await self._save_dom_and_screenshot(
-            page, f"after_{action_type}"
-        )
+        html_path, screenshot_path = await self._save_dom_and_screenshot(page, f"after_{action_type}")
 
         step_record = {
             "action": action,
@@ -292,12 +283,11 @@ HTML_END\"\"\"
         self.steps_log.append(step_record)
         return step_record
 
-
     def _build_llm_prompt_for_finalize(
         self,
         site_key: str,
         intent: str,
-        steps: List[Dict[str, Any]],
+        steps: list[dict[str, Any]],
     ) -> str:
         """
         ループが終了したあとに呼ぶ。
@@ -344,14 +334,13 @@ HTML_END\"\"\"
 """
         return prompt.strip()
 
-
     async def run_repair_loop(
         self,
         page,
         site_key: str,
         intent: str,
-        initial_failure: Dict[str, Any],
-    ) -> Dict[str, Any]:
+        initial_failure: dict[str, Any],
+    ) -> dict[str, Any]:
         """
         メインエントリ。
         - BrowserUseAgent から呼ばれることを想定
@@ -366,7 +355,7 @@ HTML_END\"\"\"
         """
         # 1. 初期状態のDOMを読み込む
         try:
-            with open(initial_failure.get("page_html_path", ""), "r", encoding="utf-8") as f:
+            with open(initial_failure.get("page_html_path", ""), encoding="utf-8") as f:
                 dom_text = f.read()
         except Exception:
             dom_text = ""
@@ -376,20 +365,18 @@ HTML_END\"\"\"
         last_error = initial_failure.get("exception_message", "")
 
         # 初期スナップショットもsteps_logに積んでおく
-        self.steps_log.append({
-            "action": {
-                "action_type": "init_state",
-                "selector": "",
-                "rationale": "failure context captured"
-            },
-            "exec_error": None,
-            "after_url": current_url,
-            "after_html_path": initial_failure.get("page_html_path", ""),
-            "after_screenshot_path": initial_failure.get("screenshot_path", "")
-        })
+        self.steps_log.append(
+            {
+                "action": {"action_type": "init_state", "selector": "", "rationale": "failure context captured"},
+                "exec_error": None,
+                "after_url": current_url,
+                "after_html_path": initial_failure.get("page_html_path", ""),
+                "after_screenshot_path": initial_failure.get("screenshot_path", ""),
+            }
+        )
 
         # 2. アクションループ
-        for step_i in range(self.max_steps):
+        for _step_i in range(self.max_steps):
             # LLMに「次の一手」を問い合わせ
             prompt = self._build_llm_prompt_for_next_action(
                 site_key=site_key,
@@ -422,7 +409,7 @@ HTML_END\"\"\"
             current_url = step_outcome.get("after_url", current_url)
             new_html_path = step_outcome.get("after_html_path", "")
             try:
-                with open(new_html_path, "r", encoding="utf-8") as f:
+                with open(new_html_path, encoding="utf-8") as f:
                     dom_text = f.read()
             except Exception:
                 dom_text = dom_text  # fallback

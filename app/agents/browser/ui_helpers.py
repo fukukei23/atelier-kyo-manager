@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 ui_helpers.py - UI interaction helpers for BrowserUseAgent
 
@@ -12,10 +11,13 @@ This module handles:
 """
 
 from __future__ import annotations
+
 import asyncio
+import contextlib
 import re
-from typing import Any, Dict, Optional
-from playwright.async_api import Page, Locator
+from typing import Any
+
+from playwright.async_api import Locator, Page
 
 from app.core.run_context import RunContext
 
@@ -25,13 +27,7 @@ def _dedupe_keep_order(items: list) -> list:
     return list(dict.fromkeys([i for i in (items or []) if i]))
 
 
-async def safe_wait_selector(
-    page: Page,
-    selector: str,
-    *,
-    timeout_ms: int,
-    state: str = "visible"
-) -> bool:
+async def safe_wait_selector(page: Page, selector: str, *, timeout_ms: int, state: str = "visible") -> bool:
     """Safely wait for selector, returning False on failure."""
     if not page or page.is_closed():
         return False
@@ -44,7 +40,7 @@ async def safe_wait_selector(
 
 async def kill_overlays(page: Page) -> None:
     """Remove overlay elements and unlock body scroll."""
-    try:
+    with contextlib.suppress(Exception):
         await page.evaluate("""
           (() => {
             const sels = ['.overlay','.backdrop','.modal-backdrop','#onetrust-banner-sdk','.cookie-banner','[aria-modal="true"]','.cmp-ui-overlay','.cmp-modal','.drawer--open'];
@@ -53,39 +49,30 @@ async def kill_overlays(page: Page) -> None:
             const html=document.documentElement; if (html) { html.style.overflow=''; html.classList.remove('no-scroll','overflow-hidden'); }
           })();
         """)
-    except Exception:
-        pass
 
 
-async def click_continue_shopping_if_present(
-    page: Page,
-    site_config: Dict[str, Any]
-) -> bool:
+async def click_continue_shopping_if_present(page: Page, site_config: dict[str, Any]) -> bool:
     """Click 'Continue Shopping' button if present."""
     ui = (site_config.get("selectors") or {}).get("ui") or {}
     candidates = _dedupe_keep_order(
-        (ui.get("continue_shopping") or []) +
-        [
+        (ui.get("continue_shopping") or [])
+        + [
             "a:has-text('CONTINUE SHOPPING')",
             "button:has-text('CONTINUE SHOPPING')",
             "[role='button']:has-text('CONTINUE SHOPPING')",
-            "text=/\\bCONTINUE\\s+SHOPPING\\b/i"
+            "text=/\\bCONTINUE\\s+SHOPPING\\b/i",
         ]
     )
     for _ in range(3):
-        try:
+        with contextlib.suppress(Exception):
             await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
-        except Exception:
-            pass
         for sel in candidates:
             try:
                 el = page.locator(sel).first
                 if await el.count() > 0 and await el.is_visible():
                     await el.click(timeout=3000)
-                    try:
+                    with contextlib.suppress(Exception):
                         await page.wait_for_load_state("domcontentloaded", timeout=3000)
-                    except Exception:
-                        pass
                     return True
             except Exception:
                 continue
@@ -94,10 +81,10 @@ async def click_continue_shopping_if_present(
 
 
 async def pause_for_operator(
-    page: Optional[Page],
-    run_context: Optional[RunContext],
+    page: Page | None,
+    run_context: RunContext | None,
     label: str,
-    runtime_kwargs: Dict[str, Any],
+    runtime_kwargs: dict[str, Any],
     logger: Any,
 ) -> None:
     """Pause for operator intervention in headful mode."""
@@ -120,19 +107,16 @@ async def pause_for_operator(
         logger.warning("[OperatorPause] input() が使えません。即座に続行します。")
 
 
-async def accept_cookies_if_present(
-    page: Page,
-    site_config: Dict[str, Any]
-) -> bool:
+async def accept_cookies_if_present(page: Page, site_config: dict[str, Any]) -> bool:
     """Accept cookies if cookie banner is present."""
     ui = (site_config.get("selectors") or {}).get("ui") or {}
     candidates = _dedupe_keep_order(
-        (ui.get("cookie_accept") or []) +
-        [
+        (ui.get("cookie_accept") or [])
+        + [
             "#onetrust-accept-btn-handler",
             "button:has-text('ACCEPT ALL')",
             "button:has-text('CONTINUE WITHOUT ACCEPTING')",
-            "button[aria-label*='Accept' i]"
+            "button[aria-label*='Accept' i]",
         ]
     )
     for sel in candidates:
@@ -150,7 +134,7 @@ async def accept_cookies_if_present(
 async def dismiss_geo_modal(page: Page, logger: Any) -> None:
     """
     Dismiss geo/locale modals.
-    
+
     1. Generic "STAY HERE" banners
     2. Moncler "Select your location" locale gate
        - Prefer "UNITED KINGDOM | ENGLISH"
@@ -226,9 +210,8 @@ async def dismiss_geo_modal(page: Page, logger: Any) -> None:
             page.locator("div[data-editorial-component='ticker-top-banner'] button[aria-label*='close' i]"),
         ]
         for loc in close_candidates:
-            if await _click_first(loc, "locale gate close button"):
-                if await _wait_for_en_int():
-                    return
+            if await _click_first(loc, "locale gate close button") and await _wait_for_en_int():
+                return
 
         try:
             await page.keyboard.press("Escape")
@@ -236,7 +219,7 @@ async def dismiss_geo_modal(page: Page, logger: Any) -> None:
         except Exception:
             pass
 
-        try:
+        with contextlib.suppress(Exception):
             await page.evaluate(
                 """
                 () => {
@@ -248,8 +231,6 @@ async def dismiss_geo_modal(page: Page, logger: Any) -> None:
                 }
                 """
             )
-        except Exception:
-            pass
     except Exception:
         return
 
@@ -257,12 +238,14 @@ async def dismiss_geo_modal(page: Page, logger: Any) -> None:
 async def human_like_pause(page: Page, *, min_ms: int = 400, max_ms: int = 900) -> None:
     """Human-like random pause."""
     import random
+
     await page.wait_for_timeout(random.randint(min_ms, max_ms))
 
 
 async def human_like_mouse_move(page: Page) -> None:
     """Simulate human-like mouse movements."""
     import random
+
     try:
         box = await page.evaluate("""() => ({ w: window.innerWidth, h: window.innerHeight })""")
         w, h = int(box.get("w", 1280)), int(box.get("h", 720))
@@ -279,6 +262,7 @@ async def human_like_mouse_move(page: Page) -> None:
 async def human_like_scroll(page: Page) -> None:
     """Simulate human-like scrolling."""
     import random
+
     try:
         total_height = await page.evaluate("() => document.body ? document.body.scrollHeight : 0")
     except Exception:
@@ -294,4 +278,3 @@ async def human_like_scroll(page: Page) -> None:
         delta = random.randint(int(vh * 0.3), int(vh * 0.6))
         await page.mouse.wheel(0, delta)
         await human_like_pause(page, min_ms=200, max_ms=500)
-

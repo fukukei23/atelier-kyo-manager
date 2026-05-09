@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 profitability_agent.py (堅牢性・再利用性向上版)
 ======================================================================
@@ -21,27 +20,35 @@ Rev: 2.0 (2025-09-08 JST)
 - OpenAI APIキー (LLMによるサマリー生成に必要)
 ======================================================================
 """
+
 from __future__ import annotations
+
 import logging
-from typing import Dict, Any, Optional
+from typing import Any
 
 # Pydanticによる厳格なデータモデル定義
 try:
     from pydantic import BaseModel, Field, ValidationError
 except ImportError:
     print("Pydantic is not installed. Please run 'pip install pydantic'.")
+
     # Pydanticがない場合は、ダミーのBaseModelで最低限動作させる
     class _DummyBaseModel:
         def __init__(self, **kwargs):
             for k, v in kwargs.items():
                 setattr(self, k, v)
+
     BaseModel = _DummyBaseModel
-    Field = lambda **kwargs: None
+
+    def Field(**kwargs):
+        return None
+
     ValidationError = Exception
 
 # --- 既存の専門エージェントとユーティリティをインポート ---
 try:
     from app.utils.ai_llm_controller import AILlmController
+
     LLM_AVAILABLE = True
 except ImportError:
     logging.warning("AILlmController not found. LLM-based summary will be disabled.")
@@ -50,9 +57,10 @@ except ImportError:
 
 # --- Pricing Config（手数料率の一元管理）をインポート ---
 try:
-    from app.core.pricing.rules import load_pricing_config
     from app.core.pricing.calculator import calculate_pricing
+    from app.core.pricing.rules import load_pricing_config
     from app.core.pricing.schemas import PricingInput
+
     PRICING_CONFIG_AVAILABLE = True
 except ImportError:
     logging.warning("PricingConfig not found. Using hardcoded fee rates.")
@@ -63,6 +71,7 @@ except ImportError:
 
 try:
     from app.utils.shipping_agent import ShippingAgent
+
     SHIPPING_AGENT_AVAILABLE = True
 except ImportError:
     logging.warning("ShippingAgent not found. Using fixed shipping costs.")
@@ -72,21 +81,27 @@ except ImportError:
 try:
     from app.utils.fx_utils import get_fx_table_jpy
 except ImportError:
-     from app.config.constants import DEFAULT_EXCHANGE_RATE_USDJPY as _FALLBACK_FX
-     logging.warning("fx_utils not found. Using dummy exchange rates.")
-     def get_fx_table_jpy(**kwargs) -> tuple[dict, dict]: return {"USD": _FALLBACK_FX}, {}
+    from app.config.constants import DEFAULT_EXCHANGE_RATE_USDJPY as _FALLBACK_FX
+
+    logging.warning("fx_utils not found. Using dummy exchange rates.")
+
+    def get_fx_table_jpy(**kwargs) -> tuple[dict, dict]:
+        return {"USD": _FALLBACK_FX}, {}
 
 # --- Pydanticによる入出力スキーマ定義 ---
 
+
 class MarketData(BaseModel):
-    name: Optional[str] = None
+    name: str | None = None
     buyma_price: float = Field(gt=0)
+
 
 class SupplierData(BaseModel):
     price: float = Field(gt=0)
     currency: str
-    category: Optional[str] = None
-    material: Optional[str] = None
+    category: str | None = None
+    material: str | None = None
+
 
 class Assessment(BaseModel):
     decision: str
@@ -96,6 +111,7 @@ class Assessment(BaseModel):
     total_cost_jpy: int
     exchange_rate_used: float
     source_currency: str
+
 
 class ProfitabilityAgent:
     """商品の収益性を多角的に分析・評価する専門エージェント。"""
@@ -118,13 +134,17 @@ class ProfitabilityAgent:
             return float(rate)
         except Exception as e:
             from app.config.constants import DEFAULT_EXCHANGE_RATE_USDJPY
-            self.logger.error(f"FX fetch/lookup failed for {currency} ({e}); using fallback {DEFAULT_EXCHANGE_RATE_USDJPY}")
+
+            self.logger.error(
+                f"FX fetch/lookup failed for {currency} ({e}); using fallback {DEFAULT_EXCHANGE_RATE_USDJPY}"
+            )
             return DEFAULT_EXCHANGE_RATE_USDJPY
 
-    def _resolve_customs_rate(self, category: Optional[str], material: Optional[str]) -> float:
+    def _resolve_customs_rate(self, category: str | None, material: str | None) -> float:
         """商品情報に基づき、関税率を決定する。rules.py の一元化ロジックを使用。"""
         try:
             from app.core.pricing.rules import resolve_customs_rate
+
             return resolve_customs_rate(category, material)
         except ImportError:
             # フォールバック: rules.py が利用できない場合
@@ -141,12 +161,12 @@ class ProfitabilityAgent:
             return 30.0 if source_currency.upper() == "USD" else 4500.0
         try:
             self.logger.info("Dynamically fetching shipping info (using fixed cost for now).")
-            return 30.0 # 仮にUSDで30ドルとする
+            return 30.0  # 仮にUSDで30ドルとする
         except Exception as e:
             self.logger.error(f"Failed to get dynamic shipping cost: {e}. Falling back to fixed cost.")
             return 30.0
 
-    def _calculate_core_profit(self, market: MarketData, supplier: SupplierData) -> Dict[str, Any]:
+    def _calculate_core_profit(self, market: MarketData, supplier: SupplierData) -> dict[str, Any]:
         """
         中核となる利益計算ロジック。calculator.py を再利用。
 
@@ -185,6 +205,7 @@ class ProfitabilityAgent:
         customs_duty = cost_before_customs * customs_rate
         total_cost_jpy = cost_before_customs + customs_duty
         from app.config.constants import PLATFORM_FEE_RATE
+
         platform_fee_rate = PLATFORM_FEE_RATE
         buyma_commission = market.buyma_price * platform_fee_rate
         net_revenue = market.buyma_price - buyma_commission
@@ -199,9 +220,9 @@ class ProfitabilityAgent:
             "source_currency": supplier.currency.upper(),
         }
 
-    def _generate_assessment_summary(self, calc_result: Dict[str, Any], model_name: str = 'gemini') -> str:
+    def _generate_assessment_summary(self, calc_result: dict[str, Any], model_name: str = "gemini") -> str:
         """LLMを使って、計算結果から定性的な評価サマリーを生成する。"""
-        profit = calc_result.get('profit_estimate', 0)
+        profit = calc_result.get("profit_estimate", 0)
 
         # ルールベースの簡易判定
         if profit < 1500:
@@ -215,9 +236,9 @@ class ProfitabilityAgent:
 あなたはプロのEコマースアナリストです。以下の収益性評価データに基づき、この商品を買い付けるべきかどうかの最終判断を、簡潔な日本語で要約してください。
 # 収益性データ
 - 推定利益: {profit} 円
-- 利益率: {calc_result.get('profit_rate')}%
-- 総原価 (関税・送料込): {calc_result.get('total_cost_jpy')} 円
-- 適用為替レート: 1 {calc_result.get('source_currency')} = {calc_result.get('exchange_rate_used')} JPY
+- 利益率: {calc_result.get("profit_rate")}%
+- 総原価 (関税・送料込): {calc_result.get("total_cost_jpy")} 円
+- 適用為替レート: 1 {calc_result.get("source_currency")} = {calc_result.get("exchange_rate_used")} JPY
 # 指示
 - 結論（「推奨」「非推奨」など）を最初に述べてください。ポジティブな点と、潜在的なリスク（例: 為替変動）を指摘してください。全体で100文字程度でまとめてください。
 """
@@ -228,7 +249,7 @@ class ProfitabilityAgent:
             # LLM失敗時のフォールバックサマリー
             return f"推奨します。推定利益: {profit}円 ({calc_result.get('profit_rate')}%)。AIによる詳細分析中にエラーが発生しました。"
 
-    def assess(self, market_data: Dict, supplier_data: Dict, llm_model: str = 'gemini') -> Dict[str, Any]:
+    def assess(self, market_data: dict, supplier_data: dict, llm_model: str = "gemini") -> dict[str, Any]:
         """
         市場データと仕入先データを基に、商品の収益性を総合的に評価する。
         """
@@ -239,12 +260,12 @@ class ProfitabilityAgent:
             market = MarketData(**market_data)
             supplier = SupplierData(**supplier_data)
         except ValidationError as ve:
-            errors = ve.errors() if hasattr(ve, 'errors') else str(ve)
+            errors = ve.errors() if hasattr(ve, "errors") else str(ve)
             summary = f"入力データの検証に失敗しました: {errors}"
             self.logger.error(summary)
             return {"decision": "error", "summary": summary}
         except Exception as e:
-             return {"decision": "error", "summary": f"予期せぬ入力エラー: {e}"}
+            return {"decision": "error", "summary": f"予期せぬ入力エラー: {e}"}
 
         # 2. 中核となる利益計算を実行
         calculation = self._calculate_core_profit(market, supplier)
@@ -254,9 +275,9 @@ class ProfitabilityAgent:
 
         # 4. Pydanticモデルで出力データを整形・保証
         assessment_data = {
-            "decision": "profitable" if calculation.get('profit_estimate', 0) > 1500 else "not_profitable",
+            "decision": "profitable" if calculation.get("profit_estimate", 0) > 1500 else "not_profitable",
             "summary": summary,
-            **calculation
+            **calculation,
         }
 
         try:
@@ -264,6 +285,6 @@ class ProfitabilityAgent:
         except ValidationError:
             # 万が一、内部の計算結果が出力スキーマに違反した場合のエラーハンドリング
             self.logger.error("Internal calculation resulted in invalid assessment data.")
-            assessment_data['summary'] = "内部エラー: 評価データの生成に失敗しました。"
-            assessment_data['decision'] = "error"
+            assessment_data["summary"] = "内部エラー: 評価データの生成に失敗しました。"
+            assessment_data["decision"] = "error"
             return assessment_data

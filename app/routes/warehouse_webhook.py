@@ -5,7 +5,7 @@ import json
 import os
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from flask import Blueprint, abort, jsonify, request
 
@@ -36,7 +36,7 @@ def _verify_signature(body: bytes, signature: str, secret: str) -> bool:
     return hmac.compare_digest(expected, signature)
 
 
-def _load_forward2me_config() -> Dict[str, Any]:
+def _load_forward2me_config() -> dict[str, Any]:
     path = Path(__file__).resolve().parents[1] / "config" / "integrations" / "forward2me.json"
     if not path.exists():
         return {}

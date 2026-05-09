@@ -1,18 +1,17 @@
-# -*- coding: utf-8 -*-
 """
 Unified runner for ResearchOrchestrator
 - Windows: Playwright用に WindowsSelectorEventLoopPolicy を強制
 - Orchestrator に存在しない引数は渡さず、属性があれば後からセット
 - ログと結果JSONの保存、失敗時のエラーレポート出力
 """
+
 from __future__ import annotations
 
-import os
-import sys
-import json
 import argparse
+import asyncio
+import json
 import logging
-import sys, asyncio
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -23,6 +22,7 @@ try:
         asyncio.get_event_loop_policy(), asyncio.WindowsProactorEventLoopPolicy
     ):
         from asyncio import WindowsSelectorEventLoopPolicy  # type: ignore[attr-defined]
+
         asyncio.set_event_loop_policy(WindowsSelectorEventLoopPolicy())
 except Exception:
     pass  # 失敗しても致命的ではない
@@ -73,9 +73,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p.set_defaults(headless=True)
 
     p.add_argument("--items", type=int, default=DEFAULT_ITEMS, help=f"収集するアイテム上限（既定: {DEFAULT_ITEMS}）")
-    p.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help=f"サイト単位の目安タイムアウト秒（既定: {DEFAULT_TIMEOUT}）")
+    p.add_argument(
+        "--timeout",
+        type=int,
+        default=DEFAULT_TIMEOUT,
+        help=f"サイト単位の目安タイムアウト秒（既定: {DEFAULT_TIMEOUT}）",
+    )
     p.add_argument("--retries", type=int, default=1, help="致命的失敗時のリトライ回数（既定: 1）")
-    p.add_argument("--log-level", default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"], help="ログ出力レベル")
+    p.add_argument(
+        "--log-level", default="INFO", choices=["CRITICAL", "ERROR", "WARNING", "INFO", "DEBUG"], help="ログ出力レベル"
+    )
     p.add_argument("--out", type=Path, default=DEFAULT_OUT_DIR, help="結果JSONの出力ディレクトリ（既定: output/）")
     p.add_argument("--tag", default="", help="ファイル名に付ける任意タグ（例: nightly, test01）")
     return p.parse_args(argv)
@@ -95,8 +102,14 @@ def main(argv: list[str]) -> int:
     setup_logging(args.log_level, DEFAULT_LOG_DIR)
 
     logging.info("=== Unified Runner start ===")
-    logging.info("brand=%s headless=%s items=%s timeout=%s retries=%s",
-                 args.brand, args.headless, args.items, args.timeout, args.retries)
+    logging.info(
+        "brand=%s headless=%s items=%s timeout=%s retries=%s",
+        args.brand,
+        args.headless,
+        args.items,
+        args.timeout,
+        args.retries,
+    )
 
     # Orchestrator を初期化（存在しない引数は渡さない）
     orch = ResearchOrchestrator()
@@ -104,21 +117,21 @@ def main(argv: list[str]) -> int:
     # 任意パラメータは「属性があればセット」
     if hasattr(orch, "headless"):
         try:
-            setattr(orch, "headless", bool(args.headless))
+            orch.headless = bool(args.headless)
             logging.debug("Set orch.headless=%s", args.headless)
         except Exception:
             logging.exception("Failed to set orch.headless")
 
     if hasattr(orch, "item_limit"):
         try:
-            setattr(orch, "item_limit", int(args.items))
+            orch.item_limit = int(args.items)
             logging.debug("Set orch.item_limit=%s", args.items)
         except Exception:
             logging.exception("Failed to set orch.item_limit")
 
     if hasattr(orch, "timeout"):
         try:
-            setattr(orch, "timeout", int(args.timeout))
+            orch.timeout = int(args.timeout)
             logging.debug("Set orch.timeout=%s", args.timeout)
         except Exception:
             logging.exception("Failed to set orch.timeout")

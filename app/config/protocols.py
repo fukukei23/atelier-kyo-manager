@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 app/config/protocols.py - 設定・依存の抽象化プロトコル
 
@@ -15,11 +14,11 @@ from typing import Any, Dict, Protocol, runtime_checkable  # noqa: F401
 class SiteConfigProvider(Protocol):
     """サイト設定を提供するプロトコル。loader の直接呼び出しを差し替え可能にする。"""
 
-    def get_site_config(self, site_name: str) -> Dict[str, Any] | None:
+    def get_site_config(self, site_name: str) -> dict[str, Any] | None:
         """指定サイトの設定を返す。存在しなければ None。"""
         ...
 
-    def get_full_config(self) -> Dict[str, Any]:
+    def get_full_config(self) -> dict[str, Any]:
         """全サイトの設定辞書を返す。"""
         ...
 
@@ -30,10 +29,12 @@ class DefaultSiteConfigProvider:
     def __init__(self) -> None:
         pass
 
-    def get_site_config(self, site_name: str) -> Dict[str, Any] | None:
+    def get_site_config(self, site_name: str) -> dict[str, Any] | None:
         from app.config.loader import get_site_config as loader_get_site_config
+
         return loader_get_site_config(site_name)
 
-    def get_full_config(self) -> Dict[str, Any]:
+    def get_full_config(self) -> dict[str, Any]:
         from app.config.loader import load_full_config
+
         return load_full_config()

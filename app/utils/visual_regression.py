@@ -19,18 +19,19 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import annotations
-import logging
-from pathlib import Path
-from typing import Optional, Tuple
-from io import BytesIO
-import re
-import os
 
-from playwright.async_api import Page
+import logging
+import os
+import re
+from io import BytesIO
+from pathlib import Path
+
 from PIL import Image
 from pixelmatch.contrib.PIL import pixelmatch
+from playwright.async_api import Page
 
 logger = logging.getLogger(__name__)
+
 
 def _safe_relpath(p: Path, start: Path = Path.cwd()) -> str:
     """
@@ -56,7 +57,7 @@ async def compare_and_maybe_update(
     hard_fail_threshold: float = 0.05,
     auto_update_baseline: bool = False,
     save_failed_diff_only: bool = True,
-) -> Tuple[float, bool, Optional[str], Optional[str]]:
+) -> tuple[float, bool, str | None, str | None]:
     """
     ページのスクリーンショットを撮影し、基準画像と比較する。
     例外を捕捉し、常にタプルを返すことで呼び出し元の安定性を保証する。
@@ -69,7 +70,7 @@ async def compare_and_maybe_update(
         baseline_path.parent.mkdir(parents=True, exist_ok=True)
 
         # 2) 現在スクリーンショット取得
-        current_bytes: Optional[bytes] = None
+        current_bytes: bytes | None = None
         if selector != "full_page":
             target_locator = page.locator(selector).first
             await target_locator.wait_for(state="visible", timeout=10000)
@@ -78,7 +79,7 @@ async def compare_and_maybe_update(
             current_bytes = await page.screenshot(full_page=True)
 
         if not current_bytes:
-             raise ValueError("Failed to capture current screenshot.")
+            raise ValueError("Failed to capture current screenshot.")
 
         # ベースラインが存在しない場合の処理
         if not baseline_path.exists():
@@ -102,10 +103,7 @@ async def compare_and_maybe_update(
 
         diff_img = Image.new("RGB", base_img.size)
 
-        mismatched_pixels = pixelmatch(
-            base_img, cur_img, diff_img,
-            threshold=threshold, includeAA=True
-        )
+        mismatched_pixels = pixelmatch(base_img, cur_img, diff_img, threshold=threshold, includeAA=True)
 
         total_pixels = base_img.width * base_img.height
         diff_rate = mismatched_pixels / total_pixels if total_pixels > 0 else 0
@@ -113,12 +111,12 @@ async def compare_and_maybe_update(
         passed = diff_rate <= threshold
         hard_failed = diff_rate >= hard_fail_threshold
 
-        diff_path_str: Optional[str] = None
+        diff_path_str: str | None = None
         if not passed or not save_failed_diff_only:
             diffs_dir = (baseline_path.parent / "diffs").resolve()
             diffs_dir.mkdir(parents=True, exist_ok=True)
 
-            sanitized_stem = re.sub(r'[\\/:*?"<>|]', '_', baseline_path.stem)
+            sanitized_stem = re.sub(r'[\\/:*?"<>|]', "_", baseline_path.stem)
             diff_filename = f"diff_{sanitized_stem}.png"
             diff_path = diffs_dir / diff_filename
             diff_img.save(diff_path)
@@ -127,9 +125,13 @@ async def compare_and_maybe_update(
         base_used_str = _safe_relpath(baseline_path)
 
         if hard_failed:
-            logger.error(f"[VRT] Hard failure! Diff rate {diff_rate:.4f} exceeds hard threshold {hard_fail_threshold}. Diff saved to '{diff_path_str}'")
+            logger.error(
+                f"[VRT] Hard failure! Diff rate {diff_rate:.4f} exceeds hard threshold {hard_fail_threshold}. Diff saved to '{diff_path_str}'"
+            )
         elif not passed:
-            logger.warning(f"[VRT] Visual difference detected. Rate: {diff_rate:.4f} (Threshold: {threshold}). Diff saved to '{diff_path_str}'")
+            logger.warning(
+                f"[VRT] Visual difference detected. Rate: {diff_rate:.4f} (Threshold: {threshold}). Diff saved to '{diff_path_str}'"
+            )
 
         if not passed and auto_update_baseline:
             baseline_path.write_bytes(current_bytes)

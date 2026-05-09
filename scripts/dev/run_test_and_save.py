@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# -*- coding: utf-8 -*-
 """テストを実行して結果をファイルに保存"""
 
 import subprocess
@@ -11,10 +10,7 @@ os.chdir(project_root)
 
 # テストを実行
 result = subprocess.run(
-    [sys.executable, "test_site_config_connection.py"],
-    capture_output=True,
-    text=True,
-    cwd=str(project_root)
+    [sys.executable, "test_site_config_connection.py"], capture_output=True, text=True, cwd=str(project_root)
 )
 
 # 結果をファイルに保存
@@ -32,4 +28,3 @@ if result.stderr:
     print(result.stderr, file=sys.stderr)
 
 sys.exit(result.returncode)
-

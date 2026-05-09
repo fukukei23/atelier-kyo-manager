@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 from __future__ import annotations
 
 from typing import Dict
@@ -10,9 +9,7 @@ except Exception:
     StrategyPlugin = None  # type: ignore
     MonclerPLPStrategy = None  # type: ignore
 
-PLUGIN_REGISTRY: Dict[str, StrategyPlugin] = {}
+PLUGIN_REGISTRY: dict[str, StrategyPlugin] = {}
 
 if StrategyPlugin and MonclerPLPStrategy:
     PLUGIN_REGISTRY["MONCLER_OFFICIAL"] = MonclerPLPStrategy()
-
-

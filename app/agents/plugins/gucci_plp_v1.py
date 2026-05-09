@@ -1,13 +1,12 @@
-# -*- coding: utf-8 -*-
 # File: app/agents/plugins/gucci_plp_v1.py
 # Version: 0.2.0
 # Purpose: GUCCI サイト用スクレイピング戦略プラグイン
 
+import json
 import logging
 import re
-import json
-from typing import List, Dict, Set, Optional
 from urllib.parse import urlparse
+
 from .base import StrategyPlugin, _apply_stealth
 
 logger = logging.getLogger(__name__)
@@ -24,6 +23,7 @@ class GucciPLPStrategy(StrategyPlugin):
     - JSON-LD製品抽出
     - Stealthモード対応（Bot検出回避）
     """
+
     site = "GUCCI"
     _DEFAULT_LOCALE = "en-US"
     _DEFAULT_COUNTRY = "US"
@@ -47,24 +47,24 @@ class GucciPLPStrategy(StrategyPlugin):
         path = self._path(url)
         if path:
             # ロケールと国の不一致を検出 (/us/en/, /it/it/, etc.)
-            if re.search(r'/([a-z]{2})/([a-z]{2})/', path):
+            if re.search(r"/([a-z]{2})/([a-z]{2})/", path):
                 # 正しいフォーマットに是正
-                locale_match = re.search(r'/([a-z]{2})/([a-z]{2})/', path)
+                locale_match = re.search(r"/([a-z]{2})/([a-z]{2})/", path)
                 if locale_match:
                     lang = locale_match.group(1)
                     country = locale_match.group(2)
                     if lang != country.lower():
                         # 不一致の場合はUS/enに強制
-                        new_path = re.sub(r'/[a-z]{2}/[a-z]{2}/', '/us/en/', path)
+                        new_path = re.sub(r"/[a-z]{2}/[a-z]{2}/", "/us/en/", path)
                         url = url.replace(path, new_path)
                         logger.info(f"[GUCCI] Locale trap corrected: {url}")
 
         # 浅すぎるパスは正規PLPへ
-        if path and path.count('/') < 3:
+        if path and path.count("/") < 3:
             return self._HARD_PLP_URL
 
         # PDPパスが含まれていたらPLPへ
-        if '/product/' in url or '/p.' in url or '/p/' in url:
+        if "/product/" in url or "/p." in url or "/p/" in url:
             return self._HARD_PLP_URL
 
         return url
@@ -90,7 +90,7 @@ class GucciPLPStrategy(StrategyPlugin):
             await page.evaluate("window.scrollTo(0, 0)")
             await page.wait_for_timeout(500)
 
-            all_product_urls: Set[str] = set()
+            all_product_urls: set[str] = set()
 
             # === 手法1: 段階的スクロール ===
             logger.info("[GUCCI] Step 1: Progressive scrolling...")
@@ -175,9 +175,9 @@ class GucciPLPStrategy(StrategyPlugin):
             logger.warning(f"[GUCCI] Materialize error: {e}")
             return False
 
-    async def _get_product_urls(self, page) -> Set[str]:
+    async def _get_product_urls(self, page) -> set[str]:
         """ページから商品URLを全て取得"""
-        urls: Set[str] = set()
+        urls: set[str] = set()
         try:
             links = await page.locator("a[href*='/product/']").all()
             for link in links:
@@ -193,9 +193,9 @@ class GucciPLPStrategy(StrategyPlugin):
             pass
         return urls
 
-    async def _extract_jsonld_products(self, page) -> List[Dict]:
+    async def _extract_jsonld_products(self, page) -> list[dict]:
         """JSON-LDから製品情報を抽出"""
-        products: List[Dict] = []
+        products: list[dict] = []
         try:
             scripts = await page.query_selector_all('script[type="application/ld+json"]')
             for script in scripts:
@@ -212,12 +212,14 @@ class GucciPLPStrategy(StrategyPlugin):
                         items = [data]
 
                     for item in items:
-                        products.append({
-                            "name": item.get("name"),
-                            "url": item.get("url"),
-                            "price": None,
-                            "brand": item.get("brand"),
-                        })
+                        products.append(
+                            {
+                                "name": item.get("name"),
+                                "url": item.get("url"),
+                                "price": None,
+                                "brand": item.get("brand"),
+                            }
+                        )
                 except Exception:
                     pass
         except Exception:

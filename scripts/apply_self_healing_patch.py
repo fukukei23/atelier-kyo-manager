@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 CR-ATELIER-003 Phase D-7: Self-Healing パッチ適用スクリプト（オフライン実行用）
 
@@ -31,9 +30,7 @@ logger = logging.getLogger(__name__)
 
 def main():
     """メイン関数"""
-    parser = argparse.ArgumentParser(
-        description="Apply self-healing patch candidate to overrides.local.json"
-    )
+    parser = argparse.ArgumentParser(description="Apply self-healing patch candidate to overrides.local.json")
     parser.add_argument(
         "--run-id",
         type=str,
@@ -63,14 +60,14 @@ def main():
         action="store_true",
         help="Dry run mode (do not actually apply the patch)",
     )
-    
+
     args = parser.parse_args()
-    
+
     # パスを解決
     overrides_path = Path(args.overrides)
     if not overrides_path.is_absolute():
         overrides_path = PROJECT_ROOT / overrides_path
-    
+
     if args.candidate_path:
         candidate_path = Path(args.candidate_path)
         if not candidate_path.is_absolute():
@@ -78,36 +75,34 @@ def main():
     else:
         # デフォルトパス: instance/runs/<run_id>/patch_candidate_self_healing.json
         candidate_path = PROJECT_ROOT / "instance" / "runs" / args.run_id / "patch_candidate_self_healing.json"
-    
+
     # ファイルの存在確認
     if not candidate_path.exists():
         logger.error(f"Patch candidate file not found: {candidate_path}")
         logger.info(f"Expected path: instance/runs/{args.run_id}/patch_candidate_self_healing.json")
         return 1
-    
+
     if not overrides_path.exists():
         logger.error(f"Overrides file not found: {overrides_path}")
         return 1
-    
+
     # パッチ候補を読み込んで確認
     try:
-        with open(candidate_path, "r", encoding="utf-8") as f:
+        with open(candidate_path, encoding="utf-8") as f:
             patch_candidate = json.load(f)
     except json.JSONDecodeError as e:
         logger.error(f"Invalid JSON in patch candidate: {e}")
         return 1
-    
+
     target_site = patch_candidate.get("target_site", "unknown")
     if target_site != args.site:
-        logger.warning(
-            f"Patch candidate target_site ({target_site}) does not match --site ({args.site})"
-        )
-    
+        logger.warning(f"Patch candidate target_site ({target_site}) does not match --site ({args.site})")
+
     changes = patch_candidate.get("changes", [])
     if not changes:
         logger.warning("Patch candidate has no changes to apply")
         return 0
-    
+
     # 適用前の確認メッセージ
     logger.info("=" * 60)
     logger.info("Self-Healing Patch Application")
@@ -122,18 +117,18 @@ def main():
     for i, change in enumerate(changes, 1):
         logger.info(f"  {i}. {change.get('path')} - {change.get('action')}")
     logger.info("")
-    
+
     if args.dry_run:
         logger.info("[DRY RUN] Patch would be applied, but --dry-run is set. Exiting.")
         return 0
-    
+
     # パッチを適用
     applier = SelfHealingPatchApplier()
     result = applier.apply_patch_candidate(
         candidate_path=candidate_path,
         overrides_path=overrides_path,
     )
-    
+
     if result["applied"]:
         logger.info("=" * 60)
         logger.info("Patch Applied Successfully")
@@ -160,4 +155,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-

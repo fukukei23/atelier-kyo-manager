@@ -1,4 +1,5 @@
 """Tests for csv_handler module."""
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -40,10 +41,13 @@ class TestImportProductsFromCsv:
         mock_db.session.commit.assert_called_once()
 
     def test_import_multiple_products(self, tmp_path, mock_db, mock_product_cls):
-        csv_file = _make_csv_file(tmp_path, [
-            "バッグ1,CHANEL,100000,150000,http://a.com,http://img.com,True",
-            "バッグ2,LV,80000,120000,http://b.com,http://img2.com,False",
-        ])
+        csv_file = _make_csv_file(
+            tmp_path,
+            [
+                "バッグ1,CHANEL,100000,150000,http://a.com,http://img.com,True",
+                "バッグ2,LV,80000,120000,http://b.com,http://img2.com,False",
+            ],
+        )
         with csv_file.open("rb") as f:
             import_products_from_csv(f)
         assert mock_db.session.add.call_count == 2

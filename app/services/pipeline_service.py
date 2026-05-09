@@ -11,7 +11,6 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from app.config.config import AppConfig
 from app.extensions import db
@@ -24,7 +23,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class PipelineResult:
     product_id: int
-    status: str = "pending"           # success / partial / failed
+    status: str = "pending"  # success / partial / failed
     collected_urls: list[str] = field(default_factory=list)
     downloaded_paths: list[str] = field(default_factory=list)
     processed_paths: list[str] = field(default_factory=list)
@@ -82,8 +81,7 @@ class PipelineService:
             # Step 3: 背景除去
             if all_images:
                 processed = self._step_remove_backgrounds(all_images, product_id)
-                result.processed_paths = [str(p) for p in processed
-                                          if "processed" in str(p) or "_nobg" in str(p)]
+                result.processed_paths = [str(p) for p in processed if "processed" in str(p) or "_nobg" in str(p)]
 
             # Step 4: 説明文生成
             description = self._step_generate_description(product)
@@ -131,10 +129,13 @@ class PipelineService:
             if product is None:
                 logger.warning("Product %d not found – skipping", pid)
                 batch.skipped += 1
-                batch.results.append(PipelineResult(
-                    product_id=pid, status="failed",
-                    errors=[f"Product {pid} not found"],
-                ))
+                batch.results.append(
+                    PipelineResult(
+                        product_id=pid,
+                        status="failed",
+                        errors=[f"Product {pid} not found"],
+                    )
+                )
                 continue
 
             try:
@@ -142,7 +143,9 @@ class PipelineService:
             except Exception as exc:
                 logger.exception("run() raised for product %d", pid)
                 result = PipelineResult(
-                    product_id=pid, status="failed", errors=[str(exc)],
+                    product_id=pid,
+                    status="failed",
+                    errors=[str(exc)],
                 )
 
             batch.results.append(result)
@@ -156,17 +159,19 @@ class PipelineService:
         batch.elapsed_sec = round(time.time() - t0, 2)
         logger.info(
             "Batch: total=%d ok=%d partial=%d fail=%d skip=%d %.1fs",
-            batch.total, batch.success, batch.partial,
-            batch.failed, batch.skipped, batch.elapsed_sec,
+            batch.total,
+            batch.success,
+            batch.partial,
+            batch.failed,
+            batch.skipped,
+            batch.elapsed_sec,
         )
         return batch
 
     # ------------------------------------------------------------------
     # 各ステップ
     # ------------------------------------------------------------------
-    def _step_collect_images(
-        self, product: Product, site_key: str
-    ) -> list[str]:
+    def _step_collect_images(self, product: Product, site_key: str) -> list[str]:
         """Step 1: 画像URL収集（CrawlerService）"""
         if not site_key or not AppConfig.SITES:
             logger.info("No site config, skipping image collection")
@@ -174,6 +179,7 @@ class PipelineService:
 
         try:
             from app.utils.ai_image_crawler import CrawlerService
+
             crawler = CrawlerService(
                 sites_config=AppConfig.SITES,
                 headless=AppConfig.HEADLESS,
@@ -190,9 +196,7 @@ class PipelineService:
             logger.warning("Image collection failed: %s", e)
             return []
 
-    def _step_download_images(
-        self, urls: list[str], product_id: int
-    ) -> list[Path]:
+    def _step_download_images(self, urls: list[str], product_id: int) -> list[Path]:
         """Step 2: 画像ダウンロード"""
         if not urls:
             return []
@@ -212,9 +216,7 @@ class PipelineService:
             images.extend(upload_dir.glob(ext))
         return sorted(images)
 
-    def _step_remove_backgrounds(
-        self, paths: list[Path], product_id: int
-    ) -> list[Path]:
+    def _step_remove_backgrounds(self, paths: list[Path], product_id: int) -> list[Path]:
         """Step 3: 背景除去"""
         try:
             return self.image_svc.remove_backgrounds(paths, product_id)
@@ -226,6 +228,7 @@ class PipelineService:
         """Step 4: AI説明文生成"""
         try:
             from app.utils.ai_generate_descriptions import DescriptionGenerator
+
             generator = DescriptionGenerator()
             product_info = {
                 "brand": product.brand or "",
@@ -242,6 +245,7 @@ class PipelineService:
         """Step 5: 出品テキスト生成"""
         try:
             from app.services.template_service import generate_listing_text
+
             return generate_listing_text(product)
         except Exception as e:
             logger.warning("Listing text generation failed: %s", e)
@@ -250,9 +254,7 @@ class PipelineService:
     # ------------------------------------------------------------------
     # 手動画像アップロード処理
     # ------------------------------------------------------------------
-    def save_uploaded_images(
-        self, product_id: int, files: list
-    ) -> list[Path]:
+    def save_uploaded_images(self, product_id: int, files: list) -> list[Path]:
         """手動アップロード画像を保存"""
         upload_dir = self.image_svc.base_dir / str(product_id) / "uploaded"
         upload_dir.mkdir(parents=True, exist_ok=True)

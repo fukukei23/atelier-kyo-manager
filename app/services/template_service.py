@@ -25,9 +25,18 @@ def generate_buyma_csv(products) -> tuple[str, int]:
     - UTF-8 BOM付き（Excel互換）
     """
     headers = [
-        "商品名", "ブランド", "カラー", "サイズ", "素材",
-        "定価", "販売価格", "仕入地域", "説明文", "カテゴリ",
-        "画像パス", "pipeline_status",
+        "商品名",
+        "ブランド",
+        "カラー",
+        "サイズ",
+        "素材",
+        "定価",
+        "販売価格",
+        "仕入地域",
+        "説明文",
+        "カテゴリ",
+        "画像パス",
+        "pipeline_status",
     ]
     rows: list[list] = []
     skipped = 0
@@ -47,20 +56,22 @@ def generate_buyma_csv(products) -> tuple[str, int]:
             except (json.JSONDecodeError, TypeError):
                 pass
 
-        rows.append([
-            p.name or "",
-            p.brand or "",
-            p.color or "",
-            p.size or "",
-            p.material or "",
-            int(p.retail_price or 0),
-            int(p.selling_price or 0),
-            p.source_region or "",
-            p.description or "",
-            p.item_category or "",
-            image_path,
-            p.pipeline_status or "",
-        ])
+        rows.append(
+            [
+                p.name or "",
+                p.brand or "",
+                p.color or "",
+                p.size or "",
+                p.material or "",
+                int(p.retail_price or 0),
+                int(p.selling_price or 0),
+                p.source_region or "",
+                p.description or "",
+                p.item_category or "",
+                image_path,
+                p.pipeline_status or "",
+            ]
+        )
 
     buf = io.StringIO()
     buf.write("\ufeff")  # UTF-8 BOM

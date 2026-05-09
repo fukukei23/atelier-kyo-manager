@@ -21,15 +21,16 @@
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
-import logging
 import asyncio
 import json
-from typing import Any, Dict, Optional, Tuple, List
+import logging
 import sys
 from pathlib import Path
 from urllib.parse import urljoin
 
-from playwright.async_api import Page, TimeoutError as PlaywrightTimeoutError
+from playwright.async_api import Page
+from playwright.async_api import TimeoutError as PlaywrightTimeoutError
+
 try:
     from app.core.run_context import RunContext
 except Exception:
@@ -49,7 +50,7 @@ class PageRecoveryAgent:
     # -----------------------------
     # 設定・URLヘルパ
     # -----------------------------
-    def _determine_fallback_url(self, run_context: RunContext, settings: dict) -> Optional[str]:
+    def _determine_fallback_url(self, run_context: RunContext, settings: dict) -> str | None:
         """ナビプラン → fallback_url → home_url の順で復帰先URLを決定。"""
         # 1) 実行時ナビプラン（任意・一時ファイル）
         nav_plan_path = run_context.get_path("navigation_plan.json")
@@ -83,15 +84,15 @@ class PageRecoveryAgent:
     # -----------------------------
     # UI操作ユーティリティ
     # -----------------------------
-    async def _handle_cookie_consent(self, page: Page, selectors_override: Optional[List[str]] = None):
+    async def _handle_cookie_consent(self, page: Page, selectors_override: list[str] | None = None):
         """Cookie同意バナーを処理（短期待機分岐）。"""
         selectors = selectors_override or [
             'button:has-text("ACCEPT AND CONTINUE")',
             'button:has-text("ACCEPT")',
             '[aria-label*="Accept"]',
             '[data-testid*="accept"]',
-            'text=ACCEPT AND CONTINUE',
-            'text=ACCEPT',
+            "text=ACCEPT AND CONTINUE",
+            "text=ACCEPT",
         ]
         for selector in selectors:
             try:
@@ -105,8 +106,8 @@ class PageRecoveryAgent:
                 logger.debug(f"Cookie同意クリック失敗（継続）: {selector}: {e}")
 
     async def _wait_for_stable_plp(
-        self, *, page: Page, plp_container_selectors: List[str], timeout_ms: int
-    ) -> Tuple[bool, Optional[str]]:
+        self, *, page: Page, plp_container_selectors: list[str], timeout_ms: int
+    ) -> tuple[bool, str | None]:
         """PLP（商品一覧コンテナ）の安定表示を待機。"""
         if not plp_container_selectors:
             return True, "body"
@@ -126,9 +127,7 @@ class PageRecoveryAgent:
     # -----------------------------
     # UI導線フォールバック
     # -----------------------------
-    async def _ui_fallback_to_plp(
-        self, *, page: Page, settings: dict, run_context: RunContext, attempt: int
-    ) -> str:
+    async def _ui_fallback_to_plp(self, *, page: Page, settings: dict, run_context: RunContext, attempt: int) -> str:
         """
         PLP待機が失敗した際の導線フォールバック:
           A) 検索アイコン→検索→Enter
@@ -138,21 +137,25 @@ class PageRecoveryAgent:
         ui = settings.get("selectors", {}).get("ui", {})
 
         # --- A) 検索導線 ---
-        search_icon_selectors = ui.get("search_icon_selectors", [
-            '[data-testid="search-icon"]',
-            'button[aria-label*="Search"]',
-            'svg[aria-label*="Search"]',
-            'a[href*="search"]',
-        ])
-        search_input_selectors = ui.get("search_input_selectors", [
-            'input[type="search"]',
-            'input[name="q"]',
-            'input[placeholder*="Search"]',
-        ])
+        search_icon_selectors = ui.get(
+            "search_icon_selectors",
+            [
+                '[data-testid="search-icon"]',
+                'button[aria-label*="Search"]',
+                'svg[aria-label*="Search"]',
+                'a[href*="search"]',
+            ],
+        )
+        search_input_selectors = ui.get(
+            "search_input_selectors",
+            [
+                'input[type="search"]',
+                'input[name="q"]',
+                'input[placeholder*="Search"]',
+            ],
+        )
         search_keyword = (
-            settings.get("discovery_settings", {}).get("search_keyword")
-            or ui.get("default_search_keyword")
-            or "bag"
+            settings.get("discovery_settings", {}).get("search_keyword") or ui.get("default_search_keyword") or "bag"
         )
 
         try:
@@ -188,16 +191,19 @@ class PageRecoveryAgent:
             logger.debug(f"[UI Fallback A] 例外（継続）: {e}")
 
         # --- B) メニュー導線 ---
-        hamburger_selectors = ui.get("hamburger_selectors", [
-            'button[aria-label*="Menu"]',
-            'button[aria-label*="menu"]',
-            '[data-testid="hamburger"]',
-            '.hamburger, .burger',
-        ])
-        gender_priority: List[str] = ui.get("gender_priority", ["Women", "Men"])
-        category_path: List[str] = ui.get("category_path", ["Women", "Bags"])
+        hamburger_selectors = ui.get(
+            "hamburger_selectors",
+            [
+                'button[aria-label*="Menu"]',
+                'button[aria-label*="menu"]',
+                '[data-testid="hamburger"]',
+                ".hamburger, .burger",
+            ],
+        )
+        gender_priority: list[str] = ui.get("gender_priority", ["Women", "Men"])
+        category_path: list[str] = ui.get("category_path", ["Women", "Bags"])
 
-        async def click_text_any(candidates: List[str], timeout=2000) -> bool:
+        async def click_text_any(candidates: list[str], timeout=2000) -> bool:
             for txt in candidates:
                 try:
                     await page.get_by_text(txt, exact=False).first.click(timeout=timeout)
@@ -274,7 +280,7 @@ class PageRecoveryAgent:
 
             # 3) PLP安定化待機
             pdp_settings = settings.get("selectors", {}).get("pdp", {})
-            plp_selectors: List[str] = pdp_settings.get("plp_container_selectors", ["body"])
+            plp_selectors: list[str] = pdp_settings.get("plp_container_selectors", ["body"])
             total_timeout_ms = int(settings.get("discovery_settings", {}).get("timeout_sec", 30)) * 1000
 
             ok, found_selector = await self._wait_for_stable_plp(
@@ -284,7 +290,9 @@ class PageRecoveryAgent:
             # 3.5) UI導線フォールバック（PLP未成立時のみ）
             if not ok:
                 logger.warning(f"PLP待機に失敗。UI導線フォールバックを試行します: {plp_selectors}")
-                ui_flow = await self._ui_fallback_to_plp(page=page, settings=settings, run_context=run_context, attempt=attempt)
+                ui_flow = await self._ui_fallback_to_plp(
+                    page=page, settings=settings, run_context=run_context, attempt=attempt
+                )
 
                 # 導線後に再待機（やや短め＋再短縮）
                 ok2, found_selector2 = await self._wait_for_stable_plp(
@@ -310,7 +318,7 @@ class PageRecoveryAgent:
             except Exception:
                 pass
 
-            card_sel_list: List[str] = pdp_settings.get("pdp_link_selectors", ["article"])
+            card_sel_list: list[str] = pdp_settings.get("pdp_link_selectors", ["article"])
             card_selectors = ", ".join(card_sel_list)
             card_count = 0
             try:
@@ -320,7 +328,9 @@ class PageRecoveryAgent:
 
             logging.info(f"回復後の状況分析: {card_count}件の商品カードを検出。")
 
-            message = f"Recovery successful via {recovery_method}. Stable with '{found_selector}', found {card_count} cards."
+            message = (
+                f"Recovery successful via {recovery_method}. Stable with '{found_selector}', found {card_count} cards."
+            )
             return {"success": True, "message": message, "card_count": card_count}
 
         except Exception as e:

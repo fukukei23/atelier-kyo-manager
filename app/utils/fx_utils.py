@@ -17,35 +17,40 @@
 # ==============================================================================
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+
 import json
 import logging
 import os
-import xml.etree.ElementTree as ET
 import urllib.request
+import xml.etree.ElementTree as ET
 from datetime import datetime, timedelta
-from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
+
 
 # --- 共通 ---
 def _now_iso() -> str:
     return datetime.utcnow().replace(microsecond=0).isoformat()
 
+
 def _app_root() -> str:
     return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 
+
 def _cache_paths():
-    cache_dir = os.path.join(_app_root(), "instance", "cache") # 修正: ".." を削除
+    cache_dir = os.path.join(_app_root(), "instance", "cache")  # 修正: ".." を削除
     os.makedirs(cache_dir, exist_ok=True)
     return cache_dir, os.path.join(cache_dir, "ecb_fx.json")
 
-def _load_json(path: str) -> Optional[dict]:
+
+def _load_json(path: str) -> dict | None:
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except Exception as e:
         logger.warning(f"[FX] Failed to load JSON from {path}: {e}")
         return None
+
 
 def _save_json(path: str, payload: dict) -> None:
     try:
@@ -55,9 +60,10 @@ def _save_json(path: str, payload: dict) -> None:
     except Exception as e:
         logger.warning(f"[FX] Failed to save JSON to {path}: {e}")
 
+
 # --- 手動レート "USD=155,EUR=170,..." を dict へ ---
-def parse_fx_rates_str(rates_str: str) -> Dict[str, float]:
-    table: Dict[str, float] = {}
+def parse_fx_rates_str(rates_str: str) -> dict[str, float]:
+    table: dict[str, float] = {}
     if not rates_str:
         return table
     for part in rates_str.split(","):
@@ -71,10 +77,12 @@ def parse_fx_rates_str(rates_str: str) -> Dict[str, float]:
             continue
     return table
 
+
 # --- ECB ---
 _ECB_XML_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
 
-def _ecb_fetch_xml(timeout_sec: int = 10) -> Tuple[str, str]:
+
+def _ecb_fetch_xml(timeout_sec: int = 10) -> tuple[str, str]:
     with urllib.request.urlopen(_ECB_XML_URL, timeout=timeout_sec) as resp:
         xml_bytes = resp.read()
     xml_text = xml_bytes.decode("utf-8", errors="ignore")
@@ -89,7 +97,8 @@ def _ecb_fetch_xml(timeout_sec: int = 10) -> Tuple[str, str]:
         logger.warning(f"[FX] Failed to parse ECB XML timestamp: {e}")
     return asof, xml_text
 
-def _ecb_xml_to_eur_table(xml_text: str) -> Dict[str, float]:
+
+def _ecb_xml_to_eur_table(xml_text: str) -> dict[str, float]:
     table = {"EUR": 1.0}
     try:
         root = ET.fromstring(xml_text)
@@ -102,7 +111,8 @@ def _ecb_xml_to_eur_table(xml_text: str) -> Dict[str, float]:
         logger.warning(f"[FX] Failed to parse ECB XML rates: {e}")
     return table
 
-def build_jpy_table_from_eur(eur_table: Dict[str, float]) -> Dict[str, float]:
+
+def build_jpy_table_from_eur(eur_table: dict[str, float]) -> dict[str, float]:
     """
     EURベース → 1通貨単位→JPY の表に変換。
     例: 1 USD = (JPY_per_EUR) / (USD_per_EUR)
@@ -110,7 +120,7 @@ def build_jpy_table_from_eur(eur_table: Dict[str, float]) -> Dict[str, float]:
     if "JPY" not in eur_table:
         return {}
     jpy_per_eur = eur_table["JPY"]
-    out: Dict[str, float] = {"JPY": 1.0}
+    out: dict[str, float] = {"JPY": 1.0}
     for ccy, per_eur in eur_table.items():
         if ccy == "JPY":
             continue
@@ -120,11 +130,10 @@ def build_jpy_table_from_eur(eur_table: Dict[str, float]) -> Dict[str, float]:
             continue
     return out
 
+
 def get_fx_table_jpy(
-    manual_table: Optional[Dict[str, float]] = None,
-    auto: bool = True,
-    ttl_hours: int = 12
-) -> Tuple[Dict[str, float], dict]:
+    manual_table: dict[str, float] | None = None, auto: bool = True, ttl_hours: int = 12
+) -> tuple[dict[str, float], dict]:
     """
     最終レート表（1通貨→JPY）とメタ情報を返す。
     優先: manual > auto(ECB+cache) > {}

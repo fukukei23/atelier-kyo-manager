@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 settings.py - Settings resolution and time budget management for BrowserUseAgent
 
@@ -12,13 +11,13 @@ Note: Browser session management logic (route setup, init scripts, session resto
 """
 
 from __future__ import annotations
+
 import os
 import time
 from pathlib import Path
-from typing import Any, Dict, Tuple, Optional
+from typing import Any
 
-from app.agents.browser.extractor import PDPSizeSelectPolicy, DEFAULT_PDP_PARALLEL_LIMIT
-from app.core.run_context import RunContext
+from app.agents.browser.extractor import DEFAULT_PDP_PARALLEL_LIMIT, PDPSizeSelectPolicy
 
 OVERALL_PLP_BUDGET_MS_DEFAULT = 120000  # 120s watchdog
 
@@ -38,25 +37,20 @@ SESSION_DIR = Path("instance/sessions")
 
 
 def resolve_run_settings(
-    site_config: Dict[str, Any],
-    runtime_kwargs: Dict[str, Any],
+    site_config: dict[str, Any],
+    runtime_kwargs: dict[str, Any],
     logger: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Resolve run settings from site_config and runtime_kwargs.
-    
+
     Priority: runtime_kwargs > site_config > defaults
     """
     ds = site_config.get("discovery_settings", {}) or {}
-    site_key_guess = (
-        site_config.get("site_key")
-        or site_config.get("id")
-        or runtime_kwargs.get("site")
-        or ""
-    )
+    site_key_guess = site_config.get("site_key") or site_config.get("id") or runtime_kwargs.get("site") or ""
     site_key_guess = str(site_key_guess or "").upper()
     vrt = ds.get("vrt", {}) or {}
-    
+
     logger.info(f"[Debug] runtime enable_video flag: {runtime_kwargs.get('enable_video')}")
     enable_har = runtime_kwargs.get("enable_har", ds.get("enable_har", True))
     enable_trace = runtime_kwargs.get("enable_trace", ds.get("enable_trace", True))
@@ -65,7 +59,7 @@ def resolve_run_settings(
     cli_enable_video = runtime_kwargs.get("enable_video")
     cfg_enable_video = ds.get("enable_video")
     env_raw = os.getenv("ATK_ENABLE_VIDEO") or os.getenv("ENABLE_VIDEO")
-    env_enable_video: Optional[bool] = None
+    env_enable_video: bool | None = None
     if env_raw is not None:
         env_enable_video = str(env_raw).strip().lower() in ("1", "true", "yes", "y", "on")
 
@@ -76,7 +70,7 @@ def resolve_run_settings(
     elif env_enable_video is not None:
         enable_video = env_enable_video
     else:
-        enable_video = True if site_key_guess == "MONCLER_OFFICIAL" else False
+        enable_video = site_key_guess == "MONCLER_OFFICIAL"
 
     default_accept_language = "en-GB,en;q=0.8"
     if site_key_guess == "MONCLER_OFFICIAL":
@@ -118,23 +112,24 @@ def resolve_run_settings(
         "locale_recover_max": int(ds.get("locale_recover_max", 5)),
         "enable_human_like": bool(runtime_kwargs.get("enable_human_like", ds.get("enable_human_like", False))),
         "enable_ua_rotation": bool(runtime_kwargs.get("enable_ua_rotation", ds.get("enable_ua_rotation", False))),
-        "enable_viewport_rotation": bool(runtime_kwargs.get("enable_viewport_rotation", ds.get("enable_viewport_rotation", False))),
+        "enable_viewport_rotation": bool(
+            runtime_kwargs.get("enable_viewport_rotation", ds.get("enable_viewport_rotation", False))
+        ),
     }
-    
+
     try:
         pdp_policy_cfg = ds.get("pdp_size_select_policy", {})
         settings["pdp_size_select_policy"] = PDPSizeSelectPolicy(
-            mode=pdp_policy_cfg.get("mode", "off"),
-            prefer_labels=pdp_policy_cfg.get("prefer_labels", [])
+            mode=pdp_policy_cfg.get("mode", "off"), prefer_labels=pdp_policy_cfg.get("prefer_labels", [])
         )
     except Exception as e:
         logger.warning(f"Could not parse PDPSizeSelectPolicy: {e}. Defaulting to 'off'.")
         settings["pdp_size_select_policy"] = PDPSizeSelectPolicy()
-    
+
     return settings
 
 
-def start_watchdog(budget_ms: int) -> Tuple[float, int]:
+def start_watchdog(budget_ms: int) -> tuple[float, int]:
     """Start time budget watchdog. Returns (start_time, budget_ms)."""
     return time.monotonic(), int(budget_ms)
 
@@ -148,4 +143,3 @@ def time_left_ms(start_t: float, budget_ms: int) -> int:
 def slice_timeout_ms(left_ms: int, cap_ms: int) -> int:
     """Slice timeout to fit within remaining budget and cap."""
     return max(500, min(left_ms, cap_ms))
-

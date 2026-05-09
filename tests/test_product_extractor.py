@@ -1,9 +1,11 @@
-# -*- coding: utf-8 -*-
 """
 ProductExtractor ユニットテスト
 """
+
+from unittest.mock import AsyncMock, MagicMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+
 from app.agents.browser.product_extractor import ProductExtractor, ProductInfo
 from app.core.run_context import RunContext
 
@@ -242,7 +244,7 @@ class TestProductExtractorEdgeCases:
         """セレクタ缺失時のフォールバックテスト"""
         config = {
             "selectors": {"pdp": {"title": []}},  # 空のセレクタ
-            "price_rules": {}
+            "price_rules": {},
         }
         extractor = ProductExtractor(site_config=config, run_context=run_context)
 

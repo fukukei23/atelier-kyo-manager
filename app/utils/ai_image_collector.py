@@ -9,14 +9,17 @@
 #    プロジェクトルートの `requirements.txt` を参照してください。
 # ----------------------------------------------------------------
 from __future__ import annotations
-import cv2, numpy as np, requests
-from icrawler.builtin import BingImageCrawler, GoogleImageCrawler
+
 from pathlib import Path
-from typing import List
+
+import cv2
+import numpy as np
+from icrawler.builtin import BingImageCrawler, GoogleImageCrawler
 
 # 1. モデルファイル
-MODEL_DIR  = Path(__file__).parent / "models"
-ONNX_FILE  = MODEL_DIR / "deeplabv3_mnv3.onnx"
+MODEL_DIR = Path(__file__).parent / "models"
+ONNX_FILE = MODEL_DIR / "deeplabv3_mnv3.onnx"
+
 
 # 2. ダウンロード処理は廃止（ローカルに無ければ明示エラー）
 def ensure_model() -> None:
@@ -29,29 +32,29 @@ def ensure_model() -> None:
         "2) 生成した deeplabv3_mnv3.onnx を models フォルダに置いて再実行してください"
     )
 
+
 # 3. 深度学習セグメンテーション
 class DeepLabSeg:
     def __init__(self, onnx: Path, use_cuda=False):
         self.net = cv2.dnn.readNetFromONNX(str(onnx))
         backend = cv2.dnn.DNN_BACKEND_CUDA if use_cuda else cv2.dnn.DNN_BACKEND_OPENCV
-        target  = cv2.dnn.DNN_TARGET_CUDA  if use_cuda else cv2.dnn.DNN_TARGET_CPU
+        target = cv2.dnn.DNN_TARGET_CUDA if use_cuda else cv2.dnn.DNN_TARGET_CPU
         self.net.setPreferableBackend(backend)
         self.net.setPreferableTarget(target)
 
     def remove_bg(self, img: np.ndarray, blur=5) -> np.ndarray:
         h, w = img.shape[:2]
-        blob = cv2.dnn.blobFromImage(img, 1/127.5, (513, 513), (127.5,)*3, swapRB=True)
+        blob = cv2.dnn.blobFromImage(img, 1 / 127.5, (513, 513), (127.5,) * 3, swapRB=True)
         self.net.setInput(blob)
         mask = self.net.forward()[0].argmax(0).astype(np.uint8)
         mask = cv2.resize(mask, (w, h), cv2.INTER_NEAREST)
-        fg_mask = cv2.medianBlur(mask*255, blur) if blur else mask*255
+        fg_mask = cv2.medianBlur(mask * 255, blur) if blur else mask * 255
         fg = cv2.bitwise_and(img, img, mask=fg_mask)
         return np.where(fg_mask[..., None] == 255, fg, 255)
 
+
 # 4. 画像検索＋背景除去
-def crawl_and_remove_bg(keyword: str, max_num=30,
-                        engines: List[str] | None = None,
-                        use_cuda=False) -> Path:
+def crawl_and_remove_bg(keyword: str, max_num=30, engines: list[str] | None = None, use_cuda=False) -> Path:
     engines = engines or ["bing", "google"]
     out_dir = Path(__file__).parent / "images" / keyword.replace(" ", "_")
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -74,8 +77,10 @@ def crawl_and_remove_bg(keyword: str, max_num=30,
             print("×", p.name, e)
     return out_dir
 
+
 def crawl_images(keyword, max_num=50, engines=None):
     return crawl_and_remove_bg(keyword, max_num, engines or ["bing", "google"])
+
 
 # 5. CLI
 if __name__ == "__main__":

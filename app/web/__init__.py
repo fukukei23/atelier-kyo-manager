@@ -9,13 +9,15 @@
 # ======================================================================
 
 from __future__ import annotations
-import os
+
 import logging
+import os
 from logging.handlers import RotatingFileHandler
+
 from flask import Flask
 
 # ★ ここがポイント：自前で SQLAlchemy() を作らない。extensions の単一インスタンスを使う
-from app.extensions import db, migrate, csrf
+from app.extensions import csrf, db, migrate
 
 
 def _load_config(app: Flask, config_name: str | None = None) -> None:
@@ -42,6 +44,7 @@ def _load_config(app: Flask, config_name: str | None = None) -> None:
     # 2) ルート config.py の load_config(app)
     try:
         import config as root_cfg  # ルート（app/ ではない）
+
         if hasattr(root_cfg, "load_config"):
             root_cfg.load_config(app)  # すでにあなたのログに出ていた loader を使用
             app.logger.info("[config] loaded via root config.load_config")
@@ -52,6 +55,7 @@ def _load_config(app: Flask, config_name: str | None = None) -> None:
     # 3) ルート config.py の Config クラス
     try:
         import config as root_cfg
+
         if hasattr(root_cfg, "Config"):
             app.config.from_object(root_cfg.Config)
             app.logger.info("[config] loaded via root config.Config")
@@ -62,6 +66,7 @@ def _load_config(app: Flask, config_name: str | None = None) -> None:
     # 4) app/config.py 側も一応サーチ（ある環境向け）
     try:
         from . import config as app_cfg  # app/config.py がある場合のみ
+
         if hasattr(app_cfg, "load_config"):
             app_cfg.load_config(app)
             app.logger.info("[config] loaded via app.config.load_config")
@@ -78,8 +83,7 @@ def _load_config(app: Flask, config_name: str | None = None) -> None:
     app.config.from_mapping(
         SECRET_KEY=os.getenv("SECRET_KEY", "change-me"),
         SQLALCHEMY_DATABASE_URI=(
-            os.getenv("DATABASE_URL") or
-            f"sqlite:///{os.path.join(app.instance_path, 'site.db')}"
+            os.getenv("DATABASE_URL") or f"sqlite:///{os.path.join(app.instance_path, 'site.db')}"
         ),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
     )
@@ -95,8 +99,7 @@ def create_app(config_name: str | None = None) -> Flask:
     # ログ
     logs_dir = os.path.join(app.instance_path, "logs")
     os.makedirs(logs_dir, exist_ok=True)
-    handler = RotatingFileHandler(os.path.join(logs_dir, "app.log"),
-                                  maxBytes=1_000_000, backupCount=3)
+    handler = RotatingFileHandler(os.path.join(logs_dir, "app.log"), maxBytes=1_000_000, backupCount=3)
     handler.setLevel(logging.INFO)
     app.logger.addHandler(handler)
     app.logger.setLevel(logging.INFO)
@@ -108,10 +111,12 @@ def create_app(config_name: str | None = None) -> Flask:
 
     # モデルは init_app の後で import（順序が重要）
     from app import models  # noqa: F401
+
     app.logger.info("Models imported for metadata binding.")
 
     # ルート登録
     from app.routes import bp as main_bp
+
     app.register_blueprint(main_bp)
     app.logger.info("Blueprint main_bp registered.")
 

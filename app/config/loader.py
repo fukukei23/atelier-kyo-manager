@@ -18,11 +18,12 @@
 # ==============================================================================
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+
+import copy
 import json
 import logging
-import copy
-from typing import Dict, Any, List
 from pathlib import Path
+from typing import Any
 
 # --- モジュールとして公開する関数を明示 ---
 __all__ = ["load_full_config", "get_site_config", "load_and_merge_configs"]
@@ -31,9 +32,10 @@ logger = logging.getLogger(__name__)
 APP_ROOT = Path(__file__).resolve().parents[2]
 
 # --- 内部キャッシュ ---
-_cached_config: Dict[str, Any] | None = None
+_cached_config: dict[str, Any] | None = None
 
-def deep_merge(source: Dict, destination: Dict) -> Dict:
+
+def deep_merge(source: dict, destination: dict) -> dict:
     """深い辞書マージを行うヘルパー関数。"""
     for key, value in source.items():
         if isinstance(value, dict):
@@ -43,7 +45,8 @@ def deep_merge(source: Dict, destination: Dict) -> Dict:
             destination[key] = value
     return destination
 
-def load_full_config(force_reload: bool = False) -> Dict[str, Any]:
+
+def load_full_config(force_reload: bool = False) -> dict[str, Any]:
     """
     base.json と overrides.local.json を階層的にマージして最終設定を生成する。
     システムで唯一の公式な設定読み込みインターフェース。
@@ -57,7 +60,7 @@ def load_full_config(force_reload: bool = False) -> Dict[str, Any]:
     base_path = config_dir / "base.json"
     override_path = config_dir / "overrides.local.json"
 
-    final_config: Dict[str, Any] = {}
+    final_config: dict[str, Any] = {}
 
     try:
         # 1. base.jsonの読み込み
@@ -65,8 +68,8 @@ def load_full_config(force_reload: bool = False) -> Dict[str, Any]:
         with base_path.open("r", encoding="utf-8") as f:
             base_data = json.load(f)
 
-        sites_list: List[Dict[str, Any]] = base_data.get("sites", [])
-        default_discovery_settings: Dict[str, Any] = base_data.get("default_discovery_settings", {})
+        sites_list: list[dict[str, Any]] = base_data.get("sites", [])
+        default_discovery_settings: dict[str, Any] = base_data.get("default_discovery_settings", {})
 
         base_sites_dict = {site["name"]: site for site in sites_list}
 
@@ -102,15 +105,17 @@ def load_full_config(force_reload: bool = False) -> Dict[str, Any]:
     _cached_config = final_config
     return final_config
 
-def get_site_config(site_name: str) -> Dict[str, Any] | None:
+
+def get_site_config(site_name: str) -> dict[str, Any] | None:
     """
     ロード済みの全設定から、指定されたサイトの設定を安全に取得する。
     """
     full_config = load_full_config()
     return full_config.get(site_name)
 
+
 # --- ★★★ 後方互換性のためのエイリアス ★★★ ---
-def load_and_merge_configs(force_reload: bool = False) -> Dict[str, Any]:
+def load_and_merge_configs(force_reload: bool = False) -> dict[str, Any]:
     """
     旧来のOrchestrator等との互換性のために維持されるエイリアス。
     新しい公式インターフェース `load_full_config` を呼び出します。
@@ -122,7 +127,7 @@ def load_and_merge_configs(force_reload: bool = False) -> Dict[str, Any]:
     return load_full_config(force_reload)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
     logger.info("--- Running Configuration Loader Test ---")
 

@@ -6,10 +6,10 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional
 
-
 # ---------------------------------------------------------------------------
 # 定数
 # ---------------------------------------------------------------------------
+
 
 class OrderStatus:
     PENDING = "pending"
@@ -48,6 +48,7 @@ STATUS_LABELS: dict[str, str] = {
 # ログ
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class AutoOrderLog:
     order_id: int
@@ -60,6 +61,7 @@ class AutoOrderLog:
 # ---------------------------------------------------------------------------
 # サービス
 # ---------------------------------------------------------------------------
+
 
 class AutoOrderService:
     """自動発注ステートマシン"""

@@ -1,10 +1,13 @@
 from __future__ import annotations
+
 from datetime import datetime
+
 from app.extensions import db
 
 
 class RepeatCustomer(db.Model):
     """F13: リピーター管理"""
+
     __tablename__ = "repeat_customer"
 
     id = db.Column(db.Integer, primary_key=True)

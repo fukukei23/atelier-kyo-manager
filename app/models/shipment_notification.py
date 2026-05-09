@@ -11,9 +11,7 @@ class ShipmentNotification(db.Model):
     __tablename__ = "shipment_notification"
 
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    order_id = db.Column(
-        db.Integer, db.ForeignKey("order.id"), nullable=False, comment="注文ID"
-    )
+    order_id = db.Column(db.Integer, db.ForeignKey("order.id"), nullable=False, comment="注文ID")
     tracking_number = db.Column(db.String(128), nullable=True, comment="追跡番号")
     warehouse = db.Column(db.String(64), nullable=True, comment="転送倉庫: stackry/shipito/buyandship")
     carrier = db.Column(db.String(64), nullable=True, comment="配送業者: fedex/dhl/ups等")

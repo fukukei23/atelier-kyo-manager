@@ -5,9 +5,8 @@
 # ======================================================================
 from __future__ import annotations
 
-import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -253,8 +252,8 @@ class TestPipelineRoutes:
         with app.test_client() as client:
             # login_required をバイパスするため login_context を使用
             with app.test_request_context():
-                from flask_login import login_user
                 from app.models.user import User
+
                 # テストユーザー作成
                 test_user = User(username="test")
                 test_user.set_password("test")

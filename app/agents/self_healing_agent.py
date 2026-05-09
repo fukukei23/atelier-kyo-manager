@@ -11,11 +11,12 @@
 # ==============================================================================
 # -*- coding: utf-8 -*-
 from __future__ import annotations
+
 import logging
-import time
-from typing import Any, Dict, Optional
 import sys
+import time
 from pathlib import Path
+from typing import Any
 
 # --- プロジェクトルートをPythonの検索パスに追加 ---
 APP_ROOT = Path(__file__).resolve().parents[2]
@@ -23,9 +24,11 @@ if str(APP_ROOT) not in sys.path:
     sys.path.insert(0, str(APP_ROOT))
 
 from playwright.async_api import Page
+
+from app.agents.failure_analysis_agent import FKB
 from app.agents.page_recovery_agent import PageRecoveryAgent
 from app.agents.selector_repair_agent import SelectorRepairAgent
-from app.agents.failure_analysis_agent import FKB
+
 try:
     from app.core.run_context import RunContext
 except Exception:
@@ -62,13 +65,15 @@ class SelfHealingAgent:
             "recovery_success": 0,
             "fkb_hit": 0,
             "llm_repair_success": 0,
-            "failed": 0
+            "failed": 0,
         }
         # Circuit Breaker: サイト別連続失敗カウンター
-        self._cb_failures: Dict[str, int] = {}
-        self._cb_opened_at: Dict[str, float] = {}
+        self._cb_failures: dict[str, int] = {}
+        self._cb_opened_at: dict[str, float] = {}
 
-    async def execute(self, *, page: Page, run_context: RunContext, settings: dict, attempt: int, failure_context: Dict[str, Any]) -> dict:
+    async def execute(
+        self, *, page: Page, run_context: RunContext, settings: dict, attempt: int, failure_context: dict[str, Any]
+    ) -> dict:
         """
         自己修復の戦略的意思決定と実行を統括する。
         Circuit Breaker: サイト別連続失敗が閾値を超えると自己修復をスキップして失敗を返す。
@@ -87,10 +92,12 @@ class SelfHealingAgent:
                 "success": False,
                 "strategy": "circuit_breaker_open",
                 "message": f"CircuitBreaker open for {site} (failures={self._cb_failures.get(site, 0)}). Wait {self.CB_COOLDOWN_SEC}s.",
-                "cb_status": "open"
+                "cb_status": "open",
             }
 
-        logging.info(f"SelfHealingAgent: {attempt}回目/{self.MAX_TOTAL_ATTEMPTS} の自己修復戦略を開始... (Site: {site})")
+        logging.info(
+            f"SelfHealingAgent: {attempt}回目/{self.MAX_TOTAL_ATTEMPTS} の自己修復戦略を開始... (Site: {site})"
+        )
         await run_context.take_screenshot(page, f"40_selfheal_strat_attempt_{attempt}_start")
 
         # 戦略1: 物理的回復を試みる
@@ -112,7 +119,7 @@ class SelfHealingAgent:
             settings=settings,
             error_msg=error_msg,
             site=site,
-            current_url=current_url
+            current_url=current_url,
         )
         if fkb_result.get("success"):
             self._record_success(site)
@@ -131,7 +138,7 @@ class SelfHealingAgent:
             html_content=html_content,
             site=settings.get("name", "UnknownSite"),
             site_config=settings,
-            run_context=run_context
+            run_context=run_context,
         )
 
         if repair_proposal and repair_proposal.get("proposed_selectors"):
@@ -144,11 +151,11 @@ class SelfHealingAgent:
         logging.error(message)
         self._record_failure(site)
         return {"success": False, "strategy": "failed", "message": message}
-    
-    async def handle_moncler_failure(self, failure_payload: Dict[str, Any]) -> Dict[str, Any]:
+
+    async def handle_moncler_failure(self, failure_payload: dict[str, Any]) -> dict[str, Any]:
         """
         CR-ATELIER-002 Step 6-4: Moncler 専用の失敗ハンドリング
-        
+
         Args:
             failure_payload: 失敗情報を含む辞書
                 - site: str
@@ -160,7 +167,7 @@ class SelfHealingAgent:
                 - selectors_current: Dict[str, Any]
                 - run_id: Optional[str]
                 - timestamp: Optional[str]
-        
+
         Returns:
             Dict[str, Any]: 分析結果
                 - analysis: str
@@ -169,24 +176,24 @@ class SelfHealingAgent:
                 - confidence: float
         """
         logger.info(f"[SelfHealing][Moncler] Handling failure: reason={failure_payload.get('failure_reason')}")
-        
+
         failure_reason = failure_payload.get("failure_reason", "unknown")
-        layer_stats = failure_payload.get("layer_stats", {})
-        rejection_stats = failure_payload.get("rejection_stats", {})
-        
+        failure_payload.get("layer_stats", {})
+        failure_payload.get("rejection_stats", {})
+
         # 失敗理由に基づいて分析
         analysis = ""
         root_cause = ""
         suggested_actions = []
         confidence = 0.0
-        
+
         if failure_reason == "raw_zero":
             analysis = "セレクタが要素を見つけられていません。DOM構造が変化した可能性があります。"
             root_cause = "primary selector mismatch"
             suggested_actions = [
                 "MONCLER_PLP_PDP_LINK_SELECTORS_PRIMARY に新しいセレクタを追加",
                 "Secondary layer のセレクタを確認",
-                "DOM スナップショットを分析してセレクタを再設計"
+                "DOM スナップショットを分析してセレクタを再設計",
             ]
             confidence = 0.85
         elif failure_reason == "rejected_all":
@@ -195,7 +202,7 @@ class SelfHealingAgent:
             suggested_actions = [
                 "URLバリデーションルールを確認",
                 "rejection_stats を分析して拒否理由を特定",
-                "必要に応じてバリデーションルールを緩和"
+                "必要に応じてバリデーションルールを緩和",
             ]
             confidence = 0.75
         elif failure_reason == "secondary_or_tertiary_used":
@@ -204,7 +211,7 @@ class SelfHealingAgent:
             suggested_actions = [
                 "Primary layer のセレクタを更新",
                 "Secondary layer のセレクタを Primary に昇格",
-                "DOM スナップショットを分析して最適なセレクタを特定"
+                "DOM スナップショットを分析して最適なセレクタを特定",
             ]
             confidence = 0.80
         elif failure_reason == "trap_detected":
@@ -213,59 +220,48 @@ class SelfHealingAgent:
             suggested_actions = [
                 "LocaleGuard の動作を確認",
                 "リダイレクト挙動を分析",
-                "Trap ページの DOM スナップショットを確認"
+                "Trap ページの DOM スナップショットを確認",
             ]
             confidence = 0.90
         elif failure_reason == "locale_corrections_exceeded":
-            analysis = "Locale補正が繰り返し発生しています。サーバ側のリダイレクトロジックが干渉している可能性があります。"
+            analysis = (
+                "Locale補正が繰り返し発生しています。サーバ側のリダイレクトロジックが干渉している可能性があります。"
+            )
             root_cause = "locale redirect loop"
             suggested_actions = [
                 "Cookie やセッション情報を確認",
                 "リダイレクト挙動を分析",
-                "LocaleGuard の再試行ロジックを調整"
+                "LocaleGuard の再試行ロジックを調整",
             ]
             confidence = 0.70
         else:
             analysis = "不明な失敗理由です。詳細な分析が必要です。"
             root_cause = "unknown"
-            suggested_actions = [
-                "DOM スナップショットを分析",
-                "ログを確認",
-                "Telemetry データを確認"
-            ]
+            suggested_actions = ["DOM スナップショットを分析", "ログを確認", "Telemetry データを確認"]
             confidence = 0.50
-        
+
         result = {
             "analysis": analysis,
             "root_cause": root_cause,
             "suggested_actions": suggested_actions,
             "confidence": confidence,
         }
-        
+
         logger.info(
             f"[SelfHealing][Moncler] Analysis complete: root_cause={root_cause}, "
             f"confidence={confidence}, actions={len(suggested_actions)}"
         )
-        
+
         # 提案をログに保存（将来の site_config パッチ作成に使用）
         # 実際の site_config 書き換えは Step7 以降の責務
-        logger.info(
-            f"[SelfHealing][Moncler] Suggested actions: {suggested_actions}"
-        )
+        logger.info(f"[SelfHealing][Moncler] Suggested actions: {suggested_actions}")
 
         return result
 
     # --- FKB ベース回復 ---
 
     async def _try_fkb_recovery(
-        self,
-        *,
-        page: Page,
-        run_context: RunContext,
-        settings: dict,
-        error_msg: str,
-        site: str,
-        current_url: str
+        self, *, page: Page, run_context: RunContext, settings: dict, error_msg: str, site: str, current_url: str
     ) -> dict:
         """FKBから解決策を取得して適用を試みる"""
         fkb_entry = self.fkb.find_matching_entry(error_msg, site, current_url)
@@ -289,7 +285,7 @@ class SelfHealingAgent:
                     "success": True,
                     "strategy": "fkb_url_redirect",
                     "message": f"FKB ID: {solution.get('id')} - 回復URLへ遷移",
-                    "fkb_entry": fkb_entry
+                    "fkb_entry": fkb_entry,
                 }
             except Exception as e:
                 logger.warning(f"[FKB] 回復URLへの遷移に失敗: {e}")
@@ -307,7 +303,7 @@ class SelfHealingAgent:
                             "strategy": "fkb_alternate_selector",
                             "message": f"FKB代替セレクタ '{selector}' が有効",
                             "selector": selector,
-                            "fkb_entry": fkb_entry
+                            "fkb_entry": fkb_entry,
                         }
                 except Exception:
                     continue
@@ -365,13 +361,12 @@ class SelfHealingAgent:
         self._cb_failures[site] = self._cb_failures.get(site, 0) + 1
         self.recovery_stats["failed"] += 1
 
-        if self._cb_failures[site] >= self.CB_THRESHOLD:
-            if site not in self._cb_opened_at:
-                self._cb_opened_at[site] = time.time()
-                logger.warning(
-                    f"[CircuitBreaker] {site}: 連続{self._cb_failures[site]}回失敗でオープン "
-                    f"(閾値={self.CB_THRESHOLD}, クールダウン={self.CB_COOLDOWN_SEC}s)"
-                )
+        if self._cb_failures[site] >= self.CB_THRESHOLD and site not in self._cb_opened_at:
+            self._cb_opened_at[site] = time.time()
+            logger.warning(
+                f"[CircuitBreaker] {site}: 連続{self._cb_failures[site]}回失敗でオープン "
+                f"(閾値={self.CB_THRESHOLD}, クールダウン={self.CB_COOLDOWN_SEC}s)"
+            )
 
     def _record_success(self, site: str) -> None:
         """成功を記録し、CBカウンターをリセット"""
@@ -395,5 +390,5 @@ class SelfHealingAgent:
             **self.recovery_stats,
             "cb_failures": dict(self._cb_failures),
             "cb_opened_sites": list(self._cb_opened_at.keys()),
-            "success_rate": round(success / total * 100, 1)
+            "success_rate": round(success / total * 100, 1),
         }

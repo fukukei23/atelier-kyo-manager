@@ -7,11 +7,10 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List
 
 from flask_login import UserMixin
-from sqlalchemy import Integer, String, Boolean, DateTime
-from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy import Boolean, DateTime, Integer, String
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from app.extensions import db
 

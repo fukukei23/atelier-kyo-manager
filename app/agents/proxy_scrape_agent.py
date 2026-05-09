@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 # ==============================================================================
 # File: app/agents/proxy_scrape_agent.py
 # Date (JST): 2025-11-05 13:05:00
@@ -13,12 +12,14 @@
 # ==============================================================================
 import asyncio
 import inspect
-import logging
 import json
-from typing import Any, Dict, Optional # ★ v1.4.0 + diff
+import logging
+from typing import Any  # ★ v1.4.0 + diff
+
 # from app.agents.gpt_integration import GPTIntegration # apply が内部で呼ぶため不要
 
 logger = logging.getLogger(__name__)
+
 
 class ProxyScrapeAgent:
     """
@@ -35,14 +36,14 @@ class ProxyScrapeAgent:
     def __init__(self):
         pass
 
-    async def run(self, orchestrator: Any, args: Any, site_conf: Dict[str, Any]):
+    async def run(self, orchestrator: Any, args: Any, site_conf: dict[str, Any]):
         proxy = site_conf.get("proxy_agent", {}) or {}
         max_cycles = int(proxy.get("max_cycles", 2))
         backoff_base = float(proxy.get("retry_backoff", 2.0))
         dry_run = bool(proxy.get("dry_run", False))
 
         attempt = 0
-        last_exc: Optional[Exception] = None
+        last_exc: Exception | None = None
         while attempt < max_cycles:
             attempt += 1
             try:
@@ -56,7 +57,7 @@ class ProxyScrapeAgent:
                         failure_context,
                         site_conf,
                         dry_run=dry_run,
-                        patch_dir=proxy.get("patch_dir", "instance/patches")
+                        patch_dir=proxy.get("patch_dir", "instance/patches"),
                     )
                     sleep_s = backoff_base ** (attempt - 1)
                     logger.info(f"[Proxy] 再試行まで待機: {sleep_s:.1f}s")
@@ -66,7 +67,7 @@ class ProxyScrapeAgent:
 
     async def _run_once(self, orchestrator: Any, args: Any):
         # ... (v1.4.0 と変更なし) ...
-        run = getattr(orchestrator, "run")
+        run = orchestrator.run
         sig = inspect.signature(run)
         wants_kwargs = any(p.kind is inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values())
         kw = {
@@ -89,29 +90,28 @@ class ProxyScrapeAgent:
 
     async def _call_sync(self, fn, **kw):
         import asyncio
+
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, lambda: fn(**kw))
 
-    def _build_failure_context(self, args: Any, exc: Exception) -> Dict[str, Any]:
+    def _build_failure_context(self, args: Any, exc: Exception) -> dict[str, Any]:
         # ... (v1.4.0 と変更なし) ...
         return {
             "error": str(exc),
-            "site_key": getattr(args, "sites", [None])[0] if getattr(args, "sites", None) else getattr(args, "site", None),
+            "site_key": getattr(args, "sites", [None])[0]
+            if getattr(args, "sites", None)
+            else getattr(args, "site", None),
             "query": getattr(args, "query", None),
             "target_url": getattr(args, "target_url", None),
         }
 
     async def _self_evolve(
-        self,
-        failure_context: Dict[str, Any],
-        site_conf: Dict[str, Any],
-        *,
-        dry_run: bool,
-        patch_dir: str
+        self, failure_context: dict[str, Any], site_conf: dict[str, Any], *, dry_run: bool, patch_dir: str
     ) -> None:
-        from app.agents.self_healing_agent import SelfHealingAgent
-        from app.agents.code_update_agent import CodeUpdateAgent
         from pathlib import Path
+
+        from app.agents.code_update_agent import CodeUpdateAgent
+        from app.agents.self_healing_agent import SelfHealingAgent
 
         proxy = site_conf.get("proxy_agent", {}) or {}
         allow_code_changes = bool(proxy.get("allow_code_changes", False))
@@ -126,17 +126,14 @@ class ProxyScrapeAgent:
             llm_generation_config=llm_cfg,
         )
 
-        updater = CodeUpdateAgent(
-            patch_dir=patch_dir,
-            enable_git_stage=bool(proxy.get("git_stage", False))
-        )
+        updater = CodeUpdateAgent(patch_dir=patch_dir, enable_git_stage=bool(proxy.get("git_stage", False)))
 
         # --- ★ 統合 (v1.5.0): diff の意図に基づき CodeUpdateAgent.apply を呼ぶ ---
 
         # 1. SelfHealingAgent の結果 (LLM提案 + Heuristic) をマージ
         #    (diff の or {} と site キー補完も適用)
-        final_proposal: Dict[str, Any] = result.get("llm_proposal") or {}
-        heuristic_patch: Dict[str, Any] = result.get("overrides_patch") or {} # Heuristic
+        final_proposal: dict[str, Any] = result.get("llm_proposal") or {}
+        heuristic_patch: dict[str, Any] = result.get("overrides_patch") or {}  # Heuristic
 
         final_proposal.setdefault("site", site_key)
 
@@ -167,7 +164,6 @@ class ProxyScrapeAgent:
 
         # 4) 監査ログ（v1.4.0 のロジックを維持）
         Path(patch_dir, f"last_result_{site_key}.json").write_text(
-            json.dumps(result, ensure_ascii=False, indent=2),
-            encoding="utf-8"
+            json.dumps(result, ensure_ascii=False, indent=2), encoding="utf-8"
         )
         logger.info("[Proxy] 自己進化ループの1サイクル完了")

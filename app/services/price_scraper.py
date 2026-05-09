@@ -6,8 +6,7 @@ source_urlから価格・在庫情報を自動取得する
 import json
 import re
 import time
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
@@ -25,9 +24,16 @@ class PriceScraper:
     TIMEOUT = 10
 
     STOCK_OUT_KEYWORDS = [
-        "売切れ", "在庫切れ", "sold out", "out of stock",
-        "在庫なし", "品切れ", "取り扱い終了",
-        "入荷待ち", "comming soon", "back order",
+        "売切れ",
+        "在庫切れ",
+        "sold out",
+        "out of stock",
+        "在庫なし",
+        "品切れ",
+        "取り扱い終了",
+        "入荷待ち",
+        "comming soon",
+        "back order",
     ]
 
     PRICE_PATTERNS = [
@@ -39,16 +45,18 @@ class PriceScraper:
 
     def __init__(self) -> None:
         self.session = requests.Session()
-        self.session.headers.update({
-            "User-Agent": self.USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "ja,en-US;q=0.7,en;q=0.3",
-        })
-        self._cache: Dict[str, Dict[str, Any]] = {}
+        self.session.headers.update(
+            {
+                "User-Agent": self.USER_AGENT,
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                "Accept-Language": "ja,en-US;q=0.7,en;q=0.3",
+            }
+        )
+        self._cache: dict[str, dict[str, Any]] = {}
 
-    def fetch(self, url: str) -> Dict[str, Any]:
+    def fetch(self, url: str) -> dict[str, Any]:
         """URLから価格・在庫情報を取得"""
-        result: Dict[str, Any] = {
+        result: dict[str, Any] = {
             "success": False,
             "title": None,
             "price": None,
@@ -99,11 +107,11 @@ class PriceScraper:
             return "server_error"
         return "unknown"
 
-    def fetch_with_retry(self, url: str, max_retries: int = 3) -> Dict[str, Any]:
+    def fetch_with_retry(self, url: str, max_retries: int = 3) -> dict[str, Any]:
         """リトライ付き取得（blocked/server_errorのみリトライ）"""
-        attempts: List[Dict[str, Any]] = []
+        attempts: list[dict[str, Any]] = []
         retry_count = 0
-        result: Dict[str, Any] = {}
+        result: dict[str, Any] = {}
 
         for attempt in range(max_retries):
             result = self.fetch(url)
@@ -116,11 +124,13 @@ class PriceScraper:
 
             error = result.get("error", "")
             error_category = self.classify_error(str(error))
-            attempts.append({
-                "attempt": attempt + 1,
-                "error": error,
-                "error_category": error_category,
-            })
+            attempts.append(
+                {
+                    "attempt": attempt + 1,
+                    "error": error,
+                    "error_category": error_category,
+                }
+            )
 
             # blocked/server_error以外はリトライしない
             if error_category not in ("blocked", "server_error"):
@@ -131,14 +141,14 @@ class PriceScraper:
 
             if attempt < max_retries - 1:
                 retry_count += 1
-                time.sleep(2 ** attempt)  # 指数バックオフ: 1s, 2s, 4s
+                time.sleep(2**attempt)  # 指数バックオフ: 1s, 2s, 4s
 
         result["attempts"] = attempts
         result["retry_count"] = retry_count
         result["error_category"] = self.classify_error(str(result.get("error", "")))
         return result
 
-    def fetch_cached(self, url: str, cache_hours: int = 24) -> Dict[str, Any]:
+    def fetch_cached(self, url: str, cache_hours: int = 24) -> dict[str, Any]:
         """キャッシュ付き取得（同一URL 24h以内は再利用）"""
         if url in self._cache:
             cached = self._cache[url]
@@ -150,15 +160,15 @@ class PriceScraper:
         return result
 
     # ---- private -------------------------------------------------------
-    def _extract_title(self, soup: BeautifulSoup) -> Optional[str]:
+    def _extract_title(self, soup: BeautifulSoup) -> str | None:
         tag = soup.find("title")
         if tag:
             return tag.get_text(strip=True)
         og = soup.find("meta", property="og:title")
         return og["content"] if og and og.get("content") else None
 
-    def _extract_price(self, soup: BeautifulSoup, text: str) -> Dict[str, Any]:
-        result: Dict[str, Any] = {"price": None, "raw": None}
+    def _extract_price(self, soup: BeautifulSoup, text: str) -> dict[str, Any]:
+        result: dict[str, Any] = {"price": None, "raw": None}
 
         # og:price:amount
         og = soup.find("meta", property="og:price:amount")
@@ -175,10 +185,7 @@ class PriceScraper:
             try:
                 data = json.loads(script.string or "")
                 offers = data if isinstance(data, dict) else {}
-                price = (
-                    offers.get("offers", {}).get("price")
-                    or offers.get("price")
-                )
+                price = offers.get("offers", {}).get("price") or offers.get("price")
                 if price:
                     result["price"] = int(float(str(price)))
                     result["raw"] = str(price)
@@ -210,9 +217,7 @@ class PriceScraper:
         # カートボタン確認
         btn = soup.find(
             ["button", "a", "input"],
-            class_=lambda x: x and any(
-                k in str(x).lower() for k in ["cart", "buy", "purchase"]
-            ),
+            class_=lambda x: x and any(k in str(x).lower() for k in ["cart", "buy", "purchase"]),
         )
         if btn:
             if btn.get("disabled") is not None:

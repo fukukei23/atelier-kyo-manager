@@ -1,41 +1,43 @@
-import os
 import csv
-import time
-import random
-import requests
 import hashlib
+import os
+import random
+import time
 import zipfile
-import gspread
 from datetime import datetime
+
+import gspread
+import requests
 from google.oauth2.service_account import Credentials
 from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium_stealth import stealth
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium_stealth import stealth
 from webdriver_manager.chrome import ChromeDriverManager
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
 
 # --- 設定（SDカードD:ドライブ・スプレッドシートID設定済み）---
 CONFIG = {
-    'profile_path': r"C:/Users/USER/AppData/Local/Google/Chrome/SeleniumProfile",
-    'base_dir': 'D:/catalog_images',
-    'screenshot_dir': 'D:/screenshots',
-    'csv_path': 'D:/catalog_data.csv',
-    'extracted_images_dir': 'D:/extracted_images',
-    'google_credentials': 'D:/credentials.json',
-    'spreadsheet_id': '1z9_lczAbnbsMYpAEslamfekEMrPQVIM1rfHqNbzze_Y',
-    'worksheet_name': 'catalog_data',
-    'safety': {
-        'max_daily_requests': 500,
-        'request_interval': (5, 10),
-        'error_threshold': 10,
-        'response_time_threshold': 8.0
-    }
+    "profile_path": r"C:/Users/USER/AppData/Local/Google/Chrome/SeleniumProfile",
+    "base_dir": "D:/catalog_images",
+    "screenshot_dir": "D:/screenshots",
+    "csv_path": "D:/catalog_data.csv",
+    "extracted_images_dir": "D:/extracted_images",
+    "google_credentials": "D:/credentials.json",
+    "spreadsheet_id": "1z9_lczAbnbsMYpAEslamfekEMrPQVIM1rfHqNbzze_Y",
+    "worksheet_name": "catalog_data",
+    "safety": {
+        "max_daily_requests": 500,
+        "request_interval": (5, 10),
+        "error_threshold": 10,
+        "response_time_threshold": 8.0,
+    },
 }
+
 
 class BUYMACatalogManager:
     def __init__(self):
@@ -50,26 +52,17 @@ class BUYMACatalogManager:
         self.stop_flag = False
 
     def _setup_directories(self):
-        directories = [
-            CONFIG['screenshot_dir'],
-            CONFIG['base_dir'],
-            CONFIG['extracted_images_dir']
-        ]
+        directories = [CONFIG["screenshot_dir"], CONFIG["base_dir"], CONFIG["extracted_images_dir"]]
         for directory in directories:
             os.makedirs(directory, exist_ok=True)
             print(f"ディレクトリ作成: {directory}")
 
     def _init_google_sheets(self):
         try:
-            scope = [
-                'https://spreadsheets.google.com/feeds',
-                'https://www.googleapis.com/auth/drive'
-            ]
-            creds = Credentials.from_service_account_file(
-                CONFIG['google_credentials'], scopes=scope
-            )
+            scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+            creds = Credentials.from_service_account_file(CONFIG["google_credentials"], scopes=scope)
             self.gc = gspread.authorize(creds)
-            self.worksheet = self.gc.open_by_key(CONFIG['spreadsheet_id']).worksheet(CONFIG['worksheet_name'])
+            self.worksheet = self.gc.open_by_key(CONFIG["spreadsheet_id"]).worksheet(CONFIG["worksheet_name"])
             print("Googleスプレッドシート接続成功")
         except Exception as e:
             print(f"Googleスプレッドシート接続エラー: {e}")
@@ -84,12 +77,15 @@ class BUYMACatalogManager:
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_argument("--lang=ja")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_argument("user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36")
+        chrome_options.add_argument(
+            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        )
 
         service = ChromeService(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
 
-        stealth(driver,
+        stealth(
+            driver,
             languages=["ja-JP", "ja"],
             vendor="Google Inc.",
             platform="Win32",
@@ -101,16 +97,16 @@ class BUYMACatalogManager:
 
     def _human_like_delay(self):
         if self._check_response_time():
-            delay = random.uniform(*CONFIG['safety']['request_interval']) * 1.5
+            delay = random.uniform(*CONFIG["safety"]["request_interval"]) * 1.5
         else:
-            delay = random.uniform(*CONFIG['safety']['request_interval'])
+            delay = random.uniform(*CONFIG["safety"]["request_interval"])
         time.sleep(delay)
 
     def _check_response_time(self):
         try:
             navigation_start = self.driver.execute_script("return window.performance.timing.navigationStart")
             response_start = self.driver.execute_script("return window.performance.timing.responseStart")
-            return (response_start - navigation_start) / 1000 > CONFIG['safety']['response_time_threshold']
+            return (response_start - navigation_start) / 1000 > CONFIG["safety"]["response_time_threshold"]
         except Exception:
             return False
 
@@ -120,7 +116,7 @@ class BUYMACatalogManager:
                 ".catalogs-modal__close",
                 ".modal-close",
                 "//button[contains(text(), '閉じる')]",
-                "//button[contains(text(), 'キャンセル')]"
+                "//button[contains(text(), 'キャンセル')]",
             ]
             for selector in close_selectors:
                 try:
@@ -145,18 +141,18 @@ class BUYMACatalogManager:
 
     def _extract_images_from_zip(self, zip_path, brand_name, catalog_id):
         try:
-            extract_dir = os.path.join(CONFIG['extracted_images_dir'], brand_name, catalog_id)
+            extract_dir = os.path.join(CONFIG["extracted_images_dir"], brand_name, catalog_id)
             os.makedirs(extract_dir, exist_ok=True)
 
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(extract_dir)
 
             image_files = []
             for root, dirs, files in os.walk(extract_dir):
                 for file in files:
-                    if file.lower().endswith(('.jpg', '.jpeg', '.png', '.gif', '.bmp')):
+                    if file.lower().endswith((".jpg", ".jpeg", ".png", ".gif", ".bmp")):
                         old_path = os.path.join(root, file)
-                        new_filename = f"{brand_name}_{catalog_id}_{len(image_files)+1}_{file}"
+                        new_filename = f"{brand_name}_{catalog_id}_{len(image_files) + 1}_{file}"
                         new_path = os.path.join(extract_dir, new_filename)
                         os.rename(old_path, new_path)
                         image_files.append(new_path)
@@ -169,10 +165,10 @@ class BUYMACatalogManager:
     def _download_file(self, url, brand_name, catalog_id):
         session = requests.Session()
         for c in self.driver.get_cookies():
-            session.cookies.set(c['name'], c['value'])
+            session.cookies.set(c["name"], c["value"])
         headers = {
-            'Referer': self.driver.current_url,
-            'User-Agent': self.driver.execute_script("return navigator.userAgent;")
+            "Referer": self.driver.current_url,
+            "User-Agent": self.driver.execute_script("return navigator.userAgent;"),
         }
 
         response = session.get(url, headers=headers)
@@ -181,26 +177,26 @@ class BUYMACatalogManager:
             if catalog_id in self.downloaded_catalog_ids or file_hash in self.downloaded_hashes:
                 return False, None
 
-            save_dir = os.path.join(CONFIG['base_dir'], brand_name, catalog_id)
+            save_dir = os.path.join(CONFIG["base_dir"], brand_name, catalog_id)
             os.makedirs(save_dir, exist_ok=True)
-            zip_path = os.path.join(save_dir, f'catalog_{catalog_id}.zip')
+            zip_path = os.path.join(save_dir, f"catalog_{catalog_id}.zip")
 
-            with open(zip_path, 'wb') as f:
+            with open(zip_path, "wb") as f:
                 f.write(response.content)
 
             image_count, image_files = self._extract_images_from_zip(zip_path, brand_name, catalog_id)
 
             record = {
-                'brand': brand_name,
-                'catalog_id': catalog_id,
-                'zip_path': zip_path,
-                'extracted_dir': os.path.join(CONFIG['extracted_images_dir'], brand_name, catalog_id),
-                'download_date': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                'image_count': image_count,
-                'file_size': os.path.getsize(zip_path),
-                'first_image_path': image_files[0] if image_files else '',
-                'all_image_paths': '|'.join(image_files),
-                'status': 'success'
+                "brand": brand_name,
+                "catalog_id": catalog_id,
+                "zip_path": zip_path,
+                "extracted_dir": os.path.join(CONFIG["extracted_images_dir"], brand_name, catalog_id),
+                "download_date": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "image_count": image_count,
+                "file_size": os.path.getsize(zip_path),
+                "first_image_path": image_files[0] if image_files else "",
+                "all_image_paths": "|".join(image_files),
+                "status": "success",
             }
 
             self.csv_records.append(record)
@@ -216,16 +212,16 @@ class BUYMACatalogManager:
         if self.worksheet:
             try:
                 row_data = [
-                    record['brand'],
-                    record['catalog_id'],
-                    record['zip_path'],
-                    record['extracted_dir'],
-                    record['download_date'],
-                    record['image_count'],
-                    record['file_size'],
-                    record['first_image_path'],
-                    record['all_image_paths'],
-                    record['status']
+                    record["brand"],
+                    record["catalog_id"],
+                    record["zip_path"],
+                    record["extracted_dir"],
+                    record["download_date"],
+                    record["image_count"],
+                    record["file_size"],
+                    record["first_image_path"],
+                    record["all_image_paths"],
+                    record["status"],
                 ]
                 self.worksheet.append_row(row_data)
                 print(f"Googleスプレッドシートに追加: {record['brand']} {record['catalog_id']}")
@@ -271,10 +267,12 @@ class BUYMACatalogManager:
     def process_catalog(self, row, brand_name):
         try:
             self._force_close_modals()
-            catalog_id = row.find_element(By.CSS_SELECTOR, 'span.catalogs-table__contents-id').text.strip()
+            catalog_id = row.find_element(By.CSS_SELECTOR, "span.catalogs-table__contents-id").text.strip()
 
             image_cell = WebDriverWait(row, 10).until(
-                EC.presence_of_element_located((By.CSS_SELECTOR, '.catalogs-table__image-item > .catalogs-table__image'))
+                EC.presence_of_element_located(
+                    (By.CSS_SELECTOR, ".catalogs-table__image-item > .catalogs-table__image")
+                )
             )
             ActionChains(self.driver).move_to_element(image_cell).pause(0.5).click().perform()
 
@@ -285,7 +283,7 @@ class BUYMACatalogManager:
             download_link = WebDriverWait(self.driver, 15).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, "a.catalogs-modal-table__link"))
             )
-            download_url = download_link.get_attribute('href')
+            download_url = download_link.get_attribute("href")
 
             success, record = self._download_file(download_url, brand_name, catalog_id)
             if success:
@@ -298,8 +296,8 @@ class BUYMACatalogManager:
 
         except Exception as e:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.driver.save_screenshot(os.path.join(CONFIG['screenshot_dir'], f'error_{timestamp}.png'))
-            with open(os.path.join(CONFIG['screenshot_dir'], f'error_{timestamp}.html'), 'w', encoding='utf-8') as f:
+            self.driver.save_screenshot(os.path.join(CONFIG["screenshot_dir"], f"error_{timestamp}.png"))
+            with open(os.path.join(CONFIG["screenshot_dir"], f"error_{timestamp}.html"), "w", encoding="utf-8") as f:
                 f.write(self.driver.page_source)
             print(f"エラー発生: {str(e)[:100]}")
             return False
@@ -308,12 +306,14 @@ class BUYMACatalogManager:
         page_num = 1
         while not self.stop_flag:
             try:
-                self.driver.get(f"{base_url}&page={page_num}" if "?brand_id=" in base_url else f"{base_url}?page={page_num}")
+                self.driver.get(
+                    f"{base_url}&page={page_num}" if "?brand_id=" in base_url else f"{base_url}?page={page_num}"
+                )
                 WebDriverWait(self.driver, 20).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'tr.catalogs-table__row'))
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "tr.catalogs-table__row"))
                 )
 
-                rows = self.driver.find_elements(By.CSS_SELECTOR, 'tr.catalogs-table__row')
+                rows = self.driver.find_elements(By.CSS_SELECTOR, "tr.catalogs-table__row")
                 if not rows:
                     break
 
@@ -325,7 +325,7 @@ class BUYMACatalogManager:
 
                 try:
                     next_btn = WebDriverWait(self.driver, 10).until(
-                        EC.element_to_be_clickable((By.CSS_SELECTOR, 'a.pagination__next:not([disabled])'))
+                        EC.element_to_be_clickable((By.CSS_SELECTOR, "a.pagination__next:not([disabled])"))
                     )
                     page_num += 1
                     self._human_like_delay()
@@ -334,7 +334,9 @@ class BUYMACatalogManager:
                     break
             except Exception as e:
                 print(f"ページ処理エラー（{brand_name}）: {str(e)}")
-                self.driver.save_screenshot(os.path.join(CONFIG['screenshot_dir'], f'pagination_error_{brand_name}.png'))
+                self.driver.save_screenshot(
+                    os.path.join(CONFIG["screenshot_dir"], f"pagination_error_{brand_name}.png")
+                )
                 break
 
     def _save_csv_summary(self):
@@ -342,12 +344,19 @@ class BUYMACatalogManager:
             return
 
         fieldnames = [
-            'brand', 'catalog_id', 'zip_path', 'extracted_dir',
-            'download_date', 'image_count', 'file_size',
-            'first_image_path', 'all_image_paths', 'status'  # ← ここに'all_image_paths'を追加
+            "brand",
+            "catalog_id",
+            "zip_path",
+            "extracted_dir",
+            "download_date",
+            "image_count",
+            "file_size",
+            "first_image_path",
+            "all_image_paths",
+            "status",  # ← ここに'all_image_paths'を追加
         ]
 
-        with open(CONFIG['csv_path'], 'w', newline='', encoding='utf-8-sig') as f:
+        with open(CONFIG["csv_path"], "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(self.csv_records)
@@ -355,18 +364,18 @@ class BUYMACatalogManager:
         print(f"詳細レポート保存: {CONFIG['csv_path']}")
 
         total_downloads = len(self.csv_records)
-        total_images = sum(record['image_count'] for record in self.csv_records)
-        total_size_mb = sum(record['file_size'] for record in self.csv_records) / (1024 * 1024)
+        total_images = sum(record["image_count"] for record in self.csv_records)
+        total_size_mb = sum(record["file_size"] for record in self.csv_records) / (1024 * 1024)
 
         summary = f"""
 === ダウンロード完了サマリー ===
 総ダウンロード数: {total_downloads}件
 総画像数: {total_images}枚
 総ファイルサイズ: {total_size_mb:.2f}MB
-保存先: {CONFIG['base_dir']}
-解凍画像: {CONFIG['extracted_images_dir']}
-CSV詳細: {CONFIG['csv_path']}
-Googleスプレッドシート: {'連携済み' if self.worksheet else '未接続'}
+保存先: {CONFIG["base_dir"]}
+解凍画像: {CONFIG["extracted_images_dir"]}
+CSV詳細: {CONFIG["csv_path"]}
+Googleスプレッドシート: {"連携済み" if self.worksheet else "未接続"}
         """
         print(summary)
 
@@ -374,16 +383,25 @@ Googleスプレッドシート: {'連携済み' if self.worksheet else '未接�
         try:
             if self.worksheet:
                 try:
-                    headers = ['Brand', 'Catalog_ID', 'ZIP_Path', 'Extracted_Dir',
-                             'Download_Date', 'Image_Count', 'File_Size_Bytes',
-                             'First_Image_Path', 'All_Image_Paths', 'Status']
+                    headers = [
+                        "Brand",
+                        "Catalog_ID",
+                        "ZIP_Path",
+                        "Extracted_Dir",
+                        "Download_Date",
+                        "Image_Count",
+                        "File_Size_Bytes",
+                        "First_Image_Path",
+                        "All_Image_Paths",
+                        "Status",
+                    ]
                     self.worksheet.clear()
                     self.worksheet.append_row(headers)
                     print("Googleスプレッドシートヘッダー設定完了")
                 except Exception as e:
                     print(f"ヘッダー設定エラー: {e}")
 
-            self.driver.get('https://www.buyma.com/login/')
+            self.driver.get("https://www.buyma.com/login/")
             input("手動ログイン後、Enterを押してください...\n（途中で止めたい場合はCtrl+C）")
 
             popular_brands = self.get_popular_brands(30)
@@ -394,7 +412,7 @@ Googleスプレッドシート: {'連携済み' if self.worksheet else '未接�
                     break
 
                 print(f"\n{brand_name}の処理を開始します...")
-                catalog_url = f'https://www.buyma.com/my/sell/catalogs?brand_id={brand_id}'
+                catalog_url = f"https://www.buyma.com/my/sell/catalogs?brand_id={brand_id}"
                 self.process_pagination(catalog_url, brand_name)
 
         except KeyboardInterrupt:
@@ -407,10 +425,10 @@ Googleスプレッドシート: {'連携済み' if self.worksheet else '未接�
 
     def _safety_check(self):
         self.request_count += 1
-        if self.request_count >= CONFIG['safety']['max_daily_requests']:
+        if self.request_count >= CONFIG["safety"]["max_daily_requests"]:
             print("1日のリクエスト上限に達しました")
             return True
-        if self.error_count >= CONFIG['safety']['error_threshold']:
+        if self.error_count >= CONFIG["safety"]["error_threshold"]:
             print("エラーが多発したため停止します")
             return True
         return False
@@ -419,6 +437,7 @@ Googleスプレッドシート: {'連携済み' if self.worksheet else '未接�
         self._save_csv_summary()
         self.driver.quit()
         print("リソースを解放しました")
+
 
 # --- 実行部分 ---
 if __name__ == "__main__":

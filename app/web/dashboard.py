@@ -1,4 +1,3 @@
-# -- coding: utf-8 --
 # ======================================================================
 # File: app/web/dashboard.py
 # Registry: app/web/dashboard.py
@@ -15,18 +14,22 @@
 # - [信頼区間] EMAの信頼区間を追加
 # ======================================================================
 from __future__ import annotations
+
 import csv
 import logging
-from dataclasses import dataclass, field
-from datetime import datetime, timedelta, date
+from collections.abc import Sequence
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional, Dict, Any, Sequence
-from flask import Flask, jsonify, render_template, request, Response
+from typing import Any
+
+from flask import Flask, Response, jsonify, render_template, request
 
 # --- DB (optional) ---
 try:
     from app import db
     from app.models import ProductPriceHistory
+
     FLASK_AVAILABLE = True
 except (ImportError, ModuleNotFoundError):
     db = None
@@ -38,7 +41,7 @@ except (ImportError, ModuleNotFoundError):
 # --- Flask App Initialization (Template Path Fixed) ---
 try:
     APP_DIR = Path(__file__).resolve().parent.parent  # -> app/
-    TEMPLATE_DIR = APP_DIR / 'templates'
+    TEMPLATE_DIR = APP_DIR / "templates"
     app = Flask(__name__, template_folder=str(TEMPLATE_DIR))
 except NameError:
     app = Flask(__name__)
@@ -56,36 +59,38 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 @dataclass
 class HistoryRow:
     """A class to represent a single row of price history."""
+
     captured_at: datetime
     brand: str
     name: str
     url: str
-    price: Optional[float]
-    list_price: Optional[float]
-    discount_pct: Optional[float]
-    sale_until: Optional[datetime]
+    price: float | None
+    list_price: float | None
+    discount_pct: float | None
+    sale_until: datetime | None
     # v2.0: 収益性フィールド
-    purchase_price: Optional[float] = None
-    selling_price: Optional[float] = None
+    purchase_price: float | None = None
+    selling_price: float | None = None
 
 
 @dataclass
 class ProfitabilityMetrics:
     """収益性分析结果"""
-    current_profit: Optional[float] = None
-    current_profit_rate: Optional[float] = None
-    avg_profit: Optional[float] = None
-    avg_profit_rate: Optional[float] = None
-    best_price_date: Optional[str] = None
-    best_price: Optional[float] = None
-    worst_price_date: Optional[str] = None
-    worst_price: Optional[float] = None
-    price_volatility: Optional[float] = None  # 価格変動係数
+
+    current_profit: float | None = None
+    current_profit_rate: float | None = None
+    avg_profit: float | None = None
+    avg_profit_rate: float | None = None
+    best_price_date: str | None = None
+    best_price: float | None = None
+    worst_price_date: str | None = None
+    worst_price: float | None = None
+    price_volatility: float | None = None  # 価格変動係数
     trend_direction: str = "stable"  # "rising", "falling", "stable"
     recommendation: str = ""
 
 
-def ema_series(values: Sequence[Optional[float]], period: int) -> List[Optional[float]]:
+def ema_series(values: Sequence[float | None], period: int) -> list[float | None]:
     """Calculates the Exponential Moving Average for a whole time series."""
     if not values:
         return []
@@ -95,7 +100,7 @@ def ema_series(values: Sequence[Optional[float]], period: int) -> List[Optional[
     if first_valid_idx == -1:
         return [None] * len(values)
 
-    ema_results: List[Optional[float]] = [None] * first_valid_idx
+    ema_results: list[float | None] = [None] * first_valid_idx
     ema_results.append(values[first_valid_idx])
 
     for i in range(first_valid_idx + 1, len(values)):
@@ -110,7 +115,7 @@ def ema_series(values: Sequence[Optional[float]], period: int) -> List[Optional[
     return ema_results
 
 
-def pct_change(old: Optional[float], new: Optional[float]) -> Optional[float]:
+def pct_change(old: float | None, new: float | None) -> float | None:
     """Calculates percentage change between two values."""
     if old is None or new is None or old == 0:
         return None
@@ -118,8 +123,7 @@ def pct_change(old: Optional[float], new: Optional[float]) -> Optional[float]:
 
 
 def calculate_profitability_metrics(
-    rows: List[HistoryRow],
-    purchase_price: Optional[float] = None
+    rows: list[HistoryRow], purchase_price: float | None = None
 ) -> ProfitabilityMetrics:
     """価格データから収益性分析指標を算出する (v2.0)"""
     if not rows:
@@ -145,7 +149,7 @@ def calculate_profitability_metrics(
     if all_prices and len(all_prices) > 1:
         mean_price = sum(all_prices) / len(all_prices)
         variance = sum((p - mean_price) ** 2 for p in all_prices) / len(all_prices)
-        volatility = (variance ** 0.5 / mean_price * 100) if mean_price > 0 else 0
+        volatility = (variance**0.5 / mean_price * 100) if mean_price > 0 else 0
     else:
         volatility = 0
 
@@ -155,7 +159,7 @@ def calculate_profitability_metrics(
         recent_ema = ema_series(all_prices, 5)
         recent_trend = recent_ema[-5:]
         if all(recent_trend):
-            slope = sum(recent_trend[i] - recent_trend[i-1] for i in range(1, len(recent_trend)))
+            slope = sum(recent_trend[i] - recent_trend[i - 1] for i in range(1, len(recent_trend)))
             if slope > 0.1:
                 trend = "rising"
             elif slope < -0.1:
@@ -198,9 +202,9 @@ class DataSource:
     def __init__(self, use_db: bool = True):
         self.use_db = use_db
 
-    def _parse_csv_history_files(self, brand: str, days: int) -> List[HistoryRow]:
+    def _parse_csv_history_files(self, brand: str, days: int) -> list[HistoryRow]:
         """Read history from CSV files."""
-        results: List[HistoryRow] = []
+        results: list[HistoryRow] = []
         cutoff = datetime.now() - timedelta(days=days)
 
         search_patterns = [
@@ -212,23 +216,27 @@ class DataSource:
         for pattern in search_patterns:
             for csv_path in pattern.parent.glob(pattern.name):
                 try:
-                    with open(csv_path, "r", encoding="utf-8") as f:
+                    with open(csv_path, encoding="utf-8") as f:
                         reader = csv.DictReader(f)
                         for row in reader:
                             try:
                                 captured = datetime.fromisoformat(row["captured_at"])
                                 if captured < cutoff:
                                     continue
-                                results.append(HistoryRow(
-                                    captured_at=captured,
-                                    brand=row.get("brand", brand),
-                                    name=row.get("name", ""),
-                                    url=row.get("url", ""),
-                                    price=float(row["price"]) if row.get("price") else None,
-                                    list_price=float(row["list_price"]) if row.get("list_price") else None,
-                                    discount_pct=float(row["discount_pct"]) if row.get("discount_pct") else None,
-                                    sale_until=datetime.fromisoformat(row["sale_until"]) if row.get("sale_until") else None,
-                                ))
+                                results.append(
+                                    HistoryRow(
+                                        captured_at=captured,
+                                        brand=row.get("brand", brand),
+                                        name=row.get("name", ""),
+                                        url=row.get("url", ""),
+                                        price=float(row["price"]) if row.get("price") else None,
+                                        list_price=float(row["list_price"]) if row.get("list_price") else None,
+                                        discount_pct=float(row["discount_pct"]) if row.get("discount_pct") else None,
+                                        sale_until=datetime.fromisoformat(row["sale_until"])
+                                        if row.get("sale_until")
+                                        else None,
+                                    )
+                                )
                             except (ValueError, KeyError):
                                 continue
                 except Exception:
@@ -236,28 +244,29 @@ class DataSource:
 
         return results
 
-    def fetch_history(self, brand: str, days: int) -> List[HistoryRow]:
+    def fetch_history(self, brand: str, days: int) -> list[HistoryRow]:
         """Fetch history from DB or CSV."""
         if self.use_db and db is not None:
             try:
                 cutoff = datetime.now() - timedelta(days=days)
                 query = ProductPriceHistory.query.filter(
-                    ProductPriceHistory.brand == brand,
-                    ProductPriceHistory.captured_at >= cutoff
+                    ProductPriceHistory.brand == brand, ProductPriceHistory.captured_at >= cutoff
                 ).order_by(ProductPriceHistory.captured_at.asc())
 
                 results = []
                 for r in query:
-                    results.append(HistoryRow(
-                        captured_at=r.captured_at,
-                        brand=r.brand,
-                        name=r.name,
-                        url=r.url,
-                        price=r.price,
-                        list_price=r.list_price,
-                        discount_pct=r.discount_pct,
-                        sale_until=r.sale_until,
-                    ))
+                    results.append(
+                        HistoryRow(
+                            captured_at=r.captured_at,
+                            brand=r.brand,
+                            name=r.name,
+                            url=r.url,
+                            price=r.price,
+                            list_price=r.list_price,
+                            discount_pct=r.discount_pct,
+                            sale_until=r.sale_until,
+                        )
+                    )
                 logging.info(f"Fetched {len(results)} rows from DB for brand '{brand}'.")
                 return results
             except Exception as e:
@@ -269,9 +278,9 @@ class DataSource:
 # =============================================================================
 # Data Transformation Logic
 # =============================================================================
-def build_series_for_web(rows: List[HistoryRow], purchase_price: Optional[float] = None) -> Dict[str, Any]:
+def build_series_for_web(rows: list[HistoryRow], purchase_price: float | None = None) -> dict[str, Any]:
     """Transforms raw history rows into a format suitable for the web frontend."""
-    bucket: Dict[str, List[HistoryRow]] = {}
+    bucket: dict[str, list[HistoryRow]] = {}
     for r in rows:
         if r.url:
             bucket.setdefault(r.url, []).append(r)
@@ -300,35 +309,38 @@ def build_series_for_web(rows: List[HistoryRow], purchase_price: Optional[float]
             # Alert threshold lowered for higher sensitivity
             if (price_ch := pct_change(yest_pts[-1].price, todays_pts[-1].price)) is not None and abs(price_ch) >= 7.0:
                 alerts.append(f"価格急変: {price_ch:+.1f}%")
-            if (disc_ch := pct_change(yest_pts[-1].discount_pct, todays_pts[-1].discount_pct)) is not None and abs(disc_ch) >= 15.0:
+            if (disc_ch := pct_change(yest_pts[-1].discount_pct, todays_pts[-1].discount_pct)) is not None and abs(
+                disc_ch
+            ) >= 15.0:
                 alerts.append(f"割引率急変: {disc_ch:+.1f}%")
 
         latest_sale_until = next((it.sale_until for it in reversed(items_sorted) if it.sale_until), None)
-        if latest_sale_until:
-            if 0 <= (days_left := (latest_sale_until.date() - today).days) <= 3:
-                alerts.append(f"セール終了まで {days_left} 日")
+        if latest_sale_until and 0 <= (days_left := (latest_sale_until.date() - today).days) <= 3:
+            alerts.append(f"セール終了まで {days_left} 日")
 
-        series_list.append({
-            "url": url,
-            "name": name,
-            "labels": labels,
-            "prices": prices,
-            "ema7": ema7,
-            "ema28": ema28,
-            "alerts": alerts,
-            # v2.0: 収益性データ
-            "profitability": {
-                "current_profit": profitability.current_profit,
-                "current_profit_rate": profitability.current_profit_rate,
-                "best_price_date": profitability.best_price_date,
-                "best_price": profitability.best_price,
-                "worst_price_date": profitability.worst_price_date,
-                "worst_price": profitability.worst_price,
-                "price_volatility": profitability.price_volatility,
-                "trend_direction": profitability.trend_direction,
-                "recommendation": profitability.recommendation,
+        series_list.append(
+            {
+                "url": url,
+                "name": name,
+                "labels": labels,
+                "prices": prices,
+                "ema7": ema7,
+                "ema28": ema28,
+                "alerts": alerts,
+                # v2.0: 収益性データ
+                "profitability": {
+                    "current_profit": profitability.current_profit,
+                    "current_profit_rate": profitability.current_profit_rate,
+                    "best_price_date": profitability.best_price_date,
+                    "best_price": profitability.best_price,
+                    "worst_price_date": profitability.worst_price_date,
+                    "worst_price": profitability.worst_price,
+                    "price_volatility": profitability.price_volatility,
+                    "trend_direction": profitability.trend_direction,
+                    "recommendation": profitability.recommendation,
+                },
             }
-        })
+        )
 
     return {"series": series_list}
 
@@ -363,7 +375,7 @@ def api_history_export():
 
     if format_type == "csv":
         output = "captured_at,brand,name,url,price,list_price,discount_pct,purchase_price,current_profit,current_profit_rate,trend_direction,volatility,recommendation\n"
-        bucket: Dict[str, List[HistoryRow]] = {}
+        bucket: dict[str, list[HistoryRow]] = {}
         for r in rows:
             if r.url:
                 bucket.setdefault(r.url, []).append(r)
@@ -375,7 +387,7 @@ def api_history_export():
         return Response(
             output,
             mimetype="text/csv",
-            headers={"Content-Disposition": f"attachment; filename=history_{brand}_{days}days.csv"}
+            headers={"Content-Disposition": f"attachment; filename=history_{brand}_{days}days.csv"},
         )
     else:
         payload = build_series_for_web(rows, purchase_price)

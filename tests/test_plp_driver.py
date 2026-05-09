@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 Task 1-1: PlpDriver のユニットテスト（モック Page/HTML）
 
@@ -12,10 +11,10 @@ Related Spec: docs/spec/CR-ATELIER-002_STEP5_SPEC.md
 Test ID Prefix: PLP
 """
 
-import pytest
 import time
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
-from typing import Dict, Any, List
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
 
 from app.agents.browser.plp_driver import PlpDriver, PlpNavigationResult
 from app.core.run_context import RunContext
@@ -88,11 +87,12 @@ async def test_plp_driver_materialize_tiles(mock_page, mock_context, site_config
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     import time
+
     start_t = time.time()
     budget_ms = 30000
-    
+
     # タイル数カウントのモック設定（locator() が呼ばれるたびに新しい Locator を返す）
     def locator_side_effect(selector):
         loc = MagicMock()  # AsyncMockではなくMagicMockを使用（属性アクセスが正しく動作するように）
@@ -100,18 +100,18 @@ async def test_plp_driver_materialize_tiles(mock_page, mock_context, site_config
         loc.first = loc
         loc.nth = MagicMock(return_value=loc)
         return loc
-    
+
     mock_page.locator = MagicMock(side_effect=locator_side_effect)
     mock_page.evaluate = AsyncMock()  # スクロール用
     mock_page.wait_for_timeout = AsyncMock()
     mock_page.wait_for_load_state = AsyncMock()
     mock_page.wait_for_selector = AsyncMock()  # wait_for_selectors 用
-    
+
     tiles_seen = await driver._materialize_plp_tiles(
         start_t=start_t,
         budget_ms=budget_ms,
     )
-    
+
     assert tiles_seen == 12
     assert mock_page.evaluate.called  # スクロールが実行された
 
@@ -120,13 +120,13 @@ async def test_plp_driver_materialize_tiles(mock_page, mock_context, site_config
 async def test_plp_driver_trap_detection(mock_page, mock_context, site_config, run_context):
     """
     (b) Trap / Legal page detection
-    
+
     Given:
     - A mocked Page whose URL or content matches trap/legal page
-    
+
     When:
     - navigate_to_pdp runs
-    
+
     Then:
     - It should set trap_detected = True
     - trap_reason should be a non-empty string
@@ -138,39 +138,38 @@ async def test_plp_driver_trap_detection(mock_page, mock_context, site_config, r
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     # Trap ページの URL を設定
     mock_page.url = "https://example.com/legal"
-    
+
     trap_call_count = [0]  # 呼び出し回数をカウント
-    
+
     def is_trap_page_side_effect(url, trap_config):
         trap_call_count[0] += 1
         # 最初の呼び出し（リカバリ前）では True を返す
         if trap_call_count[0] == 1:
             return True
         # 2回目以降（リカバリ後、URL が変更された後）では False を返す
-        if "legal" in url or "terms" in url:
-            return True
-        return False
-    
+        return bool("legal" in url or "terms" in url)
+
     # _recover_from_trap が呼ばれたら、URL を変更して成功を返す
     async def recover_side_effect(*args, **kwargs):
         mock_page.url = "https://example.com/products"  # リカバリ後のURL
         return True
-    
-    with patch.object(driver, '_materialize_tiles', return_value=5), \
-         patch.object(driver, '_is_trap_page', side_effect=is_trap_page_side_effect), \
-         patch.object(driver, '_recover_from_trap', new_callable=AsyncMock, side_effect=recover_side_effect) as mock_recover, \
-         patch.object(driver, '_click_tile_and_navigate', return_value=mock_page):
-        
+
+    with (
+        patch.object(driver, "_materialize_tiles", return_value=5),
+        patch.object(driver, "_is_trap_page", side_effect=is_trap_page_side_effect),
+        patch.object(driver, "_recover_from_trap", new_callable=AsyncMock, side_effect=recover_side_effect),
+        patch.object(driver, "_click_tile_and_navigate", return_value=mock_page),
+    ):
         # リカバリが成功するケース
         result = await driver.navigate_to_pdp(
             start_t=time.time(),
             budget_ms=30000,
             target_url="https://example.com/products",
         )
-        
+
         # アサーション（Stage 5: 早期トラップ検出によりrecovery_attempted=False）
         assert result.trap_detected is True
         assert result.trap_reason is not None
@@ -189,19 +188,19 @@ async def test_plp_driver_trap_detection_no_recovery(mock_page, mock_context, si
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     mock_page.url = "https://example.com/legal"
     site_config["navigation"] = {
         "trap_url_patterns": ["/legal"],
     }
-    
+
     # Stage 5: 早期トラップ検出のため、例外ではなく結果オブジェクトが返る
     result = await driver.navigate_to_pdp(
         start_t=time.time(),
         budget_ms=30000,
         target_url="https://example.com/products",
     )
-    
+
     # 早期検出で即座にリターン（リカバリ処理は呼ばれない）
     assert result.trap_detected is True
     assert result.recovery_attempted is False
@@ -218,19 +217,19 @@ async def test_plp_driver_click_tile(mock_page, mock_context, site_config, run_c
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     # クリック後のページ遷移をモック
     new_page = AsyncMock()
     new_page.url = "https://example.com/product/123"
     new_page.wait_for_load_state = AsyncMock()
     new_page.wait_for_url = AsyncMock()
-    
+
     # リンク要素のモック
     link_element = MagicMock()
     link_element.scroll_into_view_if_needed = AsyncMock()
     link_element.get_attribute = AsyncMock(return_value="https://example.com/product/123")
     link_element.click = AsyncMock()
-    
+
     # リンクやタイルが見つかるようにモック設定
     def locator_side_effect(selector):
         loc = MagicMock()  # AsyncMockではなくMagicMockを使用
@@ -241,11 +240,11 @@ async def test_plp_driver_click_tile(mock_page, mock_context, site_config, run_c
         loc.first.count = AsyncMock(return_value=1)
         loc.first.click = AsyncMock()
         return loc
-    
+
     mock_page.locator = MagicMock(side_effect=locator_side_effect)
-    
-    # _click_and_wait_for_navigation の戻り値をモック（_click_and_capture_navigation をラップしている）    
-    with patch.object(driver, '_click_and_wait_for_navigation', return_value=new_page):
+
+    # _click_and_wait_for_navigation の戻り値をモック（_click_and_capture_navigation をラップしている）
+    with patch.object(driver, "_click_and_wait_for_navigation", return_value=new_page):
         result_page = await driver._click_tile_and_navigate_to_pdp()
         assert result_page is not None
         assert result_page.url == "https://example.com/product/123"
@@ -255,14 +254,14 @@ async def test_plp_driver_click_tile(mock_page, mock_context, site_config, run_c
 async def test_plp_driver_navigate_to_pdp_happy_path(mock_page, mock_context, site_config, run_context):
     """
     (a) Happy path: PLP → PDP success
-    
+
     Given:
     - A mocked Page whose DOM contains at least one product tile/link
     - site_config with minimal required keys
-    
+
     When:
     - await PlpDriver.navigate_to_pdp() is called
-    
+
     Then:
     - It should attempt to materialize tiles
     - Click a tile via _click_tile_and_navigate_to_pdp
@@ -275,28 +274,29 @@ async def test_plp_driver_navigate_to_pdp_happy_path(mock_page, mock_context, si
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     start_t = time.time()
     budget_ms = 30000
-    
+
     # モック設定: タイルが8個見つかる
     mock_page.locator.return_value.count = AsyncMock(return_value=8)
-    
+
     # 新タブが開かれるケース
     new_page = AsyncMock()
     new_page.url = "https://example.com/product/123"
     new_page.wait_for_load_state = AsyncMock()
     new_page.wait_for_url = AsyncMock()
-    
-    with patch.object(driver, '_materialize_tiles', return_value=8), \
-         patch.object(driver, '_is_trap_page', return_value=False), \
-         patch.object(driver, '_click_tile_and_navigate', return_value=new_page):
-        
+
+    with (
+        patch.object(driver, "_materialize_tiles", return_value=8),
+        patch.object(driver, "_is_trap_page", return_value=False),
+        patch.object(driver, "_click_tile_and_navigate", return_value=new_page),
+    ):
         result = await driver.navigate_to_pdp(
             start_t=start_t,
             budget_ms=budget_ms,
         )
-        
+
         # アサーション
         assert isinstance(result, PlpNavigationResult)
         assert result.pdp_url == "https://example.com/product/123"
@@ -323,22 +323,23 @@ async def test_plp_driver_navigate_to_pdp_same_tab(mock_page, mock_context, site
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     start_t = time.time()
     budget_ms = 30000
-    
+
     # 同タブでの遷移（self.page を返す）
     mock_page.url = "https://example.com/product/123"  # URLが変更された
-    
-    with patch.object(driver, '_materialize_tiles', return_value=5), \
-         patch.object(driver, '_is_trap_page', return_value=False), \
-         patch.object(driver, '_click_tile_and_navigate', return_value=mock_page):
-        
+
+    with (
+        patch.object(driver, "_materialize_tiles", return_value=5),
+        patch.object(driver, "_is_trap_page", return_value=False),
+        patch.object(driver, "_click_tile_and_navigate", return_value=mock_page),
+    ):
         result = await driver.navigate_to_pdp(
             start_t=start_t,
             budget_ms=budget_ms,
         )
-        
+
         assert result.pdp_url == "https://example.com/product/123"
         assert result.pdp_opened_in_new_tab is False  # 同タブ
         assert result.tiles_seen == 5
@@ -350,15 +351,15 @@ async def test_plp_driver_navigate_to_pdp_same_tab(mock_page, mock_context, site
 async def test_plp_driver_handle_overlays(mock_page, mock_context, site_config, run_context):
     """
     (c) Overlay handling
-    
+
     Given:
     - A mocked Page where:
       - A cookie banner element exists for selectors["ui"]["cookie_accept"]
       - A geo modal exists for navigation["overlays"]["geo_modal_selectors"]
-    
+
     When:
     - navigate_to_pdp runs
-    
+
     Then:
     - _handle_overlays() should be invoked and try to click those elements
     """
@@ -368,25 +369,25 @@ async def test_plp_driver_handle_overlays(mock_page, mock_context, site_config, 
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     # Cookie バナーのモック
     cookie_locator_first = MagicMock()
     cookie_locator_first.count = AsyncMock(return_value=1)
     cookie_locator_first.click = AsyncMock()
-    
+
     cookie_locator = MagicMock()
     cookie_locator.first = cookie_locator_first
     cookie_locator.count = AsyncMock(return_value=1)
-    
+
     # Geo モーダルのモック
     geo_locator_first = MagicMock()
     geo_locator_first.count = AsyncMock(return_value=1)
     geo_locator_first.click = AsyncMock()
-    
+
     geo_locator = MagicMock()
     geo_locator.first = geo_locator_first
     geo_locator.count = AsyncMock(return_value=1)
-    
+
     # locator の呼び出しに応じて異なる locator を返す
     def locator_side_effect(selector):
         selector_str = str(selector).lower()
@@ -402,15 +403,15 @@ async def test_plp_driver_handle_overlays(mock_page, mock_context, site_config, 
             default.first.count = AsyncMock(return_value=0)
             default.count = AsyncMock(return_value=0)
             return default
-    
+
     mock_page.locator = MagicMock(side_effect=locator_side_effect)
     mock_page.evaluate = AsyncMock()  # オーバーレイ削除用
     mock_page.wait_for_timeout = AsyncMock()
-    
+
     # Stage 4: _handle_overlays() は overlays_handled リストをパラメータとして受け取る
-    overlays_handled: List[str] = []
+    overlays_handled: list[str] = []
     await driver._handle_overlays(overlays_handled)
-    
+
     # Cookie バナー、Geo モーダル、オーバーレイの処理が呼ばれたことを確認
     assert mock_page.locator.called
     assert cookie_locator_first.click.called  # Cookie バナーがクリックされた
@@ -421,6 +422,7 @@ async def test_plp_driver_handle_overlays(mock_page, mock_context, site_config, 
 
 
 # === Task 3: Config getter テスト ===
+
 
 def test_get_plp_config_with_new_schema(mock_page, mock_context, run_context):
     """Stage 4: 新スキーマ（selectors.plp.*）から設定を取得するテスト"""
@@ -437,16 +439,16 @@ def test_get_plp_config_with_new_schema(mock_page, mock_context, run_context):
             },
         },
     }
-    
+
     driver = PlpDriver(
         page=mock_page,
         context=mock_context,
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     config = driver._get_plp_config()
-    
+
     # 新スキーマの値が取得できていることを確認
     assert config.get("product_tiles") == [".tile-selector"]
     assert config.get("product_link") == ["a.product-link"]
@@ -473,16 +475,16 @@ def test_get_plp_config_fallback_to_legacy_schema(mock_page, mock_context, run_c
             },
         },
     }
-    
+
     driver = PlpDriver(
         page=mock_page,
         context=mock_context,
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     config = driver._get_plp_config()
-    
+
     # 旧スキーマからフォールバックして値を取得できていることを確認
     assert config.get("product_link") == ["a.legacy-link"]
     assert config.get("container") == [".legacy-container"]
@@ -514,16 +516,16 @@ def test_get_overlay_config_with_new_schema(mock_page, mock_context, run_context
             },
         },
     }
-    
+
     driver = PlpDriver(
         page=mock_page,
         context=mock_context,
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     config = driver._get_overlay_config()
-    
+
     # 新スキーマの値が取得できていることを確認
     assert config.get("cookie", {}).get("selectors") == ["#new-cookie-banner"]
     assert config.get("cookie", {}).get("wait_after_click_ms") == 800
@@ -546,16 +548,16 @@ def test_get_overlay_config_fallback_to_legacy_schema(mock_page, mock_context, r
             },
         },
     }
-    
+
     driver = PlpDriver(
         page=mock_page,
         context=mock_context,
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     config = driver._get_overlay_config()
-    
+
     # 旧スキーマからフォールバックして値を取得できていることを確認
     assert config.get("cookie", {}).get("selectors") == ["#legacy-cookie"]
     assert config.get("geo", {}).get("selectors") == ["button.close-geo"]
@@ -578,16 +580,16 @@ def test_get_trap_config_with_new_schema(mock_page, mock_context, run_context):
             },
         },
     }
-    
+
     driver = PlpDriver(
         page=mock_page,
         context=mock_context,
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     config = driver._get_trap_config()
-    
+
     # 新スキーマの値が取得できていることを確認
     assert "/privacy" in config.get("detect_by_url", {}).get("patterns", [])
     assert "/terms" in config.get("detect_by_url", {}).get("patterns", [])
@@ -607,16 +609,16 @@ def test_get_trap_config_fallback_to_legacy_schema(mock_page, mock_context, run_
             "trap_url_patterns": ["/legal", "/terms"],
         },
     }
-    
+
     driver = PlpDriver(
         page=mock_page,
         context=mock_context,
         site_config=site_config,
         run_context=run_context,
     )
-    
+
     config = driver._get_trap_config()
-    
+
     # 旧スキーマからフォールバックして値を取得できていることを確認
     patterns = config.get("detect_by_url", {}).get("patterns", [])
     assert "/legal" in patterns

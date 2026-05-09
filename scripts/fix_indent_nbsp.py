@@ -5,17 +5,18 @@
 #  - 変更があるときだけ書き込み (idempotent)
 #  - 行末改行は既存を尊重、なければ 1 つ付与
 
-import sys
 import io
 import os
 import re
+import sys
 
-NB = "\u00A0"  # NO-BREAK SPACE
+NB = "\u00a0"  # NO-BREAK SPACE
 INDENT_RE = re.compile(rf"^([ \t{NB}]+)")
+
 
 def fix_file(path: str) -> bool:
     try:
-        with io.open(path, "r", encoding="utf-8", errors="surrogateescape") as f:
+        with open(path, encoding="utf-8", errors="surrogateescape") as f:
             data = f.read()
     except (FileNotFoundError, IsADirectoryError):
         return False
@@ -32,7 +33,7 @@ def fix_file(path: str) -> bool:
             lead = m.group(1)
             new_lead = lead.replace("\t", "    ").replace(NB, " ")
             if new_lead != lead:
-                line = new_lead + line[len(lead):]
+                line = new_lead + line[len(lead) :]
                 changed = True
         fixed_lines.append(line)
 
@@ -45,10 +46,11 @@ def fix_file(path: str) -> bool:
             changed = True
 
     if changed:
-        with io.open(path, "w", encoding="utf-8", newline="") as f:
+        with open(path, "w", encoding="utf-8", newline="") as f:
             f.write(fixed)
 
     return changed
+
 
 def main():
     # pre-commit からのファイルリストのみ処理
@@ -60,6 +62,7 @@ def main():
             print(f"fixed-indent: {p}")
     # 変更があれば非 0 で終了 → pre-commit が「修正されたので再実行して」と案内
     sys.exit(1 if modified else 0)
+
 
 if __name__ == "__main__":
     main()

@@ -1,9 +1,10 @@
 """
 利益計算ロジックのテスト
 """
-from app.core.pricing.schemas import PricingInput
+
 from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.rules import PricingConfig, resolve_customs_rate
+from app.core.pricing.schemas import PricingInput
 
 
 def test_calculate_pricing_basic():
@@ -31,7 +32,7 @@ def test_calculate_pricing_basic():
     assert res.revenue == 30000
     assert res.total_cost == 27100
     assert res.profit == 2900
-    assert round(res.profit_rate, 4) == round(2900/30000, 4)
+    assert round(res.profit_rate, 4) == round(2900 / 30000, 4)
 
 
 def test_calculate_pricing_zero_selling_price():
@@ -167,11 +168,12 @@ def test_calculate_pricing_rounding():
     assert isinstance(res.profit_rate, float)
 
     assert res.revenue == 20000.78
-    assert len(str(res.total_cost).split('.')[-1]) <= 2
-    assert len(str(res.profit).split('.')[-1]) <= 2
+    assert len(str(res.total_cost).split(".")[-1]) <= 2
+    assert len(str(res.profit).split(".")[-1]) <= 2
 
 
 # --- FR-005 新テスト ---
+
 
 def test_exchange_rate_conversion():
     """為替変換テスト（USD→JPY）"""
@@ -181,12 +183,12 @@ def test_exchange_rate_conversion():
         transfer_fee=0.0,
     )
     inp = PricingInput(
-        purchase_price=100,          # 100 USD
-        selling_price=20000,         # 20000 JPY
-        customs_duty=0,              # 自動計算
-        exchange_rate=150.0,         # 1 USD = 150 JPY
+        purchase_price=100,  # 100 USD
+        selling_price=20000,  # 20000 JPY
+        customs_duty=0,  # 自動計算
+        exchange_rate=150.0,  # 1 USD = 150 JPY
         original_currency="USD",
-        item_category="accessory",   # 10%
+        item_category="accessory",  # 10%
     )
 
     res = calculate_pricing(inp, cfg)
@@ -210,7 +212,7 @@ def test_warehouse_shipping_cost():
         purchase_price=10000,
         selling_price=20000,
         customs_duty=1000,
-        shipping_cost=1500,            # 国内送料
+        shipping_cost=1500,  # 国内送料
         warehouse_shipping_cost=3000,  # 転送倉庫送料
     )
 
@@ -233,7 +235,7 @@ def test_auto_customs_bag():
     inp = PricingInput(
         purchase_price=50000,
         selling_price=80000,
-        customs_duty=0,              # 0 → 自動計算
+        customs_duty=0,  # 0 → 自動計算
         item_category="bag",
     )
 
@@ -258,8 +260,8 @@ def test_manual_customs_override():
     inp = PricingInput(
         purchase_price=50000,
         selling_price=80000,
-        customs_duty=3000,           # 手動入力 → 自動計算を上書き
-        item_category="bag",         # 自動なら11%だが手動が優先
+        customs_duty=3000,  # 手動入力 → 自動計算を上書き
+        item_category="bag",  # 自動なら11%だが手動が優先
     )
 
     res = calculate_pricing(inp, cfg)
@@ -326,7 +328,7 @@ def test_backward_compatible_jpy():
         selling_price=20000,
         customs_duty=1000,
         original_currency="JPY",
-        exchange_rate=150.0,         # JPY なので為替適用なし
+        exchange_rate=150.0,  # JPY なので為替適用なし
     )
 
     res = calculate_pricing(inp, cfg)

@@ -1,13 +1,11 @@
 """
 包括テスト: ai_vision_agent, config/protocols, config/paths
 """
+
 from __future__ import annotations
 
-import os
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 
 # ==========================================
@@ -58,12 +56,16 @@ class TestInspectParcelImages:
         from app.agents.ai_vision_agent import AIVisionAgent
 
         agent = AIVisionAgent()
-        with patch.object(agent, "_analyze_image", return_value={
-            "image_url": "url",
-            "damage_detected": True,
-            "brand_logo_visible": True,
-            "notes": "Damage found",
-        }):
+        with patch.object(
+            agent,
+            "_analyze_image",
+            return_value={
+                "image_url": "url",
+                "damage_detected": True,
+                "brand_logo_visible": True,
+                "notes": "Damage found",
+            },
+        ):
             result = agent.inspect_parcel_images(parcel_id="P003", image_urls=["url"])
             assert "Potential damage detected." in result["issues"]
 
@@ -71,12 +73,16 @@ class TestInspectParcelImages:
         from app.agents.ai_vision_agent import AIVisionAgent
 
         agent = AIVisionAgent()
-        with patch.object(agent, "_analyze_image", return_value={
-            "image_url": "url",
-            "damage_detected": False,
-            "brand_logo_visible": False,
-            "notes": "No logo",
-        }):
+        with patch.object(
+            agent,
+            "_analyze_image",
+            return_value={
+                "image_url": "url",
+                "damage_detected": False,
+                "brand_logo_visible": False,
+                "notes": "No logo",
+            },
+        ):
             result = agent.inspect_parcel_images(parcel_id="P004", image_urls=["url"])
             assert "Brand logo not visible in provided photos." in result["issues"]
 
@@ -204,7 +210,7 @@ class TestPaths:
             assert str(d).startswith(str(PROJECT_ROOT))
 
     def test_compatibility_dirs_exist(self):
-        from app.config.paths import INSTANCE_DIR, OUTPUT_DIR, EXPORTS_DIR
+        from app.config.paths import EXPORTS_DIR, INSTANCE_DIR, OUTPUT_DIR
 
         for d in [INSTANCE_DIR, OUTPUT_DIR, EXPORTS_DIR]:
             assert isinstance(d, Path)
