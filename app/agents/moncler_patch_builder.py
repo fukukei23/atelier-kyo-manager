@@ -160,11 +160,11 @@ def build_moncler_patch_candidate(
                     }
             # Secondary/Tertiary の場合は、tile_selectors も更新を検討
             elif recommended_layer in ("secondary", "tertiary") and current_tile_selectors != valid_candidates:
-                    patch["changes"]["selectors.plp"] = patch["changes"].get("selectors.plp", {})
-                    patch["changes"]["selectors.plp"]["tile_selectors"] = {
-                        "before": current_tile_selectors,
-                        "after": valid_candidates[:10],  # 最大10件
-                    }
+                patch["changes"]["selectors.plp"] = patch["changes"].get("selectors.plp", {})
+                patch["changes"]["selectors.plp"]["tile_selectors"] = {
+                    "before": current_tile_selectors,
+                    "after": valid_candidates[:10],  # 最大10件
+                }
 
     # Self-Healing の結果から trap_url_patterns の追加を抽出
     self_healing = analysis_payload.get("self_healing", {})

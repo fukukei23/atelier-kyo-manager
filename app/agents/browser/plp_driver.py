@@ -1182,7 +1182,11 @@ class PlpDriver:
 
         if prefer_locale and allowed_domain:
             target_locale_path = f"/{prefer_locale}/"
-            if allowed_domain.lower() in current_url and target_locale_path not in current_url and _LOCALE_SEG_RE.search(current_url):
+            if (
+                allowed_domain.lower() in current_url
+                and target_locale_path not in current_url
+                and _LOCALE_SEG_RE.search(current_url)
+            ):
                 return True
         return False
 

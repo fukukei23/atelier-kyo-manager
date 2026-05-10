@@ -27,11 +27,10 @@ extend-exclude = [
 [lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 ignore = [
-    # --- Phase 3: 残存する違反 ---
-    "E501",   # line too long (formatterが扱う)
+    # --- 残存する違反 ---
+    "E501",   # line too long (formatterが扱う、長い文字列/JSコード残存)
     "E402",   # module level import not at top — try/except import guards
     "F821",   # undefined name — forward references, conditional imports
-    "SIM117", # with statement merging
 ]
 fixable = ["ALL"]
 unfixable = []

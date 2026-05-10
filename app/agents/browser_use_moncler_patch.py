@@ -193,7 +193,9 @@ async def _collect_candidate_urls(page: Page) -> list[str]:
             continue
         absu = urljoin(origin, u)
         # PDPらしさの軽いヒューリスティクス
-        if (any(k in absu for k in ("/product", "/products/", "/p/")) or urlparse(absu).path.count("/") >= 3) and absu not in seen:
+        if (
+            any(k in absu for k in ("/product", "/products/", "/p/")) or urlparse(absu).path.count("/") >= 3
+        ) and absu not in seen:
             seen.add(absu)
             out.append(absu)
     return out[:50]
@@ -479,7 +481,11 @@ async def moncler_plp_recovery(page: Page, site_config: dict[str, Any] | None, q
 
         is_wrong_locale = False
         # 例: /en-de/ が含まれていて、かつ force_locale が en-int の場合
-        if f"/{force_locale}/" not in current_path and re.search(r"/en-[a-z]{2}/", current_path) and force_locale not in current_path:
+        if (
+            f"/{force_locale}/" not in current_path
+            and re.search(r"/en-[a-z]{2}/", current_path)
+            and force_locale not in current_path
+        ):
             is_wrong_locale = True
             logger.warning(f"[MonclerPatch] Wrong locale detected: {current_path} (Target: {force_locale})")
 

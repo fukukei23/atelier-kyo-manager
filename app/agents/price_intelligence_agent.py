@@ -262,8 +262,6 @@ if __name__ == "__main__":
         exit(1)
 
     agent = PriceIntelligenceAgent(headless=not args.headful)
-    results = agent.run(
-        brand_name=args.brand, item_limit=args.items, site_config=buyma_config
-    )
+    results = agent.run(brand_name=args.brand, item_limit=args.items, site_config=buyma_config)
     print("\n--- Price Intelligence Agent Results ---")
     print(json.dumps(results, ensure_ascii=False, indent=2))

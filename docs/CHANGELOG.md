@@ -4,6 +4,37 @@
 
 ## 2026-05-10
 
+### P2-1: selector_repair_agent.py 分割（755行→170行）
+- プロンプト構築・ランキング・検証の3モジュールに分割
+- 新規ファイル: `browser/selector_prompt_builder.py`(250行), `browser/selector_ranker.py`(79行), `browser/selector_validator.py`(52行)
+- バグ修正: `_build_selector_repair_prompt` の重複 feedback_section（2重定義）を除去、missing `previous_successes`/`previous_failures` パラメータを追加
+- テスト: 886 passed, 0 failures
+
+### P2-3: ruff.toml ignore 解消（SIM117）
+- 4テストファイルのネスト `with` をマージして SIM117 違反6件解消
+- `ruff format` で E501 違反22ファイル自動修正（79件残存は長文字列/JSコード）
+- ruff.toml ignore: `SIM117` 除去 → 現在 `E501`, `E402`, `F821` の3ルール
+
+### P1-2: browser_use_agent.py スリム化（2,597行→1,834行）
+- Phase 1: 11メソッドのUI helpers/settings委譲（~200行削減）
+- Phase 2a: `_normalize_abs_url`, `_looks_like_trap_or_legal`, `_resolve_run_settings` 委譲（~100行削減）
+- Phase 4: 6メソッド/関数のモジュール抽出（~290行削減）
+  - 新規ファイル: `browser/stealth.py`（~120行）, `browser/route_setup.py`（~75行）, `browser/session_config.py`（~100行）, `browser/deep_extraction.py`（~170行）
+  - `_setup_init_scripts` → `stealth.setup_stealth_init_scripts`
+  - `_build_context_options` / `_get_session_file` / `_apply_saved_session` → `session_config` モジュール
+  - `_setup_routes` → `route_setup.setup_routes`
+  - `_perform_vrt` + `_unpack_vrt` → `visual_regression.perform_vrt` / `unpack_vrt`
+  - `_run_deep_extraction_phase2` → `deep_extraction.run_deep_extraction_phase2`
+- `_resolve_run_settings` → `settings.resolve_run_settings` に1行委譲
+- 外部importer（2箇所）は変更不要
+- テスト: 886 passed, 0 failures
+
+### P1-1: navigation_driver.py 責務分割（4,212行→1,723行）
+- 40メソッドの巨大モノリスを5モジュールに分割（Mixinパターン + pure function抽出）
+- 新規ファイル: `nav_types.py`(99行), `url_rules.py`(388行), `moncler_nav.py`(322行), `locale_manager.py`(1,007行), `nav_fallbacks.py`(650行)
+- 後方互換: re-exportにより外部importer 7箇所は変更不要
+- テスト: 886 passed, 0 failures
+
 ### Selenium → Playwright 移行 (P1-5)
 - `price_intelligence_agent.py`（v14.0.0J）と `buyma_catalog_manager.py`（v2.0.0）を Selenium から Playwright sync API に全面書き換え
 - selenium/selenium-stealth/webdriver-manager 依存を除去（`ai_image_crawler.py` は別タスクで残存）
@@ -36,5 +67,13 @@
 - 2箇所（`e2e_success_stage`/`self_healing_policy`）は未実装モジュールのため正当な optional import として保持
 - `__init__` の if/elif/else パターンを `or` パターンに簡素化
 
+### P1-4: sys.path 操作の集約・除去
+- app/内7モジュール + テスト6ファイル（計14ファイル）から `sys.path.insert` を除去
+- 5ファイルの `try: from app.core... except: from core...` フォールバックimportを直importに統一
+- `failure_analysis_agent.py` の ImportError スタブ（ダミークラス約20行）も除去
+- スクリプト（`scripts/`, `app/scripts/run_site.py`）は正当なエントリポイントとして保持
+- `grep -rn "sys.path.insert" app/` → `app/scripts/run_site.py` のみ（正当）
+- テスト 886 passed、回帰なし
+
 ### テスト結果
-- **886 passed, 0 failed, 6 skipped**（旧911から旧テストファイル削除分 -25、機能退化なし）
+- **886 passed, 0 failed, 6 skipped**

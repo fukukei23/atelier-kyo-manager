@@ -74,9 +74,8 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
         self.discovery_agent = discovery_agent or SelectorDiscoveryAgent(runtime_kwargs=self.runtime_kwargs)
         self.patch_agent = patch_agent or SelfHealingPatchAgent(runtime_kwargs=self.runtime_kwargs)
         self.sandbox = sandbox or SelfHealingSandbox()
-        self.policy = (
-            policy
-            or (SelfHealingPolicy.from_file(Path("app/config/self_healing_policy.json")) if SelfHealingPolicy else None)
+        self.policy = policy or (
+            SelfHealingPolicy.from_file(Path("app/config/self_healing_policy.json")) if SelfHealingPolicy else None
         )
         self.patch_applier = patch_applier or SelfHealingPatchApplier()
         self.selector_repair_agent = selector_repair_agent or SelectorRepairAgent(llm_client=llm_client)

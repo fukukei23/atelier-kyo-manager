@@ -390,10 +390,13 @@ class TestSaveChatHistory:
             model_family="openai",
         )
 
-        with patch.dict("sys.modules", {
-            "app": MagicMock(db=mock_db),
-            "app.models": MagicMock(ChatHistory=mock_chat_history),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app": MagicMock(db=mock_db),
+                "app.models": MagicMock(ChatHistory=mock_chat_history),
+            },
+        ):
             ctrl._save_chat_history("hello", result)
 
         assert mock_db.session.add.call_count == 2
@@ -408,10 +411,13 @@ class TestSaveChatHistory:
         ctrl = self._make_ctrl()
         result = GenerateResult(text="test", tokens={})
 
-        with patch.dict("sys.modules", {
-            "app": MagicMock(db=mock_db),
-            "app.models": MagicMock(ChatHistory=MagicMock()),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app": MagicMock(db=mock_db),
+                "app.models": MagicMock(ChatHistory=MagicMock()),
+            },
+        ):
             ctrl._save_chat_history("hello", result)
 
         mock_db.session.rollback.assert_called_once()
@@ -421,6 +427,7 @@ class TestSaveChatHistory:
 
         # ChatHistory が実際の kwargs を保持するようにする
         created = []
+
         def fake_chat_history(**kwargs):
             m = MagicMock()
             m._kwargs = kwargs
@@ -432,10 +439,13 @@ class TestSaveChatHistory:
         ctrl = self._make_ctrl()
         result = GenerateResult(text="test", tokens=150)
 
-        with patch.dict("sys.modules", {
-            "app": MagicMock(db=mock_db),
-            "app.models": MagicMock(ChatHistory=fake_chat_history),
-        }):
+        with patch.dict(
+            "sys.modules",
+            {
+                "app": MagicMock(db=mock_db),
+                "app.models": MagicMock(ChatHistory=fake_chat_history),
+            },
+        ):
             ctrl._save_chat_history("hello", result)
 
         # 2件目が assistant メッセージ

@@ -55,15 +55,15 @@ class PradaPLPStrategy(StrategyPlugin):
         path = self._path(url)
         # 不一致パターンを検出 (/us/en/, /it/it/, etc.)
         if path and re.search(r"/([a-z]{2})/([a-z]{2})/", path):
-                locale_match = re.search(r"/([a-z]{2})/([a-z]{2})/", path)
-                if locale_match:
-                    lang = locale_match.group(1)
-                    country = locale_match.group(2)
-                    if lang != country.lower():
-                        # 不一致の場合はUS/enに強制
-                        new_path = re.sub(r"/[a-z]{2}/[a-z]{2}/", "/us/en/", path)
-                        url = url.replace(path, new_path)
-                        logger.info(f"[PRADA] Locale trap corrected: {url}")
+            locale_match = re.search(r"/([a-z]{2})/([a-z]{2})/", path)
+            if locale_match:
+                lang = locale_match.group(1)
+                country = locale_match.group(2)
+                if lang != country.lower():
+                    # 不一致の場合はUS/enに強制
+                    new_path = re.sub(r"/[a-z]{2}/[a-z]{2}/", "/us/en/", path)
+                    url = url.replace(path, new_path)
+                    logger.info(f"[PRADA] Locale trap corrected: {url}")
 
         # 浅すぎるパスは正規PLPへ
         if path and path.count("/") < 3:
