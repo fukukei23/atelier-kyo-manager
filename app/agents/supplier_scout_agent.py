@@ -12,25 +12,15 @@
 from __future__ import annotations
 
 import logging
-import sys
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin
 
-# --- プロジェクトルートをPythonの検索パスに追加 ---
-APP_ROOT = Path(__file__).resolve().parents[2]
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
-
 from app.agents.browser_use_agent import BrowserUseAgent
 from app.agents.failure_analysis_agent import FailureAnalysisAgent
 from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
+from app.core.run_context import RunContext
 from app.models.result_models import DiscoveryResult
-
-try:
-    from app.core.run_context import RunContext
-except Exception:
-    from core.run_context import RunContext
 
 logger = logging.getLogger(__name__)
 

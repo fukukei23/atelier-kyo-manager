@@ -4,7 +4,6 @@
 #    AILlmControllerがDeepSeekと正常に通信できるかをテストする。
 # ----------------------------------------------------------------
 import os
-import sys
 
 import pytest
 from dotenv import load_dotenv
@@ -13,11 +12,6 @@ from dotenv import load_dotenv
 # テストスクリプトが起動した時点で、.envファイルを読み込む
 load_dotenv()
 # --- ↑↑ ここまでが最重要修正点 ↑↑ ---
-
-# プロジェクトのルートディレクトリをPythonのパスに追加
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-
-import os
 
 from app import create_app
 from app.utils.ai_llm_controller import AILlmController

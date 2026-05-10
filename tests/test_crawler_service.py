@@ -8,7 +8,6 @@
 import json
 import logging
 import os
-import sys
 
 from dotenv import load_dotenv
 
@@ -18,9 +17,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 
 # .envファイルから環境変数を読み込む
 load_dotenv()
-
-# プロジェクトのルートパスをシステムパスに追加
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 from app import create_app
 from app.utils.ai_image_crawler import CrawlerService

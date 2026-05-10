@@ -6,9 +6,6 @@
 import os
 import sys
 
-# プロジェクトルートをパスに追加
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 
 def test_imports():
     """テストファイルのインポートを確認"""
