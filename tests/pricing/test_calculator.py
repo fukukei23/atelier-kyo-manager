@@ -337,3 +337,152 @@ def test_backward_compatible_jpy():
     # total_cost = 10000 + 0 + 1000 + 0 + 0 + 0 + 0 + 0 = 11000
     assert res.purchase_price_jpy == 10000.0
     assert res.profit == 9000.0
+
+
+# --- 境界値・エッジケーステスト ---
+
+
+def test_exchange_rate_zero_skips_conversion():
+    """exchange_rate=0 の場合、USDでも為替変換されずそのまま使われる"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=100,  # 100 USD
+        selling_price=20000,
+        customs_duty=1000,
+        original_currency="USD",
+        exchange_rate=0.0,  # レート0 → 為替適用なし
+    )
+
+    res = calculate_pricing(inp, cfg)
+
+    # exchange_rate > 0 が false → purchase_price_jpy = 100 (そのまま)
+    assert res.purchase_price_jpy == 100.0
+    # total_cost = 100 + 0 + 1000 + 0 + 0 + 0 + 0 + 0 = 1100
+    assert res.profit == 18900.0
+
+
+def test_customs_auto_includes_warehouse_shipping():
+    """関税自動計算に warehouse_shipping_cost が含まれる（ライン38の検証）"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=50000,
+        selling_price=80000,
+        customs_duty=0,  # 自動計算
+        warehouse_shipping_cost=3000,
+        item_category="bag",  # 11%
+    )
+
+    res = calculate_pricing(inp, cfg)
+
+    # auto_customs_duty = (50000 + 3000) * 0.11 = 5830
+    # total_shipping = 0 + 3000 = 3000
+    # total_cost = 50000 + 3000 + 5830 + 0 + 0 + 0 + 0 + 0 = 58830
+    assert res.auto_customs_duty == 5830.0
+    assert res.total_cost == 58830.0
+    assert res.profit == 21170.0
+
+
+def test_domestic_vs_overseas_commission():
+    """同一条件下で source_type のみ変えた場合、手数料差が正確に反映される"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.077,
+        overseas_commission_rate=0.055,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=30000,
+        selling_price=50000,
+        customs_duty=2000,
+    )
+
+    domestic = calculate_pricing(inp, cfg, source_type="domestic")
+    overseas = calculate_pricing(inp, cfg, source_type="overseas")
+
+    # domestic commission = 50000 * 0.077 = 3850
+    # overseas commission = 50000 * 0.055 = 2750
+    assert domestic.total_cost > overseas.total_cost
+    profit_diff = domestic.total_cost - overseas.total_cost
+    assert profit_diff == 3850 - 2750  # = 1100
+    assert overseas.profit - domestic.profit == 1100
+
+
+def test_profit_near_zero_boundary():
+    """利益率がほぼ0%の境界値テスト"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    # total_cost が selling_price にほぼ一致する入力
+    # total_cost = purchase_price + shipping + customs + procurement + ...
+    # = 9500 + 500 + 0 + 0 + ... = 10000
+    inp = PricingInput(
+        purchase_price=9500,
+        selling_price=10000,
+        customs_duty=0,  # 自動計算: (9500+0)*0.10 = 950
+        shipping_cost=500,
+    )
+
+    res = calculate_pricing(inp, cfg)
+
+    # auto_customs = (9500 + 0) * 0.10 = 950
+    # total_cost = 9500 + 500 + 950 + 0 + 0 + 0 + 0 + 0 = 10950
+    # profit = 10000 - 10950 = -950 (赤字)
+    assert res.profit < 0
+    assert res.profit_rate < 0
+
+
+def test_profit_exactly_zero():
+    """利益がほぼゼロになる条件のテスト"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    # 全コスト = selling_price になるよう設計
+    # customs自動を避け手動指定
+    inp = PricingInput(
+        purchase_price=8000,
+        selling_price=10000,
+        customs_duty=1000,  # 手動
+        shipping_cost=1000,
+    )
+
+    res = calculate_pricing(inp, cfg)
+
+    # total_cost = 8000 + 1000 + 1000 + 0 + 0 + 0 + 0 + 0 = 10000
+    assert res.total_cost == 10000.0
+    assert res.profit == 0.0
+    assert res.profit_rate == 0.0
+
+
+def test_material_overrides_category_for_customs():
+    """素材指定がカテゴリより優先される（革素材 + bag → leather の12%が適用）"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=50000,
+        selling_price=80000,
+        customs_duty=0,
+        item_category="bag",  # 通常は11%
+        item_material="leather",  # 12%が優先
+    )
+
+    res = calculate_pricing(inp, cfg)
+
+    # leather優先 → 12%
+    # auto_customs = (50000 + 0) * 0.12 = 6000
+    assert res.customs_rate_used == 0.12
+    assert res.auto_customs_duty == 6000.0
