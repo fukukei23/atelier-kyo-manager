@@ -25,15 +25,9 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-
-# --- プロジェクトルートをPythonの検索パスに追加 ---
-APP_ROOT = Path(__file__).resolve().parents[2]
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
 
 from app.models.result_models import DiscoveryResult
 

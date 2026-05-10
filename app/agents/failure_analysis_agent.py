@@ -12,38 +12,15 @@ from __future__ import annotations
 
 import json
 import logging
-import sys
 import traceback
 from pathlib import Path
 from typing import Any
 
-# --- プロジェクトルートをPythonの検索パスに追加 ---
 APP_ROOT = Path(__file__).resolve().parents[2]
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
 
-# --- プロジェクトのモジュールをインポート ---
-try:
-    from app.core.run_context import RunContext
-    from app.models.result_models import GenerateResult
-    from app.utils.ai_llm_controller import AILlmController
-except ImportError as e:
-    logging.warning(f"[FailureAnalysisAgent] Import failed, using stubs: {e}")
-
-    class GenerateResult:
-        def __init__(self, text: str, cost_usd: float = 0.0):
-            self.text = text
-            self.cost_usd = cost_usd
-
-    class AILlmController:
-        def generate(self, prompt: str, task_type: str) -> GenerateResult:
-            logging.info("AILlmController (Stub Fallback): AIへのリクエストをシミュレートします。")
-            dummy_response = {
-                "diagnosis": "ナビゲーション中にタイムアウトが発生しました。",
-                "root_cause": "ターゲットサイトの応答が遅いか、表示を待機すべき特定の要素（セレクタ）がDOM上に存在しなかった可能性があります。",
-                "recommended_action": "config/overrides.local.jsonの該当サイト設定で、`timeout_sec`を延長するか、`wait_for_selectors`の値を見直してください。",
-            }
-            return GenerateResult(text=json.dumps(dummy_response, ensure_ascii=False, indent=2))
+from app.core.run_context import RunContext
+from app.models.result_models import GenerateResult
+from app.utils.ai_llm_controller import AILlmController
 
 
 logger = logging.getLogger(__name__)

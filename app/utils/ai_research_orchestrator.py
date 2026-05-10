@@ -12,13 +12,7 @@
 import argparse
 import asyncio
 import logging
-import sys
 from pathlib import Path
-
-# --- プロジェクトのルートパスをsys.pathに追加 ---
-APP_ROOT = Path(__file__).resolve().parents[1]
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
 
 from app.agents.persistence_agent import PersistenceAgent
 from app.agents.reporting_agent import ReportingAgent

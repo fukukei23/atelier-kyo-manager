@@ -13,26 +13,16 @@
 from __future__ import annotations
 
 import logging
-import sys
 import time
 from pathlib import Path
 from typing import Any
-
-# --- プロジェクトルートをPythonの検索パスに追加 ---
-APP_ROOT = Path(__file__).resolve().parents[2]
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
 
 from playwright.async_api import Page
 
 from app.agents.failure_analysis_agent import FKB
 from app.agents.page_recovery_agent import PageRecoveryAgent
 from app.agents.selector_repair_agent import SelectorRepairAgent
-
-try:
-    from app.core.run_context import RunContext
-except Exception:
-    from core.run_context import RunContext
+from app.core.run_context import RunContext
 
 logger = logging.getLogger(__name__)
 

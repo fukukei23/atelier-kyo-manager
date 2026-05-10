@@ -17,10 +17,7 @@ import json
 import logging
 from typing import Any
 
-try:
-    from app.core.run_context import RunContext
-except Exception:
-    from core.run_context import RunContext
+from app.core.run_context import RunContext
 
 try:
     from app.models.result_models import GenerateResult

@@ -24,24 +24,15 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import sys
 from pathlib import Path
 from urllib.parse import urljoin
 
 from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
-try:
-    from app.core.run_context import RunContext
-except Exception:
-    from core.run_context import RunContext
+from app.core.run_context import RunContext
 
 logger = logging.getLogger(__name__)
-
-# プロジェクトルートをPythonパスに追加
-APP_ROOT = Path(__file__).resolve().parents[2]
-if str(APP_ROOT) not in sys.path:
-    sys.path.insert(0, str(APP_ROOT))
 
 
 class PageRecoveryAgent:
