@@ -1,3 +1,16 @@
+# ==============================================================================
+# ファイル名 (File Name): buyma_catalog_manager.py
+# レジストリ (Registry): app/utils/buyma_catalog_manager.py
+# 更新日時 (Date & Time JST): 2026-05-10
+# バージョン (Version): 2.0.0 (Playwright Migration)
+#
+# --- v2.0.0での主な変更点 (What's New in v2.0.0) ---
+# - [Playwright移行] Selenium → Playwright sync API に移行
+# - selenium / selenium-stealth / webdriver-manager 依存を除去
+# - chromium.launch() + new_context() パターンに統一
+# ==============================================================================
+from __future__ import annotations
+
 import csv
 import hashlib
 import os
@@ -5,22 +18,14 @@ import random
 import time
 import zipfile
 from datetime import datetime
+from pathlib import Path
 
 import gspread
 import requests
 from google.oauth2.service_account import Credentials
-from selenium import webdriver
-from selenium.common.exceptions import NoSuchElementException, TimeoutException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium_stealth import stealth
-from webdriver_manager.chrome import ChromeDriverManager
+from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
-# --- 設定（SDカードD:ドライブ・スプレッドシートID設定済み）---
+# --- 設定 ---
 CONFIG = {
     "profile_path": r"C:/Users/USER/AppData/Local/Google/Chrome/SeleniumProfile",
     "base_dir": "D:/catalog_images",
@@ -41,12 +46,15 @@ CONFIG = {
 
 class BUYMACatalogManager:
     def __init__(self):
-        self.driver = self._init_driver()
+        self.pw = None
+        self.browser: Browser | None = None
+        self.context: BrowserContext | None = None
+        self.page: Page | None = None
         self.request_count = 0
         self.error_count = 0
-        self.downloaded_hashes = set()
-        self.downloaded_catalog_ids = set()
-        self.csv_records = []
+        self.downloaded_hashes: set[str] = set()
+        self.downloaded_catalog_ids: set[str] = set()
+        self.csv_records: list[dict] = []
         self._setup_directories()
         self._init_google_sheets()
         self.stop_flag = False
@@ -70,30 +78,28 @@ class BUYMACatalogManager:
             self.worksheet = None
 
     def _init_driver(self):
-        chrome_options = Options()
-        chrome_options.add_argument(f"--user-data-dir={CONFIG['profile_path']}")
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        chrome_options.add_argument("--lang=ja")
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_argument(
-            "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
-        )
+        profile_dir = Path(CONFIG["profile_path"])
+        profile_dir.mkdir(parents=True, exist_ok=True)
 
-        service = ChromeService(ChromeDriverManager().install())
-        driver = webdriver.Chrome(service=service, options=chrome_options)
-
-        stealth(
-            driver,
-            languages=["ja-JP", "ja"],
-            vendor="Google Inc.",
-            platform="Win32",
-            webgl_vendor="Intel Inc.",
-            renderer="Intel Iris OpenGL Engine",
-            fix_hairline=True,
+        self.pw = sync_playwright().start()
+        self.context = self.pw.chromium.launch_persistent_context(
+            user_data_dir=str(profile_dir),
+            headless=False,
+            viewport={"width": 1280, "height": 900},
+            locale="ja-JP",
+            timezone_id="Asia/Tokyo",
+            args=["--disable-blink-features=AutomationControlled"],
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            ),
         )
-        return driver
+        self.context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'languages', {get: () => ['ja-JP', 'ja', 'en-US', 'en']});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+        """)
+        self.page = self.context.pages[0] if self.context.pages else self.context.new_page()
 
     def _human_like_delay(self):
         if self._check_response_time():
@@ -104,9 +110,9 @@ class BUYMACatalogManager:
 
     def _check_response_time(self):
         try:
-            navigation_start = self.driver.execute_script("return window.performance.timing.navigationStart")
-            response_start = self.driver.execute_script("return window.performance.timing.responseStart")
-            return (response_start - navigation_start) / 1000 > CONFIG["safety"]["response_time_threshold"]
+            nav_start = self.page.evaluate("return window.performance.timing.navigationStart")
+            resp_start = self.page.evaluate("return window.performance.timing.responseStart")
+            return (resp_start - nav_start) / 1000 > CONFIG["safety"]["response_time_threshold"]
         except Exception:
             return False
 
@@ -115,23 +121,18 @@ class BUYMACatalogManager:
             close_selectors = [
                 ".catalogs-modal__close",
                 ".modal-close",
-                "//button[contains(text(), '閉じる')]",
-                "//button[contains(text(), 'キャンセル')]",
             ]
             for selector in close_selectors:
                 try:
-                    if selector.startswith("//"):
-                        elements = self.driver.find_elements(By.XPATH, selector)
-                    else:
-                        elements = self.driver.find_elements(By.CSS_SELECTOR, selector)
+                    elements = self.page.query_selector_all(selector)
                     for element in elements:
-                        if element.is_displayed() and element.is_enabled():
+                        if element.is_visible() and element.is_enabled():
                             element.click()
                             self._human_like_delay()
                             return True
                 except Exception:
                     continue
-            self.driver.execute_script("""
+            self.page.evaluate("""
                 document.querySelectorAll('.catalogs-modal-table, .modal, .modal-backdrop').forEach(e => e.remove());
             """)
             return True
@@ -164,11 +165,11 @@ class BUYMACatalogManager:
 
     def _download_file(self, url, brand_name, catalog_id):
         session = requests.Session()
-        for c in self.driver.get_cookies():
-            session.cookies.set(c["name"], c["value"])
+        for cookie in self.context.cookies():
+            session.cookies.set(cookie["name"], cookie["value"])
         headers = {
-            "Referer": self.driver.current_url,
-            "User-Agent": self.driver.execute_script("return navigator.userAgent;"),
+            "Referer": self.page.url,
+            "User-Agent": self.page.evaluate("return navigator.userAgent;"),
         }
 
         response = session.get(url, headers=headers)
@@ -241,7 +242,7 @@ class BUYMACatalogManager:
             164: "SAINT LAURENT",
             202: "DIOR",
             147: "FENDI",
-            167: "VALENTINO",
+            167: "VALENCIAGA",
             144: "COACH",
             155: "BURBERRY",
             172: "MONCLER",
@@ -267,21 +268,20 @@ class BUYMACatalogManager:
     def process_catalog(self, row, brand_name):
         try:
             self._force_close_modals()
-            catalog_id = row.find_element(By.CSS_SELECTOR, "span.catalogs-table__contents-id").text.strip()
+            catalog_id_el = row.query_selector("span.catalogs-table__contents-id")
+            catalog_id = catalog_id_el.inner_text().strip() if catalog_id_el else ""
 
-            image_cell = WebDriverWait(row, 10).until(
-                EC.presence_of_element_located(
-                    (By.CSS_SELECTOR, ".catalogs-table__image-item > .catalogs-table__image")
-                )
+            image_cell = self.page.wait_for_selector(
+                ".catalogs-table__image-item > .catalogs-table__image", timeout=10000
             )
-            ActionChains(self.driver).move_to_element(image_cell).pause(0.5).click().perform()
+            image_cell.hover()
+            time.sleep(0.5)
+            image_cell.click()
 
-            WebDriverWait(self.driver, 15).until(
-                EC.visibility_of_element_located((By.CSS_SELECTOR, ".catalogs-modal-table"))
-            )
+            self.page.wait_for_selector(".catalogs-modal-table", state="visible", timeout=15000)
 
-            download_link = WebDriverWait(self.driver, 15).until(
-                EC.element_to_be_clickable((By.CSS_SELECTOR, "a.catalogs-modal-table__link"))
+            download_link = self.page.wait_for_selector(
+                "a.catalogs-modal-table__link", state="visible", timeout=15000
             )
             download_url = download_link.get_attribute("href")
 
@@ -296,9 +296,9 @@ class BUYMACatalogManager:
 
         except Exception as e:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            self.driver.save_screenshot(os.path.join(CONFIG["screenshot_dir"], f"error_{timestamp}.png"))
+            self.page.screenshot(path=os.path.join(CONFIG["screenshot_dir"], f"error_{timestamp}.png"))
             with open(os.path.join(CONFIG["screenshot_dir"], f"error_{timestamp}.html"), "w", encoding="utf-8") as f:
-                f.write(self.driver.page_source)
+                f.write(self.page.content())
             print(f"エラー発生: {str(e)[:100]}")
             return False
 
@@ -306,14 +306,12 @@ class BUYMACatalogManager:
         page_num = 1
         while not self.stop_flag:
             try:
-                self.driver.get(
+                self.page.goto(
                     f"{base_url}&page={page_num}" if "?brand_id=" in base_url else f"{base_url}?page={page_num}"
                 )
-                WebDriverWait(self.driver, 20).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "tr.catalogs-table__row"))
-                )
+                self.page.wait_for_selector("tr.catalogs-table__row", timeout=20000)
 
-                rows = self.driver.find_elements(By.CSS_SELECTOR, "tr.catalogs-table__row")
+                rows = self.page.query_selector_all("tr.catalogs-table__row")
                 if not rows:
                     break
 
@@ -324,18 +322,18 @@ class BUYMACatalogManager:
                     self._human_like_delay()
 
                 try:
-                    next_btn = WebDriverWait(self.driver, 10).until(
-                        EC.element_to_be_clickable((By.CSS_SELECTOR, "a.pagination__next:not([disabled])"))
+                    next_btn = self.page.wait_for_selector(
+                        "a.pagination__next:not([disabled])", state="visible", timeout=10000
                     )
                     page_num += 1
                     self._human_like_delay()
-                except (NoSuchElementException, TimeoutException):
+                except Exception:
                     print(f"{brand_name} の最終ページに到達")
                     break
             except Exception as e:
                 print(f"ページ処理エラー（{brand_name}）: {str(e)}")
-                self.driver.save_screenshot(
-                    os.path.join(CONFIG["screenshot_dir"], f"pagination_error_{brand_name}.png")
+                self.page.screenshot(
+                    path=os.path.join(CONFIG["screenshot_dir"], f"pagination_error_{brand_name}.png")
                 )
                 break
 
@@ -353,7 +351,7 @@ class BUYMACatalogManager:
             "file_size",
             "first_image_path",
             "all_image_paths",
-            "status",  # ← ここに'all_image_paths'を追加
+            "status",
         ]
 
         with open(CONFIG["csv_path"], "w", newline="", encoding="utf-8-sig") as f:
@@ -401,7 +399,8 @@ Googleスプレッドシート: {"連携済み" if self.worksheet else "未接�
                 except Exception as e:
                     print(f"ヘッダー設定エラー: {e}")
 
-            self.driver.get("https://www.buyma.com/login/")
+            self._init_driver()
+            self.page.goto("https://www.buyma.com/login/")
             input("手動ログイン後、Enterを押してください...\n（途中で止めたい場合はCtrl+C）")
 
             popular_brands = self.get_popular_brands(30)
@@ -435,7 +434,21 @@ Googleスプレッドシート: {"連携済み" if self.worksheet else "未接�
 
     def cleanup(self):
         self._save_csv_summary()
-        self.driver.quit()
+        for resource in [self.context, self.browser]:
+            if resource:
+                try:
+                    resource.close()
+                except Exception:
+                    pass
+        if self.pw:
+            try:
+                self.pw.stop()
+            except Exception:
+                pass
+        self.page = None
+        self.context = None
+        self.browser = None
+        self.pw = None
         print("リソースを解放しました")
 
 
