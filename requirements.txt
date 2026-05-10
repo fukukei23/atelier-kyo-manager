@@ -1,5 +1,5 @@
 # requirements.txt
-# 最終更新: 2026-05-09
+# 最終更新: 2026-05-10
 
 # --- Flask Core ---
 Flask>=3.0,<4.0

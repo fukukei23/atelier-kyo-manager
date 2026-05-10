@@ -1,15 +1,13 @@
 # ==============================================================================
 # ファイル名 (File Name): price_intelligence_agent.py
 # レジストリ (Registry): app/agents/price_intelligence_agent.py
-# 更新日時 (Date & Time JST): 2025-09-19 22:11:00
-# バージョン (Version): 13.0.0J (Config-Driven Timeout)
+# 更新日時 (Date & Time JST): 2026-05-10
+# バージョン (Version): 14.0.0J (Playwright Migration)
 #
-# --- v13.0.0Jでの主な変更点 (What's New in v13.0.0J) ---
-# - [設定駆動タイムアウト] `run` メソッドが `site_config` を受け取り、
-#   SeleniumのWebDriverWaitの待機時間を `timeout_sec` (デフォルト20秒) に
-#   基づいて動的に設定するように変更。
-# - [即時撤退思想の導入] これにより、Orchestratorから渡される「即時撤退」
-#   ポリシーに準拠し、応答の遅いサイトでの無駄な待機を削減します。
+# --- v14.0.0Jでの主な変更点 (What's New in v14.0.0J) ---
+# - [Playwright移行] Selenium → Playwright sync API に移行
+# - selenium / selenium-stealth / webdriver-manager 依存を除去
+# - chromium.launch() + new_context() パターンに統一
 # ==============================================================================
 # -*- coding: utf-8 -*-
 from __future__ import annotations
@@ -25,17 +23,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import quote_plus
 
-from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.chrome.service import Service as ChromeService
-from selenium.webdriver.common.by import By
-from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.edge.service import Service as EdgeService
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium_stealth import stealth
-from webdriver_manager.chrome import ChromeDriverManager
-from webdriver_manager.microsoft import EdgeChromiumDriverManager
+from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 try:
     from app.extractors.product_info_extractor import extract_product_info
@@ -51,79 +39,69 @@ except ImportError:
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 
+USER_DATA_DIR = Path(__file__).resolve().parents[2] / "instance" / "pw_profile" / "price_intelligence"
+
 
 class PriceIntelligenceAgent:
     def __init__(self, headless: bool = True):
         self.headless = headless
-        self.driver: webdriver.Chrome | webdriver.Edge | None = None
-        self.wait: WebDriverWait | None = None
+        self.pw = None
+        self.browser: Browser | None = None
+        self.context: BrowserContext | None = None
+        self.page: Page | None = None
 
         base_dir = Path(__file__).resolve().parents[2]
         self.screenshot_dir = base_dir / "instance" / "screenshots"
         self.screenshot_dir.mkdir(parents=True, exist_ok=True)
 
-    def _init_driver(self, browser_name: str, timeout_sec: int):
-        if self.driver:
+    def _init_driver(self, timeout_sec: int):
+        if self.page:
             return
 
-        logging.info(f"Initializing {browser_name.capitalize()} driver with {timeout_sec}s timeout...")
+        logging.info(f"Initializing Playwright chromium with {timeout_sec}s timeout...")
 
-        if browser_name == "chrome":
-            options = webdriver.ChromeOptions()
-            profile_path = Path.home() / "AppData/Local/Google/Chrome/SeleniumProfile"
-            options.add_argument(f"--user-data-dir={profile_path}")
-            options.add_argument("--profile-directory=Default")
-            if self.headless:
-                options.add_argument("--headless=new")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option("useAutomationExtension", False)
-            try:
-                service = ChromeService(ChromeDriverManager().install())
-                self.driver = webdriver.Chrome(service=service, options=options)
-            except Exception as e:
-                logging.error(f"Failed to initialize Chrome Driver: {e}", exc_info=True)
-                raise
-        elif browser_name == "edge":
-            options = webdriver.EdgeOptions()
-            profile_path = Path.home() / "AppData/Local/Microsoft/Edge/SeleniumProfile"
-            options.add_argument(f"user-data-dir={profile_path}")
-            options.add_argument("profile-directory=Default")
-            if self.headless:
-                options.add_argument("--headless=new")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_experimental_option("excludeSwitches", ["enable-automation"])
-            options.add_experimental_option("useAutomationExtension", False)
-            try:
-                service = EdgeService(EdgeChromiumDriverManager().install())
-                self.driver = webdriver.Edge(service=service, options=options)
-            except Exception as e:
-                logging.error(f"Failed to initialize Edge Driver: {e}", exc_info=True)
-                raise
-        else:
-            raise ValueError(f"Unsupported browser: {browser_name}")
-
-        stealth(self.driver, languages=["ja-JP", "ja"], vendor="Google Inc.", platform="Win32")
-        self.wait = WebDriverWait(self.driver, timeout_sec)
+        USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
+        self.pw = sync_playwright().start()
+        self.browser = self.pw.chromium.launch(headless=self.headless)
+        self.context = self.browser.new_context(
+            viewport={"width": 1280, "height": 800},
+            locale="ja-JP",
+            timezone_id="Asia/Tokyo",
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            ),
+        )
+        self.context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+            Object.defineProperty(navigator, 'languages', {get: () => ['ja-JP', 'ja', 'en-US', 'en']});
+            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+        """)
+        self.page = self.context.new_page()
+        self.page.set_default_timeout(timeout_sec * 1000)
 
     def _quit_driver(self):
-        if self.driver:
+        for resource in [self.context, self.browser]:
+            if resource:
+                try:
+                    resource.close()
+                except Exception as e:
+                    logging.error(f"Error closing resource: {e}")
+        if self.pw:
             try:
-                self.driver.quit()
+                self.pw.stop()
             except Exception as e:
-                logging.error(f"Error quitting driver: {e}")
-            finally:
-                self.driver = None
+                logging.error(f"Error stopping playwright: {e}")
+        self.page = None
+        self.context = None
+        self.browser = None
+        self.pw = None
 
     def _save_failure_screenshot(self, context_name: str):
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         fp = self.screenshot_dir / f"failure_{context_name}_{ts}.png"
         try:
-            self.driver.save_screenshot(str(fp))
+            self.page.screenshot(path=str(fp))
             logging.error(f"Saved failure screenshot to: {fp}")
         except Exception as e:
             logging.error(f"Failed to save screenshot: {e}")
@@ -131,40 +109,37 @@ class PriceIntelligenceAgent:
     def _perform_buyma_search(self, brand_name: str, site_config: dict[str, Any]) -> bool:
         try:
             logging.info(f"Navigating to BUYMA home page: {site_config['home_url']}")
-            self.driver.get(site_config["home_url"])
+            self.page.goto(site_config["home_url"])
 
             if cookie_selector := site_config.get("cookie_accept_selector"):
-                with contextlib.suppress(TimeoutException):
-                    self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, cookie_selector))).click()
+                with contextlib.suppress(Exception):
+                    self.page.click(cookie_selector, timeout=3000)
 
             search_input = None
             for selector in site_config.get("selectors", {}).get("search_input_candidates", []):
                 try:
-                    search_input = self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
-                    if search_input:
-                        break
-                except TimeoutException:
+                    self.page.wait_for_selector(selector, timeout=5000)
+                    search_input = selector
+                    break
+                except Exception:
                     continue
 
             if not search_input:
-                raise TimeoutException("Could not find any known search input field.")
+                raise RuntimeError("Could not find any known search input field.")
 
-            search_input.clear()
+            self.page.fill(search_input, "")
             for char in brand_name:
-                search_input.send_keys(char)
-                time.sleep(random.uniform(0.05, 0.15))
-            search_input.send_keys(Keys.RETURN)
+                self.page.type(search_input, char, delay=random.randint(50, 150))
+            self.page.keyboard.press("Enter")
 
-            self.wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, site_config["selectors"]["results_item"])))
+            self.page.wait_for_selector(site_config["selectors"]["results_item"])
             return True
         except Exception:
             logging.warning("Human-like search failed, falling back to direct search URL.")
             try:
                 search_url = site_config["search_template"].format(q=quote_plus(brand_name))
-                self.driver.get(search_url)
-                self.wait.until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, site_config["selectors"]["results_item"]))
-                )
+                self.page.goto(search_url)
+                self.page.wait_for_selector(site_config["selectors"]["results_item"])
                 return True
             except Exception as e:
                 logging.error(f"All search attempts for BUYMA failed: {e}")
@@ -183,10 +158,10 @@ class PriceIntelligenceAgent:
             out.push({ url, name, buyma_price_list_view: m ? parseInt((m[1] || m[2]).replace(/,/g,'')) : null });
         }catch(e){}} return out;
         """
-        return self.driver.execute_script(script)
+        return self.page.evaluate(script)
 
     def _extract_from_pdp(self, site_config: dict[str, Any]) -> dict[str, Any]:
-        html = self.driver.page_source
+        html = self.page.content()
         if EXTRACTOR_AVAILABLE:
             try:
                 data = extract_product_info(html, site_config=site_config)
@@ -205,13 +180,13 @@ class PriceIntelligenceAgent:
         timeout_sec = site_config.get("discovery_settings", {}).get("timeout_sec", 20)
 
         try:
-            self._init_driver(browser_name, timeout_sec)
+            self._init_driver(timeout_sec)
             if not self._perform_buyma_search(brand_name, site_config):
                 return []
 
             anchors, seen = [], set()
             for i in range(6):
-                self.driver.execute_script("window.scrollBy(0, 900);")
+                self.page.evaluate("window.scrollBy(0, 900)")
                 time.sleep(random.uniform(0.8, 1.2))
                 batch = self._js_collect_item_anchors_buyma()
                 new_items = 0
@@ -229,7 +204,7 @@ class PriceIntelligenceAgent:
             for card in anchors[:item_limit]:
                 pdp_data = {}
                 try:
-                    self.driver.get(card["url"])
+                    self.page.goto(card["url"])
                     time.sleep(random.uniform(1.4, 2.4))
                     pdp_data = self._extract_from_pdp(site_config)
                 except Exception as e:
@@ -270,10 +245,9 @@ class PriceIntelligenceAgent:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Price Intelligence Agent for BUYMA (v13.0J)")
+    parser = argparse.ArgumentParser(description="Price Intelligence Agent for BUYMA (v14.0J)")
     parser.add_argument("brand", help="The brand name to research on BUYMA")
     parser.add_argument("--items", type=int, default=3)
-    parser.add_argument("--browser", choices=["chrome", "edge"], default="chrome", help="Browser to use")
     parser.add_argument("--headful", action="store_true")
     args = parser.parse_args()
 
@@ -289,7 +263,7 @@ if __name__ == "__main__":
 
     agent = PriceIntelligenceAgent(headless=not args.headful)
     results = agent.run(
-        brand_name=args.brand, item_limit=args.items, site_config=buyma_config, browser_name=args.browser
+        brand_name=args.brand, item_limit=args.items, site_config=buyma_config
     )
     print("\n--- Price Intelligence Agent Results ---")
     print(json.dumps(results, ensure_ascii=False, indent=2))

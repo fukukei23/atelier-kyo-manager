@@ -82,14 +82,15 @@
   - `scripts/run_site.py` はエントリポイントとして残すが、他ファイルからは除去
 - **推定工数**: 2-3時間
 
-### P1-5. `price_intelligence_agent.py` の Selenium → Playwright 移行
-- **対象**: `app/agents/price_intelligence_agent.py`（295行、Selenium依存）、`app/utils/buyma_catalog_manager.py`（452行、Selenium依存）
+### P1-5. `price_intelligence_agent.py` の Selenium → Playwright 移行 ✅完了（2026-05-10）
+- **対象**: `app/agents/price_intelligence_agent.py`（295行→270行）、`app/utils/buyma_catalog_manager.py`（452行→430行）
 - **問題概要**: プロジェクトのブラウザ自動化は Playwright に統一されているが、この2ファイルのみ Selenium + selenium_stealth を使用。依存ライブラリの増大と保守コストの二重化
 - **修正方針**:
-  - `price_intelligence_agent.py`: Playwright async API に書き換え、`selenium`/`selenium_stealth`/`webdriver_manager` 依存を除去
-  - `buyma_catalog_manager.py`: 同様に Playwright に移行
-  - `requirements.txt` から `selenium`, `selenium-stealth`, `webdriver-manager` を削除
+  - `price_intelligence_agent.py`: Playwright sync API に書き換え、`selenium`/`selenium_stealth`/`webdriver_manager` 依存を除去 ✅
+  - `buyma_catalog_manager.py`: 同様に Playwright sync API に移行 ✅
+  - `requirements.txt` から `selenium`, `selenium-stealth`, `webdriver-manager` を削除 → `ai_image_crawler.py` が未移行のため保留
 - **推定工数**: 4-6時間（2ファイル合計）
+- **残タスク**: `app/utils/ai_image_crawler.py` の Playwright 移行後に requirements.txt から Selenium 除去可能
 
 ### P1-6. 残存 ImportError ガードの段階的整理
 - **対象**: P0-4/P0-5以外の全ファイル（計25箇所）:
