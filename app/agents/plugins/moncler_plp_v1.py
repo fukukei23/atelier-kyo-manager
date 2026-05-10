@@ -77,7 +77,11 @@ class MonclerPLPStrategy(StrategyPlugin):
         path = self._path(url)
         if not path or path == "/" or re.match(r"^/en-[a-z]{2}/?$", path or "", re.IGNORECASE):
             return self._HARD_PLP_URL
-        if host and host.endswith("moncler.com") and not re.search(r"/(outerwear|search|products|p[-/])", path, re.IGNORECASE):
+        if (
+            host
+            and host.endswith("moncler.com")
+            and not re.search(r"/(outerwear|search|products|p[-/])", path, re.IGNORECASE)
+        ):
             return self._HARD_PLP_URL
         return url
 
@@ -89,7 +93,9 @@ class MonclerPLPStrategy(StrategyPlugin):
                 try:
                     if request.resource_type == "document":
                         url = request.url
-                        if "moncler.com" in url and (("/en-jp/" in url) or ("/en-de/" in url) or ("/en-int/" not in url)):
+                        if "moncler.com" in url and (
+                            ("/en-jp/" in url) or ("/en-de/" in url) or ("/en-int/" not in url)
+                        ):
                             new_url = re.sub(r"/en-[a-z]{2}/", "/en-int/", url, flags=re.IGNORECASE)
                             if new_url == url:
                                 new_url = "https://www.moncler.com/en-int/"

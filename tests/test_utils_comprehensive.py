@@ -189,11 +189,11 @@ class TestFxHelpers:
     def test_get_fx_table_auto_live(self, mock_fetch):
         xml = '<Envelope><Cube><Cube time="2025-01-01"><Cube currency="USD" rate="1.1"/><Cube currency="JPY" rate="160"/></Cube></Cube></Envelope>'
         mock_fetch.return_value = ("2025-01-01", xml)
-        with tempfile.TemporaryDirectory() as td:
-            with patch("app.utils.fx_utils._cache_paths", return_value=(td, os.path.join(td, "ecb_fx.json"))):
-                table, meta = get_fx_table_jpy(manual_table=None, auto=True)
-                assert meta["source"] == "ecb(live)"
-                assert "USD" in table
+        with tempfile.TemporaryDirectory() as td, \
+             patch("app.utils.fx_utils._cache_paths", return_value=(td, os.path.join(td, "ecb_fx.json"))):
+            table, meta = get_fx_table_jpy(manual_table=None, auto=True)
+            assert meta["source"] == "ecb(live)"
+            assert "USD" in table
 
     def test_get_fx_table_auto_cache_fallback_on_failure(self):
         with tempfile.TemporaryDirectory() as td:
@@ -201,8 +201,8 @@ class TestFxHelpers:
             old_data = {"asof": "2020-01-01T00:00:00", "table": {"USD": 148.0}}
             with open(cache_file, "w") as f:
                 json.dump(old_data, f)
-            with patch("app.utils.fx_utils._cache_paths", return_value=(td, cache_file)):
-                with patch("app.utils.fx_utils._ecb_fetch_xml", side_effect=Exception("Network error")):
-                    table, meta = get_fx_table_jpy(manual_table=None, auto=True, ttl_hours=0)
-                    assert meta["source"] == "ecb(cache-fallback)"
-                    assert table["USD"] == 148.0
+            with patch("app.utils.fx_utils._cache_paths", return_value=(td, cache_file)), \
+                 patch("app.utils.fx_utils._ecb_fetch_xml", side_effect=Exception("Network error")):
+                table, meta = get_fx_table_jpy(manual_table=None, auto=True, ttl_hours=0)
+                assert meta["source"] == "ecb(cache-fallback)"
+                assert table["USD"] == 148.0

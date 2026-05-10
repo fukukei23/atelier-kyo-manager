@@ -72,6 +72,23 @@ from app.agents.browser.navigation_driver import (
 )
 from app.agents.browser.session_manager import EXTERNAL_BLOCKLIST_HOSTS, SessionManager
 
+# P1-2 Phase 1: UI helpers 委譲
+from app.agents.browser.ui_helpers import (
+    accept_cookies_if_present as ui_accept_cookies_if_present,
+    click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
+    dismiss_geo_modal as ui_dismiss_geo_modal,
+    human_like_mouse_move as ui_human_like_mouse_move,
+    human_like_pause as ui_human_like_pause,
+    human_like_scroll as ui_human_like_scroll,
+    kill_overlays as ui_kill_overlays,
+    pause_for_operator as ui_pause_for_operator,
+    safe_wait_selector as ui_safe_wait_selector,
+)
+from app.agents.browser.settings import (
+    resolve_run_settings as settings_resolve_run_settings,
+    time_left_ms as settings_time_left_ms,
+)
+
 # --- 専用パッチの動的インポート ---
 try:
     from app.agents.browser_use_moncler_patch import moncler_plp_recovery
@@ -152,22 +169,6 @@ PLUGIN_REGISTRY: dict[str, StrategyPlugin] = {}
 # ==============================================================================
 
 
-def _unpack_vrt(res, *, threshold: float | None = None):
-    if isinstance(res, dict):
-        d = float(res.get("diff_percent", 0.0))
-        ok = bool(res.get("is_ok", (threshold is None or d <= float(threshold or 0.0))))
-        return {"diff_percent": d, "is_ok": ok}
-    if isinstance(res, (tuple, list)):
-        if not res:
-            return None
-        return _unpack_vrt(res[0], threshold=threshold)
-    if isinstance(res, (int, float)):
-        d = float(res)
-        ok = (threshold is None) or (d <= float(threshold or 0.0))
-        return {"diff_percent": d, "is_ok": ok}
-    return None
-
-
 # ==============================================================================
 # BrowserUseAgent Class
 # ==============================================================================
@@ -180,83 +181,12 @@ class BrowserUseAgent:
     TODO: LocaleGateHandler などの共通クラスにロケーションゲート処理を抽象化予定。
     """
 
-    # ★ V88.6.0: インスタンスメソッドに変更 (旧 v88.5.9J のグローバル関数)
+    # Phase 2: LocaleMixin._looks_like_trap_or_legal に委譲
     def _looks_like_trap_or_legal(self, url: str) -> bool:
-        """
-        明らかに商品一覧ではなく、法務/クッキー/ヘルプ系に飛ばされてると判断したら True。
-        こういうページに張り付いてもPDPは取れないので、早期abortさせる。
+        """LocaleMixin._looks_like_trap_or_legal delegation (pure URL check, no self.page dependency)"""
+        from app.agents.browser.locale_manager import LocaleMixin
 
-        ★ V88.5.9: 先に軽量正規化を行ってから判定する。
-        - /en-jp/en-int/ を /en-int/ に置換
-        - #product-information-panel 等のハッシュを除去
-        """
-        try:
-            # V88.5.9: ローカルインポート (urllib.parse はグローバルで import 済)
-            sp = urlsplit(url)
-            path = sp.path or ""
-            # 二重ロケールの早期修正
-            path = path.replace("/en-jp/en-int/", "/en-int/").replace("/en-jp/", "/en-int/")
-            # “PDPアンカー”などのハッシュは評価前に捨てる
-            sp = sp._replace(path=path, fragment="")
-            url = urlunsplit(sp)
-        except Exception:
-            pass  # 正規化に失敗しても、元のURLで判定を続行
-
-        try:
-            u = urlparse(url)
-            full_lower = url.lower()
-            path_lower = (u.path or "").lower()
-            host = (u.netloc or "").lower()
-
-            # V88.5.7: /en-jp (日本向け)
-            jp_locale = "moncler.com" in full_lower and "/en-jp" in path_lower
-
-            # V88.5.8: コーポレートサイト
-            corporate = "monclergroup.com" in host or "/brands/moncler" in path_lower
-
-            # V88.6.3: Moncler のロケーションゲート/トップページを trap とみなす
-            moncler_locale_gate = "moncler.com" in host and path_lower in (
-                "/en-int",
-                "/en-int/",
-                "/en-gb",
-                "/en-gb/",
-                "/en-us",
-                "/en-us/",
-            )
-
-            # V88.5.6 以前のリーガルキーワード
-            legal_kw = any(
-                k in path_lower
-                for k in (
-                    "/cookie-policy",
-                    "/cookies",
-                    "/privacy",
-                    "/legal",
-                    "/help",
-                    "/customer-service",
-                    "/customer_service",
-                    "/support",
-                    "/account",
-                    "/login",
-                    "/accessibility-statement",
-                    "/client-service/",
-                )
-            )
-
-            # V88.5.9: 簡潔な return 形式に統合
-            if jp_locale:
-                logger.warning(f"[_looks_like_trap] Detected /en-jp locale trap: {url}")
-            if corporate:
-                logger.warning(f"[_looks_like_trap] Detected corporate site redirect/path: {url}")
-            if legal_kw:
-                logger.warning(f"[_looks_like_trap] Detected legal/help keyword trap: {url}")
-            if moncler_locale_gate:
-                logger.warning(f"[_looks_like_trap] Detected Moncler locale gate/home: {url}")
-
-            return jp_locale or corporate or legal_kw or moncler_locale_gate
-
-        except Exception:
-            return False
+        return LocaleMixin._looks_like_trap_or_legal(self, url)
 
     def __init__(self, runtime_kwargs: dict[str, Any] | None = None):
         self.runtime_kwargs = runtime_kwargs or {}
@@ -768,83 +698,7 @@ class BrowserUseAgent:
 
     # --- Settings Resolution ---
     def _resolve_run_settings(self, site_config: dict[str, Any]) -> dict[str, Any]:
-        ds = site_config.get("discovery_settings", {}) or {}
-        site_key_guess = site_config.get("site_key") or site_config.get("id") or self.runtime_kwargs.get("site") or ""
-        site_key_guess = str(site_key_guess or "").upper()
-        vrt = ds.get("vrt", {}) or {}
-        self.logger.info(f"[Debug] runtime enable_video flag: {self.runtime_kwargs.get('enable_video')}")
-        enable_har = self.runtime_kwargs.get("enable_har", ds.get("enable_har", True))
-        enable_trace = self.runtime_kwargs.get("enable_trace", ds.get("enable_trace", True))
-
-        # --- enable_video resolution (CLI > site config > env > default) ---
-        cli_enable_video = self.runtime_kwargs.get("enable_video")
-        cfg_enable_video = ds.get("enable_video")
-        env_raw = os.getenv("ATK_ENABLE_VIDEO") or os.getenv("ENABLE_VIDEO")
-        env_enable_video: bool | None = None
-        if env_raw is not None:
-            env_enable_video = str(env_raw).strip().lower() in ("1", "true", "yes", "y", "on")
-
-        if cli_enable_video is not None:
-            enable_video = bool(cli_enable_video)
-        elif cfg_enable_video is not None:
-            enable_video = bool(cfg_enable_video)
-        elif env_enable_video is not None:
-            enable_video = env_enable_video
-        else:
-            enable_video = site_key_guess == "MONCLER_OFFICIAL"
-
-        default_accept_language = "en-GB,en;q=0.8"
-        if site_key_guess == "MONCLER_OFFICIAL":
-            default_accept_language = "en-US,en;q=0.8"
-
-        settings = {
-            "timeout_sec": self.runtime_kwargs.get("timeout_sec") or ds.get("timeout_sec", 60),
-            "headless": self.runtime_kwargs.get("headless", True),
-            "slow_mo": self.runtime_kwargs.get("slow_mo", 0),
-            "viewport": ds.get("viewport"),
-            "user_agent": ds.get("user_agent"),
-            "extra_http_headers": ds.get("extra_http_headers"),
-            "accept_language": ds.get("accept_language", default_accept_language),
-            "enable_har": enable_har,
-            "enable_trace": enable_trace,
-            "enable_video": enable_video,
-            "enable_locale_escape": bool(ds.get("enable_locale_escape", True)),
-            "overall_plp_budget_ms": int(ds.get("overall_plp_budget_ms", OVERALL_PLP_BUDGET_MS_DEFAULT)),
-            "pdp_parallel_limit": int(ds.get("pdp_parallel_limit", DEFAULT_PDP_PARALLEL_LIMIT)),
-            "pdp_retry_once": bool(ds.get("pdp_retry_once", True)),
-            "enable_visual_regression_check": bool(ds.get("enable_visual_regression_check", False)),
-            "vrt_scope": (vrt.get("scope") or "none").lower(),
-            "vrt_threshold": float(vrt.get("threshold", 0.02)),
-            "vrt_hard_fail_threshold": float(vrt.get("hard_fail_threshold", 0.05)),
-            "vrt_fail_on_hard_threshold": bool(vrt.get("fail_on_hard_threshold", True)),
-            "vrt_baseline_dir": vrt.get("baseline_dir"),
-            "vrt_plp_selector": vrt.get("plp_selector") or "full_page",
-            "vrt_pdp_selector": vrt.get("pdp_selector") or "full_page",
-            "vrt_auto_update_baseline": bool(vrt.get("auto_update_baseline", False)),
-            "vrt_save_failed_diff_only": bool(vrt.get("save_failed_diff_only", True)),
-            "wait_for_selectors": _dedupe_keep_order(ds.get("wait_for_selectors") or []),
-            "wait_until": ds.get("wait_until") or "domcontentloaded",
-            "plp_scroll_rounds": int(ds.get("plp_scroll_rounds", 10)),
-            "extra_block_routes": _dedupe_keep_order(ds.get("extra_block_routes") or []),
-            "pdp_price_wait_ms": int(ds.get("pdp_price_wait_ms", 4000)),
-            "locale_recover_max": int(ds.get("locale_recover_max", 5)),
-            "enable_human_like": bool(self.runtime_kwargs.get("enable_human_like", ds.get("enable_human_like", False))),
-            "enable_ua_rotation": bool(
-                self.runtime_kwargs.get("enable_ua_rotation", ds.get("enable_ua_rotation", False))
-            ),
-            "enable_viewport_rotation": bool(
-                self.runtime_kwargs.get("enable_viewport_rotation", ds.get("enable_viewport_rotation", False))
-            ),
-        }
-        try:
-            pdp_policy_cfg = ds.get("pdp_size_select_policy", {})
-            settings["pdp_size_select_policy"] = PDPSizeSelectPolicy(
-                mode=pdp_policy_cfg.get("mode", "off"), prefer_labels=pdp_policy_cfg.get("prefer_labels", [])
-            )
-        except Exception as e:
-            logger.warning(f"Could not parse PDPSizeSelectPolicy: {e}. Defaulting to 'off'.")
-            settings["pdp_size_select_policy"] = PDPSizeSelectPolicy()
-        return settings
+        return settings_resolve_run_settings(site_config, self.runtime_kwargs, self.logger)
 
     # --- Time Budget Helpers ---
     @staticmethod
@@ -853,8 +707,7 @@ class BrowserUseAgent:
 
     @staticmethod
     def _time_left_ms(start_t: float, budget_ms: int) -> int:
-        used = int((time.monotonic() - start_t) * 1000)
-        return max(0, budget_ms - used)
+        return settings_time_left_ms(start_t, budget_ms)
 
     @staticmethod
     def _slice_timeout_ms(left_ms: int, cap_ms: int) -> int:
@@ -862,198 +715,24 @@ class BrowserUseAgent:
 
     # --- Safe Wait ---
     async def safe_wait_selector(self, page: Page, selector: str, *, timeout_ms: int, state: str = "visible") -> bool:
-        if not page or page.is_closed():
-            return False
-        try:
-            await page.wait_for_selector(selector, state=state, timeout=timeout_ms)
-            return True
-        except Exception:
-            return False
+        return await ui_safe_wait_selector(page, selector, timeout_ms=timeout_ms, state=state)
 
     # --- UI Helpers ---
     async def _kill_overlays(self, page: Page) -> None:
-        with contextlib.suppress(Exception):
-            await page.evaluate("""
-              (() => {
-                const sels = ['.overlay','.backdrop','.modal-backdrop','#onetrust-banner-sdk','.cookie-banner','[aria-modal="true"]','.cmp-ui-overlay','.cmp-modal','.drawer--open'];
-                document.querySelectorAll(sels.join(',')).forEach(el => el.remove());
-                const b = document.body; if (b) { b.classList.remove('modal-open','locked','no-scroll','overflow-hidden'); b.style.overflow=''; }
-                const html=document.documentElement; if (html) { html.style.overflow=''; html.classList.remove('no-scroll','overflow-hidden'); }
-              })();
-            """)
+        await ui_kill_overlays(page)
 
     async def _click_continue_shopping_if_present(self, page: Page, site_config: dict[str, Any]) -> bool:
-        ui = (site_config.get("selectors") or {}).get("ui") or {}
-        candidates = _dedupe_keep_order(
-            (ui.get("continue_shopping") or [])
-            + [
-                "a:has-text('CONTINUE SHOPPING')",
-                "button:has-text('CONTINUE SHOPPING')",
-                "[role='button']:has-text('CONTINUE SHOPPING')",
-                "text=/\\bCONTINUE\\s+SHOPPING\\b/i",
-            ]
-        )
-        for _ in range(3):
-            with contextlib.suppress(Exception):
-                await page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
-            for sel in candidates:
-                try:
-                    el = page.locator(sel).first
-                    if await el.count() > 0 and await el.is_visible():
-                        await el.click(timeout=3000)
-                        with contextlib.suppress(Exception):
-                            await page.wait_for_load_state("domcontentloaded", timeout=3000)
-                        return True
-                except Exception:
-                    continue
-            await page.wait_for_timeout(1200)
-        return False
+        return await ui_click_continue_shopping_if_present(page, site_config)
 
     async def _pause_for_operator(self, page: Page | None, run_context: RunContext | None, label: str) -> None:
         """Headful 実行中に人間が介入して操作できるよう一時停止する。"""
-        if not self.runtime_kwargs.get("interactive_pause"):
-            return
-        slug = "".join(ch if ch.isalnum() or ch in ("-", "_") else "_" for ch in label.lower())
-        if page and run_context:
-            try:
-                await run_context.take_screenshot(page, f"50_operator_{slug}")
-            except Exception as e:
-                self.logger.debug(f"[OperatorPause] screenshot failed: {e}")
-        prompt = (
-            f"\n[OperatorPause] '{label}' で一時停止中です。"
-            f" Playwright ウィンドウを操作したら Enter を押して再開してください..."
-        )
-        try:
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, lambda: input(prompt))
-        except (EOFError, RuntimeError):
-            self.logger.warning("[OperatorPause] input() が使えません。即座に続行します。")
+        await ui_pause_for_operator(page, run_context, label, self.runtime_kwargs, self.logger)
 
     async def _accept_cookies_if_present(self, page: Page, site_config: dict[str, Any]) -> bool:
-        ui = (site_config.get("selectors") or {}).get("ui") or {}
-        candidates = _dedupe_keep_order(
-            (ui.get("cookie_accept") or [])
-            + [
-                "#onetrust-accept-btn-handler",
-                "button:has-text('ACCEPT ALL')",
-                "button:has-text('CONTINUE WITHOUT ACCEPTING')",
-                "button[aria-label*='Accept' i]",
-            ]
-        )
-        for sel in candidates:
-            try:
-                node = page.locator(sel).first
-                if await node.count() > 0 and await node.is_visible():
-                    await node.click(timeout=3000)
-                    await asyncio.sleep(0.2)
-                    return True
-            except Exception:
-                continue
-        return False
+        return await ui_accept_cookies_if_present(page, site_config)
 
     async def _dismiss_geo_modal(self, page: Page) -> None:
-        """
-        ジオ / ロケール関係のモーダルを潰す。
-
-        1. 汎用の「STAY HERE」系バナー
-        2. Moncler の「Select your location」ロケーションゲート
-           - 「UNITED KINGDOM | ENGLISH」を優先的に踏みに行く
-        """
-
-        for sel in [
-            "text=STAY HERE",
-            "text=REMAIN HERE",
-            "text=REMAIN IN ENGLISH",
-            "text=CONTINUE SHOPPING",
-            "text=ショッピングを続ける",
-        ]:
-            try:
-                el = page.locator(sel).first
-                if await el.count() > 0 and await el.is_visible():
-                    await el.click(timeout=3000)
-                    break
-            except Exception:
-                continue
-
-        async def _click_first(loc: Locator, desc: str) -> bool:
-            try:
-                if await loc.count() == 0:
-                    return False
-                target = loc.first
-                if not await target.is_visible():
-                    await target.scroll_into_view_if_needed()
-                await target.click(timeout=5000)
-                self.logger.info(f"[GeoModal] Clicked {desc}")
-                await page.wait_for_timeout(300)
-                return True
-            except Exception as e:
-                self.logger.debug(f"[GeoModal] Click failed ({desc}): {e}")
-                return False
-
-        async def _wait_for_en_int(timeout_ms: int = 4000) -> bool:
-            try:
-                await page.wait_for_function(
-                    "() => location.href.includes('/en-int/') && !location.href.includes('/en-gb/')",
-                    timeout=timeout_ms,
-                )
-                return True
-            except Exception:
-                return "/en-int/" in (page.url or "").lower()
-
-        try:
-            header = page.locator("text=Select your location").first
-            header_visible = await header.count() > 0
-            if header_visible:
-                self.logger.info("[GeoModal] Moncler locale gate header detected.")
-
-            uk_candidates = [
-                page.get_by_text(re.compile(r"UNITED\\s+KINGDOM\\s*\\|\\s*ENGLISH", re.I)),
-                page.get_by_role("link", name=re.compile(r"UNITED\\s+KINGDOM\\s*\\|\\s*ENGLISH", re.I)),
-                page.get_by_role("button", name=re.compile(r"UNITED\\s+KINGDOM\\s*\\|\\s*ENGLISH", re.I)),
-                page.get_by_role("button", name=re.compile(r"United\\s+Kingdom.*English", re.I)),
-                page.get_by_role("link", name=re.compile(r"United\\s+Kingdom.*English", re.I)),
-                page.locator("[data-testid*='locale' i] button:has-text('United Kingdom')"),
-                page.locator("[data-component*='locale' i] button:has-text('United Kingdom')"),
-                page.locator("button:has-text('United Kingdom EN')"),
-                page.locator("text=/United\\s+Kingdom\\s*\\|\\s*English/i"),
-            ]
-            for loc in uk_candidates:
-                if await _click_first(loc, "United Kingdom / English selector"):
-                    if await _wait_for_en_int():
-                        return
-                    break
-
-            close_candidates = [
-                page.locator("button[aria-label*='close' i]"),
-                page.locator("button:has-text('Close')"),
-                page.locator(".modal__close, .c-modal__close"),
-                page.locator("[data-testid*='close' i]"),
-                page.locator("div[data-editorial-component='ticker-top-banner'] button[aria-label*='close' i]"),
-            ]
-            for loc in close_candidates:
-                if await _click_first(loc, "locale gate close button") and await _wait_for_en_int():
-                    return
-
-            try:
-                await page.keyboard.press("Escape")
-                await page.wait_for_timeout(200)
-            except Exception:
-                pass
-
-            with contextlib.suppress(Exception):
-                await page.evaluate(
-                    """
-                    () => {
-                      const headers = Array.from(
-                        document.querySelectorAll('*')
-                      ).filter(el => el.textContent && el.textContent.includes('Select your location'));
-                      const roots = headers.map(h => h.closest('div[role="dialog"], [data-testid*="modal"], .modal, .c-modal')).filter(Boolean);
-                      roots.forEach(root => root.remove());
-                    }
-                    """
-                )
-        except Exception:
-            return
+        await ui_dismiss_geo_modal(page, self.logger)
 
     # --- Locale Helpers (Moncler specific but could be generalized) ---
     def _normalize_to_en_int_url(self, url: str) -> str:
@@ -1253,16 +932,10 @@ class BrowserUseAgent:
     # --- PDP Extraction ---
     # --- PLP -> PDP Link Collection (Robust v85.5) ---
     def _normalize_abs_url(self, base_url: str, href: str) -> str:
-        try:
-            absu = urljoin(base_url, href)
-            parts = list(urlsplit(absu))
-            if parts[2].endswith("/"):
-                parts[2] = parts[2].rstrip("/")
-            parts[3] = ""
-            parts[4] = ""  # query & fragment
-            return urlunsplit(parts)
-        except Exception:
-            return href
+        """Phase 2: navigation_helpers.normalize_abs_url に委譲"""
+        from app.agents.browser.navigation_helpers import normalize_abs_url
+
+        return normalize_abs_url(base_url, href)
 
     async def _collect_pdp_links(
         self, page: Page, site_config: dict, settings: dict, run_context: RunContext
@@ -1374,167 +1047,16 @@ class BrowserUseAgent:
     # --- V88.3.0J: _run_deep_extraction_phase2 Safer Fallback Evaluate ---
     # --- V88.6.2J: (BugFix) SyntaxError on container_sels ---
     async def _run_deep_extraction_phase2(self, page: Page, site_config: dict) -> list[str]:
-        logger.debug("[Phase 2] Running deep extraction (JSON-LD, onclick, data-*, ...)")
-        # ★ 88.6.2: (BugFix) 括弧が過剰だった SyntaxError を修正
-        container_sels: list[str] = ((site_config.get("selectors") or {}).get("pdp") or {}).get(
-            "plp_container_selectors", []
-        ) or []
-        for cont in container_sels or []:
-            await self.safe_wait_selector(page, cont, timeout_ms=1000, state="visible")
-        try:
-            for _ in range(2):
-                await page.evaluate("window.scrollBy(0, document.body.scrollHeight)")
-                await page.wait_for_timeout(200)
-        except Exception:
-            pass
+        from app.agents.browser.deep_extraction import run_deep_extraction_phase2
 
-        # V86.0: Strict mode violation prevention + V88.2: Get ElementHandle
-        scope = page.locator("main, [role='main'], #main, #app")
-        handle: ElementHandle | None = None
-        try:
-            await scope.first.wait_for(state="attached", timeout=4000)
-            handle = await scope.first.element_handle(timeout=4000)  # Get handle
-        except Exception as e_handle:
-            # (V88.6.2: ログレベルは warning のまま)
-            logger.warning(
-                f"[Phase 2] Could not get element handle for scope: {e_handle}. Falling back to page evaluate."
-            )
-            handle = None  # Ensure handle is None if getting it failed
-
-        # JS Script that takes an optional node context
-        _js_script = """
-          (node) => {
-            const area = node || document;
-            const out = [];
-            const push = (u) => { if (u && typeof u === 'string' && !u.startsWith('javascript:')) out.push(u); };
-            area.querySelectorAll("[data-product-url],[data-product-href],[data-href],a[href]").forEach(el => {
-              const a = el.closest("a") || el;
-              const cand = a.getAttribute("href") || a.getAttribute("data-href") || a.getAttribute("data-product-url") || a.getAttribute("data-product-href");
-              if (cand) push(cand);
-            });
-            area.querySelectorAll("[onclick]").forEach(el => {
-              const oc = el.getAttribute("onclick") || "";
-              const m1 = oc.match(/(?:location\\.(?:href|assign)|window\\.location|document\\.location)\\s*=\\s*['"]([^'"]+)['"]/i);
-              if (m1 && m1[1]) push(m1[1]);
-              const m2 = oc.match(/history\\.pushState\\s*\\(\\s*[^,]*,\\s*[^,]*,\\s*['"]([^'"]+)['"]\\s*\\)/i);
-              if (m2 && m2[1]) push(m2[1]);
-            });
-            area.querySelectorAll("script[type='application/ld+json']").forEach(s => {
-              try {
-                const data = JSON.parse(s.textContent || "null");
-                const arr = Array.isArray(data) ? data : [data];
-                const pushAny = (v) => { if (v && typeof v === "string") push(v); };
-                arr.forEach(d => {
-                  if (!d || typeof d !== "object") return;
-                  pushAny(d.url || d['@id']);
-                  if (Array.isArray(d.offers)) {
-                    d.offers.forEach(o => { pushAny(o && (o.url || o['@id'])); });
-                  } else if (d.offers && typeof d.offers === "object") {
-                    pushAny(d.offers.url || d.offers['@id']);
-                  }
-                  if (d.itemListElement && Array.isArray(d.itemListElement)) {
-                    d.itemListElement.forEach(it => {
-                      if (it && it.item && (it.item.url || it.item['@id'])) {
-                        pushAny(it.item.url || it.item['@id']);
-                      }
-                    });
-                  }
-                });
-              } catch(e) {}
-            });
-            return out.filter(Boolean);
-          }
-        """
-
-        hrefs: list[str] = []
-        try:
-            if handle:
-                # Execute JS within the specific element context
-                hrefs = await handle.evaluate(_js_script)
-                logger.debug("[Phase 2] Deep extraction performed using element handle.")
-            else:
-                # --- V88.3.0: Safer Fallback ---
-                # ドキュメント全体を対象にした無引数版を直接渡す
-                hrefs = await page.evaluate("""
-                  () => {
-                    const out = [];
-                    const push = (u) => { if (u && typeof u === 'string' && !u.startsWith('javascript:')) out.push(u); };
-                    document.querySelectorAll("[data-product-url],[data-product-href],[data-href],a[href]").forEach(el => {
-                      const a = el.closest("a") || el;
-                      const cand = a.getAttribute("href") || a.getAttribute("data-href") || a.getAttribute("data-product-url") || a.getAttribute("data-product-href");
-                      if (cand) push(cand);
-                    });
-                    document.querySelectorAll("[onclick]").forEach(el => {
-                      const oc = el.getAttribute("onclick") || "";
-                      const m1 = oc.match(/(?:location\\.(?:href|assign)|window\\.location|document\\.location)\\s*=\\s*['"]([^'"]+)['"]/i);
-                      if (m1 && m1[1]) push(m1[1]);
-                      const m2 = oc.match(/history\\.pushState\\s*\\(\\s*[^,]*,\\s*[^,]*,\\s*['"]([^'"]+)['"]\\s*\\)/i);
-                      if (m2 && m2[1]) push(m2[1]);
-                    });
-                    document.querySelectorAll("script[type='application/ld+json']").forEach(s => {
-                      try {
-                        const data = JSON.parse(s.textContent || "null");
-                        const arr = Array.isArray(data) ? data : [data];
-                        const pushAny = (v) => { if (v && typeof v === "string") push(v); };
-                        arr.forEach(d => {
-                          if (!d || typeof d !== "object") return;
-                          pushAny(d.url || d['@id']);
-                          if (Array.isArray(d.offers)) {
-                            d.offers.forEach(o => { pushAny(o && (o.url || o['@id'])); });
-                          } else if (d.offers && typeof d.offers === "object") {
-                            pushAny(d.offers.url || d.offers['@id']);
-                          }
-                          if (d.itemListElement && Array.isArray(d.itemListElement)) {
-                            d.itemListElement.forEach(it => {
-                              if (it && it.item && (it.item.url || it.item['@id'])) {
-                                pushAny(it.item.url || it.item['@id']);
-                            }
-                            });
-                          }
-                        });
-                      } catch(e) {}
-                    });
-                    return out.filter(Boolean);
-                  }
-                """)
-                logger.debug("[Phase 2] Deep extraction performed using page evaluate (fallback).")
-                # --- V88.3.0 修正ここまで ---
-        except Exception as e:
-            logger.warning(f"[Phase 2] Deep extraction evaluate failed: {e}")
-            hrefs = []  # Ensure hrefs is a list even on error
-
-        return _dedupe_keep_order(hrefs)
-
-    # --- V88.2.0-V88.3.0 修正ここまで ---
+        return await run_deep_extraction_phase2(page, site_config, self.safe_wait_selector)
 
     # --- VRT ---
     async def _perform_vrt(self, page: Page, scope: str, settings: dict[str, Any]):
-        try:
-            from pathlib import Path as _P
+        from app.utils.visual_regression import perform_vrt
 
-            site_name = self.runtime_kwargs.get("site") or "GENERIC"
-            baseline_dir = _P(settings.get("vrt_baseline_dir") or f"app/visual_baselines/{site_name}")
-            baseline_dir.mkdir(parents=True, exist_ok=True)
-            sel = settings.get("vrt_plp_selector") if scope == "plp" else settings.get("vrt_pdp_selector")
-            res = await compare_and_maybe_update(
-                page=page,
-                baseline_path=baseline_dir / f"{scope}.png",
-                selector=sel,
-                threshold=settings.get("vrt_threshold", 0.02),
-                hard_fail_threshold=settings.get("vrt_hard_fail_threshold", 0.05),
-                auto_update_baseline=settings.get("auto_update_baseline", False),
-                save_failed_diff_only=settings.get("save_failed_diff_only", True),
-            )
-            vrt_result = _unpack_vrt(res, threshold=settings.get("vrt_threshold", 0.02))
-            if vrt_result and not vrt_result.get("is_ok", True):
-                diff = float(vrt_result.get("diff_percent", 0.0))
-                hard = diff > float(settings.get("vrt_hard_fail_threshold", 0.05))
-                msg = f"[VRT][{scope.upper()}] diff={diff:.4f} (thr={settings.get('vrt_threshold', 0.02)})"
-                if hard and settings.get("vrt_fail_on_hard_threshold", True) and scope == "pdp":
-                    raise PlaywrightError(msg + f" HARD>{settings.get('vrt_hard_fail_threshold', 0.05)}")
-                logger.warning(msg + (" HARD" if hard else ""))
-        except Exception as vrt_e:
-            logger.warning(f"[VRT][{scope.upper()}] skipped: {vrt_e}")
+        site_name = self.runtime_kwargs.get("site") or "GENERIC"
+        await perform_vrt(page, scope, settings, site_name, self.logger)
 
     # --- Browser Context Setup ---
     def _build_context_options(
@@ -1542,316 +1064,42 @@ class BrowserUseAgent:
         settings: dict[str, Any],
         run_context: RunContext,
     ) -> dict[str, Any]:
-        """
-        Playwright BrowserContext 用のオプションを一括構築する。
-        ビデオ/HAR/トレースの保存先もここで定義しておく。
-        """
-        ctx_opts: dict[str, Any] = {}
+        from app.agents.browser.session_config import build_context_options
 
-        import random
-
-        viewport = settings.get("viewport")
-        if settings.get("enable_viewport_rotation"):
-            viewport = random.choice(VIEWPORT_POOL)
-        if viewport:
-            ctx_opts["viewport"] = viewport
-
-        ctx_opts["locale"] = "en-GB"
-        ctx_opts["timezone_id"] = "UTC"
-
-        headers = (settings.get("extra_http_headers") or {}).copy()
-        headers["Accept-Language"] = settings.get("accept_language") or "en-GB,en;q=0.8"
-        ctx_opts["extra_http_headers"] = headers
-
-        user_agent = settings.get("user_agent")
-        if settings.get("enable_ua_rotation") and USER_AGENT_POOL:
-            user_agent = random.choice(USER_AGENT_POOL)
-        if user_agent:
-            ctx_opts["user_agent"] = user_agent
-
-        if settings.get("enable_har"):
-            ctx_opts["record_har_path"] = str(run_context.get_path("network.har"))
-        if settings.get("enable_trace"):
-            trace_dir = run_context.get_path("trace")
-            Path(trace_dir).mkdir(parents=True, exist_ok=True)
-            ctx_opts["record_trace_dir"] = str(trace_dir)
-            self.logger.debug(f"[Playwright] record_trace_dir={trace_dir}")
-        if settings.get("enable_video"):
-            videos_dir = run_context.get_path("videos")
-            Path(videos_dir).mkdir(parents=True, exist_ok=True)
-            ctx_opts["record_video_dir"] = str(videos_dir)
-            ctx_opts["record_video_size"] = {"width": 1280, "height": 720}
-
-        return ctx_opts
+        return build_context_options(settings, run_context.get_path, self.logger)
 
     async def _setup_routes(self, context: BrowserContext, settings: dict[str, Any]):
-        base_routes = ["**/*onetrust.com/**", "**/*cookielaw.org/**", "**/*cookiepro.com/**"]
-        extra = settings.get("extra_block_routes") or []
-        extra_hosts, extra_globs = [], []
-        for x in extra:
-            x = (x or "").strip()
-            if not x:
-                continue
-            if "*" in x or "/" in x:
-                extra_globs.append(x)
-            else:
-                extra_hosts.append(x.lstrip("."))
-        block_hosts = tuple(h.lower().lstrip(".") for h in EXTERNAL_BLOCKLIST_HOSTS) + tuple(
-            h.lower() for h in extra_hosts
-        )
+        from app.agents.browser.route_setup import setup_routes
 
-        async def _abort(route: Route):
-            await route.abort()
-
-        async def _locale_rewrite(route: Route):
-            try:
-                req = route.request
-                url = req.url
-                if req.resource_type == "document" and "moncler.com" in url:
-                    pu = urlparse(url)
-                    path_lower = (pu.path or "/").lower()
-                    skip_paths = ("/search", "/account", "/customer", "/help", "/privacy", "/legal")
-                    is_skippable = path_lower == "/" or any(
-                        path_lower.startswith(s) or path_lower.startswith(f"{s}/") for s in skip_paths
-                    )
-                    if not is_skippable:
-                        fixed = self._normalize_to_en_int_url(url)
-                        if fixed != url:
-                            self.logger.info(f"[Route] URL normalized: {url} -> {fixed}")
-                            await route.continue_(url=fixed)
-                            return
-                    else:
-                        self.logger.debug(f"[Route] Skipping locale normalization for path: {path_lower}")
-                host = urlparse(url).netloc.lower().strip(".")
-                if any(host == b or host.endswith("." + b) for b in block_hosts):
-                    await route.abort()
-                    return
-                try:
-                    await route.fallback()
-                except Exception:
-                    await route.continue_()
-            except Exception as e:
-                self.logger.warning(f"[Route] handler error: {e}")
-                with contextlib.suppress(Exception):
-                    await route.continue_()
-
-        await context.route("**/*", _locale_rewrite)
-        for pat in base_routes + extra_globs:
-            await context.route(pat, _abort)
+        await setup_routes(context, settings, self._normalize_to_en_int_url, self.logger)
 
     def _get_session_file(self, site: str, site_config: dict[str, Any]) -> Path:
-        # site_config.discovery_settings.session_file があれば優先、なければデフォルトパス
-        ds = site_config.get("discovery_settings") or {}
-        sess_path = ds.get("session_file")
-        if sess_path:
-            return Path(sess_path)
-        safe_site = "".join(c for c in site.lower() if c.isalnum() or c in ("_", "-")) or "default"
-        return SESSION_DIR / f"{safe_site}.json"
+        from app.agents.browser.session_config import get_session_file
+
+        return get_session_file(site, site_config)
 
     async def _apply_saved_session(
         self, context: BrowserContext, page: Page, site: str, site_config: dict[str, Any]
     ) -> None:
-        """
-        手動突破で保存した Cookie/LocalStorage を復元する。
-        ファイル形式例:
-        {
-          "cookies": [ {name, value, domain, path, expires, httpOnly, secure, sameSite}, ... ],
-          "localStorage": { "key": "value", ... }
-        }
-        """
-        sess_file = self._get_session_file(site, site_config)
-        if not sess_file.exists():
-            return
-        try:
-            data = json.loads(sess_file.read_text(encoding="utf-8"))
-        except Exception as e:
-            self.logger.warning(f"[Session] Failed to read session file {sess_file}: {e}")
-            return
+        from app.agents.browser.session_config import apply_saved_session, get_session_file
 
-        # Cookie
-        cookies = data.get("cookies") or []
-        if cookies:
-            try:
-                await context.add_cookies(cookies)
-                self.logger.info(f"[Session] Restored {len(cookies)} cookies from {sess_file}")
-            except Exception as e:
-                self.logger.warning(f"[Session] add_cookies failed: {e}")
-
-        # LocalStorage
-        ls = data.get("localStorage") or {}
-        if ls:
-            try:
-                # set localStorage before any navigation
-                # Playwright python add_init_script does not take args; embed as JSON
-                import json as _json
-
-                payload = _json.dumps(ls)
-                script = f"""
-                  (() => {{
-                    try {{
-                      const items = {payload};
-                      for (const [k,v] of Object.entries(items || {{}})) {{
-                        localStorage.setItem(k, v);
-                      }}
-                    }} catch (e) {{}}
-                  }})();
-                """
-                await context.add_init_script(script)
-                self.logger.info(f"[Session] Restored localStorage keys={list(ls.keys())[:5]} from {sess_file}")
-            except Exception as e:
-                self.logger.warning(f"[Session] localStorage restore failed: {e}")
+        sess_file = get_session_file(site, site_config)
+        await apply_saved_session(context, sess_file, self.logger)
 
     # --- Human-like interaction helpers ---
     async def _human_like_pause(self, page: Page, *, min_ms: int = 400, max_ms: int = 900):
-        import random
-
-        await page.wait_for_timeout(random.randint(min_ms, max_ms))
+        await ui_human_like_pause(page, min_ms=min_ms, max_ms=max_ms)
 
     async def _human_like_mouse_move(self, page: Page):
-        import random
-
-        try:
-            box = await page.evaluate("""() => ({ w: window.innerWidth, h: window.innerHeight })""")
-            w, h = int(box.get("w", 1280)), int(box.get("h", 720))
-        except Exception:
-            w, h = 1280, 720
-        moves = random.randint(3, 6)
-        for _ in range(moves):
-            x = random.randint(int(w * 0.1), int(w * 0.9))
-            y = random.randint(int(h * 0.1), int(h * 0.9))
-            await page.mouse.move(x, y, steps=random.randint(5, 12))
-            await self._human_like_pause(page, min_ms=120, max_ms=280)
+        await ui_human_like_mouse_move(page)
 
     async def _human_like_scroll(self, page: Page):
-        import random
-
-        try:
-            total_height = await page.evaluate("() => document.body ? document.body.scrollHeight : 0")
-        except Exception:
-            total_height = 0
-        if not total_height:
-            await page.mouse.wheel(0, random.randint(200, 600))
-            await self._human_like_pause(page, min_ms=200, max_ms=400)
-            return
-        viewport = await page.evaluate("() => ({h: window.innerHeight || 800})")
-        vh = int(viewport.get("h", 800))
-        steps = random.randint(2, 4)
-        for _ in range(steps):
-            delta = random.randint(int(vh * 0.3), int(vh * 0.6))
-            await page.mouse.wheel(0, delta)
-            await self._human_like_pause(page, min_ms=200, max_ms=500)
+        await ui_human_like_scroll(page)
 
     async def _setup_init_scripts(self, context: BrowserContext):
-        # --- Baseline init script ---
-        await context.add_init_script(
-            """try { localStorage.setItem('a11y-contrast','off'); localStorage.setItem('high-contrast','off'); } catch(e){} Object.defineProperty(navigator, 'language', {get: () => 'en-GB'}); Object.defineProperty(navigator, 'languages', {get: () => ['en-GB','en']}); (function(){ const _rz=Intl.DateTimeFormat.prototype.resolvedOptions; Intl.DateTimeFormat.prototype.resolvedOptions=function(){const o=_rz.call(this); o.timeZone='UTC'; return o;}; })();"""
-        )
+        from app.agents.browser.stealth import setup_stealth_init_scripts
 
-        # --- Stealthish patches to reduce headless fingerprinting ---
-        await context.add_init_script(r"""
-          (() => {
-            try {
-              const rand = (min, max) => Math.random() * (max - min) + min;
-              const jitter = (base, span) => base + rand(-span, span);
-
-              // navigator.* tweaks
-              const nav = navigator;
-              if (nav) {
-                const lang = (nav.language || 'en-GB');
-                const langs = Array.isArray(nav.languages) && nav.languages.length ? nav.languages : ['en-GB','en'];
-                Object.defineProperty(nav, 'webdriver', { get: () => undefined });
-                Object.defineProperty(nav, 'hardwareConcurrency', { get: () => 8 });
-                Object.defineProperty(nav, 'deviceMemory', { get: () => 8 });
-                Object.defineProperty(nav, 'language', { get: () => lang });
-                Object.defineProperty(nav, 'languages', { get: () => langs });
-                Object.defineProperty(nav, 'maxTouchPoints', { get: () => 0 });
-                Object.defineProperty(nav, 'platform', { get: () => 'Win32' });
-              }
-
-              // Canvas noise
-              const patchCanvas = (proto) => {
-                if (!proto) return;
-                const toDataURL = proto.toDataURL;
-                proto.toDataURL = function(...args) {
-                  const ctx = this.getContext && this.getContext('2d');
-                  if (ctx) {
-                    const shift = () => (Math.random() - 0.5) * 2;
-                    ctx.fillStyle = `rgba(${128+shift()},${128+shift()},${128+shift()},0.01)`;
-                    ctx.fillRect(0, 0, 2, 2);
-                  }
-                  return toDataURL.apply(this, args);
-                };
-              };
-              if (typeof HTMLCanvasElement !== 'undefined' && HTMLCanvasElement.prototype) {
-                patchCanvas(HTMLCanvasElement.prototype);
-              }
-              if (typeof OffscreenCanvas !== 'undefined' && OffscreenCanvas.prototype) {
-                patchCanvas(OffscreenCanvas.prototype);
-              }
-
-              // WebGL noise
-              const patchWebGL = (proto) => {
-                if (!proto) return;
-                const getParameter = proto.getParameter;
-                proto.getParameter = function(param) {
-                  // Vendor/renderer slightly jittered
-                  const VENDOR = 0x1F00, RENDERER = 0x1F01;
-                  if (param === VENDOR) {
-                    const v = getParameter.call(this, param);
-                    return typeof v === 'string' ? v.replace(/Google Inc\./, 'Google LLC') : v;
-                  }
-                  if (param === RENDERER) {
-                    const r = getParameter.call(this, param);
-                    return typeof r === 'string' ? r.replace(/ANGLE \(|\)/g, '') : r;
-                  }
-                  return getParameter.call(this, param);
-                };
-              };
-              if (typeof WebGLRenderingContext !== 'undefined' && WebGLRenderingContext.prototype) {
-                patchWebGL(WebGLRenderingContext.prototype);
-              }
-              if (typeof WebGL2RenderingContext !== 'undefined' && WebGL2RenderingContext.prototype) {
-                patchWebGL(WebGL2RenderingContext.prototype);
-              }
-
-              // AudioContext fingerprint jitter
-              const patchAudio = (Cls) => {
-                if (!Cls || !Cls.prototype) return;
-                const getFloatFrequencyData = Cls.prototype.getFloatFrequencyData;
-                if (getFloatFrequencyData) {
-                  Cls.prototype.getFloatFrequencyData = function(arr) {
-                    const res = getFloatFrequencyData.call(this, arr);
-                    for (let i = 0; i < arr.length; i += Math.floor(arr.length / 8) || 1) {
-                      arr[i] = arr[i] * (0.99 + Math.random() * 0.02);
-                    }
-                    return res;
-                  };
-                }
-              };
-              if (typeof AnalyserNode !== 'undefined') {
-                patchAudio(AnalyserNode);
-              }
-
-              // Fonts enumeration shield
-              if (typeof Navigator !== 'undefined' && Navigator.prototype) {
-                const origFonts = Navigator.prototype.fonts;
-                if (origFonts) {
-                  Navigator.prototype.fonts = function() {
-                    const it = origFonts.apply(this, arguments);
-                    if (it && typeof it.status === 'string') return it;
-                    return {
-                      status: 'loaded',
-                      check: () => true,
-                      load: () => Promise.resolve(),
-                      values: () => [].values()
-                    };
-                  };
-                }
-              }
-
-            } catch (e) { /* swallow */ }
-          })();
-        """)
+        await setup_stealth_init_scripts(context)
 
     # --- Main Run Logic (V88.5.0: Refactored for session management) ---
     async def run(

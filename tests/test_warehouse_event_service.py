@@ -50,12 +50,14 @@ class TestHandleParcelReceived:
         mock_agent.inspect_parcel_images.return_value = {"authentic": True}
         mock_vision_cls.return_value = mock_agent
 
-        _handle_parcel_received({
-            "parcel_id": "P001",
-            "client_reference": "REF-001",
-            "photos": ["https://img.example.com/1.jpg"],
-            "received_at": "2026-05-10T00:00:00Z",
-        })
+        _handle_parcel_received(
+            {
+                "parcel_id": "P001",
+                "client_reference": "REF-001",
+                "photos": ["https://img.example.com/1.jpg"],
+                "received_at": "2026-05-10T00:00:00Z",
+            }
+        )
 
         mock_persist.assert_called_once()
         record = mock_persist.call_args[0][1]
@@ -76,9 +78,7 @@ class TestHandleParcelReceived:
 
         _handle_parcel_received({"parcel_id": "P001", "client_reference": "REF-001"})
 
-        mock_run_ctx.update_status.assert_called_once_with(
-            "WAREHOUSE_RECEIVED", meta={"parcel_id": "P001"}
-        )
+        mock_run_ctx.update_status.assert_called_once_with("WAREHOUSE_RECEIVED", meta={"parcel_id": "P001"})
 
     @patch("app.services.warehouse_event_service._log_reporting_event")
     @patch("app.services.warehouse_event_service._persist_event")

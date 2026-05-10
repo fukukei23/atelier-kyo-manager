@@ -149,11 +149,7 @@ class TestNormalizeProposal:
 
 class TestExtractSuggestedSelectors:
     def test_extracts_from_nested_path(self):
-        evidence = {
-            "suggested_selectors": {
-                "pdp": {"pdp_link_selectors": [".product-link", "a.item"]}
-            }
-        }
+        evidence = {"suggested_selectors": {"pdp": {"pdp_link_selectors": [".product-link", "a.item"]}}}
         result = extract_suggested_selectors(evidence, "pdp.pdp_link_selectors")
         assert result == [".product-link", "a.item"]
 
@@ -177,11 +173,7 @@ class TestExtractSuggestedSelectors:
         assert result == ["z"]
 
     def test_filters_invalid_items(self):
-        evidence = {
-            "suggested_selectors": {
-                "pdp": {"links": [".valid", 123, None, ".also-valid"]}
-            }
-        }
+        evidence = {"suggested_selectors": {"pdp": {"links": [".valid", 123, None, ".also-valid"]}}}
         result = extract_suggested_selectors(evidence, "pdp.links")
         assert result == [".valid", ".also-valid"]
 
@@ -194,9 +186,7 @@ class TestApplySelectorProposal:
         proposal = tmp_path / "proposal.json"
         proposal.write_text(json.dumps({"gucci": {"selectors": {"new": ["b"]}}}), encoding="utf-8")
 
-        success, diff = apply_selector_proposal(
-            proposal_path=proposal, overrides_path=overrides, site="gucci"
-        )
+        success, diff = apply_selector_proposal(proposal_path=proposal, overrides_path=overrides, site="gucci")
 
         assert success is True
         assert diff is not None
@@ -209,9 +199,7 @@ class TestApplySelectorProposal:
         proposal = tmp_path / "proposal.json"
         proposal.write_text(json.dumps({"prada": {"selectors": {"x": ["1"]}}}), encoding="utf-8")
 
-        success, diff = apply_selector_proposal(
-            proposal_path=proposal, overrides_path=overrides, site="prada"
-        )
+        success, diff = apply_selector_proposal(proposal_path=proposal, overrides_path=overrides, site="prada")
 
         assert success is True
         result = json.loads(overrides.read_text(encoding="utf-8"))
@@ -228,9 +216,7 @@ class TestApplySelectorProposal:
         proposal = tmp_path / "proposal.json"
         proposal.write_text(json.dumps({"gucci": {"selectors": {"x": ["1"]}}}), encoding="utf-8")
 
-        success, diff = apply_selector_proposal(
-            proposal_path=proposal, overrides_path=overrides, site="gucci"
-        )
+        success, diff = apply_selector_proposal(proposal_path=proposal, overrides_path=overrides, site="gucci")
 
         assert success is False
 
@@ -239,9 +225,7 @@ class TestApplySelectorProposal:
         overrides.write_text("{}", encoding="utf-8")
         proposal = tmp_path / "nonexistent.json"
 
-        success, diff = apply_selector_proposal(
-            proposal_path=proposal, overrides_path=overrides, site="gucci"
-        )
+        success, diff = apply_selector_proposal(proposal_path=proposal, overrides_path=overrides, site="gucci")
 
         assert success is False
 
@@ -252,9 +236,7 @@ class TestApplySelectorProposal:
         proposal = tmp_path / "proposal.json"
         proposal.write_text(json.dumps({"gucci": {"selectors": {"x": ["1"]}}}), encoding="utf-8")
 
-        success, diff = apply_selector_proposal(
-            proposal_path=proposal, overrides_path=overrides, site="gucci"
-        )
+        success, diff = apply_selector_proposal(proposal_path=proposal, overrides_path=overrides, site="gucci")
 
         assert success is True
         result = json.loads(overrides.read_text(encoding="utf-8"))
@@ -267,9 +249,7 @@ class TestApplySelectorProposal:
         proposal = tmp_path / "proposal.json"
         proposal.write_text(json.dumps({"gucci": {"selectors": {}}}), encoding="utf-8")
 
-        success, diff = apply_selector_proposal(
-            proposal_path=proposal, overrides_path=overrides, site="gucci"
-        )
+        success, diff = apply_selector_proposal(proposal_path=proposal, overrides_path=overrides, site="gucci")
 
         assert success is False
 
@@ -278,9 +258,7 @@ class TestApplySelectorProposal:
         proposal = tmp_path / "proposal.json"
         proposal.write_text(json.dumps({"gucci": {"selectors": {"x": ["1"]}}}), encoding="utf-8")
 
-        success, diff = apply_selector_proposal(
-            proposal_path=proposal, overrides_path=overrides, site="gucci"
-        )
+        success, diff = apply_selector_proposal(proposal_path=proposal, overrides_path=overrides, site="gucci")
 
         assert success is True
         assert overrides.exists()

@@ -31,10 +31,14 @@ class TestRunBatch:
         mock_db.session.get.side_effect = [p1, None, p3]
 
         run_result_ok = PipelineResult(product_id=1, status="success")
-        with patch.object(svc, "run", side_effect=[
-            run_result_ok,
-            Exception("crash"),
-        ]):
+        with patch.object(
+            svc,
+            "run",
+            side_effect=[
+                run_result_ok,
+                Exception("crash"),
+            ],
+        ):
             result = svc.run_batch([1, 2, 3])
 
         assert result.total == 3

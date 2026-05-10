@@ -131,18 +131,18 @@ class PrivateAPIVisitor(ast.NodeVisitor):
                     and node.attr.startswith("_")
                     and isinstance(node.value.value, ast.Name)
                 ):
-                        parent_var = node.value.value.id
-                        if parent_var in self.imported_modules or parent_var in self.imported_names:
-                            violation_type = "PRIVATE_ATTRIBUTE_ACCESS"
-                            details = f"access: {self._get_attribute_path(node.value)}.{node.attr}"
-                            self.violations.append(
-                                PrivateAPIViolation(
-                                    self.file_path,
-                                    node.lineno,
-                                    violation_type,
-                                    details,
-                                )
+                    parent_var = node.value.value.id
+                    if parent_var in self.imported_modules or parent_var in self.imported_names:
+                        violation_type = "PRIVATE_ATTRIBUTE_ACCESS"
+                        details = f"access: {self._get_attribute_path(node.value)}.{node.attr}"
+                        self.violations.append(
+                            PrivateAPIViolation(
+                                self.file_path,
+                                node.lineno,
+                                violation_type,
+                                details,
                             )
+                        )
 
         self.generic_visit(node)
 

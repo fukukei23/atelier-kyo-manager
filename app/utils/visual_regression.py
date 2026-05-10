@@ -25,6 +25,7 @@ import os
 import re
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 from PIL import Image
 from pixelmatch.contrib.PIL import pixelmatch
@@ -146,3 +147,54 @@ async def compare_and_maybe_update(
         logger.error(f"[VRT] Core comparison failed: {e}", exc_info=True)
         # 呼び出し元は止めず、失敗として扱う
         return 1.0, False, None, None
+
+
+def unpack_vrt(res, *, threshold: float | None = None):
+    if isinstance(res, dict):
+        d = float(res.get("diff_percent", 0.0))
+        ok = bool(res.get("is_ok", (threshold is None or d <= float(threshold or 0.0))))
+        return {"diff_percent": d, "is_ok": ok}
+    if isinstance(res, (tuple, list)):
+        if not res:
+            return None
+        return unpack_vrt(res[0], threshold=threshold)
+    if isinstance(res, (int, float)):
+        d = float(res)
+        ok = (threshold is None) or (d <= float(threshold or 0.0))
+        return {"diff_percent": d, "is_ok": ok}
+    return None
+
+
+async def perform_vrt(
+    page,
+    scope: str,
+    settings: dict,
+    site_name: str,
+    logger: Any,
+) -> None:
+    from pathlib import Path as _P
+    from playwright.async_api import Error as PlaywrightError
+
+    try:
+        baseline_dir = _P(settings.get("vrt_baseline_dir") or f"app/visual_baselines/{site_name}")
+        baseline_dir.mkdir(parents=True, exist_ok=True)
+        sel = settings.get("vrt_plp_selector") if scope == "plp" else settings.get("vrt_pdp_selector")
+        res = await compare_and_maybe_update(
+            page=page,
+            baseline_path=baseline_dir / f"{scope}.png",
+            selector=sel,
+            threshold=settings.get("vrt_threshold", 0.02),
+            hard_fail_threshold=settings.get("vrt_hard_fail_threshold", 0.05),
+            auto_update_baseline=settings.get("auto_update_baseline", False),
+            save_failed_diff_only=settings.get("save_failed_diff_only", True),
+        )
+        vrt_result = unpack_vrt(res, threshold=settings.get("vrt_threshold", 0.02))
+        if vrt_result and not vrt_result.get("is_ok", True):
+            diff = float(vrt_result.get("diff_percent", 0.0))
+            hard = diff > float(settings.get("vrt_hard_fail_threshold", 0.05))
+            msg = f"[VRT][{scope.upper()}] diff={diff:.4f} (thr={settings.get('vrt_threshold', 0.02)})"
+            if hard and settings.get("vrt_fail_on_hard_threshold", True) and scope == "pdp":
+                raise PlaywrightError(msg + f" HARD>{settings.get('vrt_hard_fail_threshold', 0.05)}")
+            logger.warning(msg + (" HARD" if hard else ""))
+    except Exception as vrt_e:
+        logger.warning(f"[VRT][{scope.upper()}] skipped: {vrt_e}")

@@ -229,12 +229,12 @@ class TestEnsureDirs:
             tmp_path / "data" / "generated",
         ]
 
-        with patch("app.config.paths.SCRIPTS_DEV_DIR", test_dirs[0]):
-            with patch("app.config.paths.DOCS_REPORTS_DIR", test_dirs[1]):
-                with patch("app.config.paths.LOGS_GENERATED_DIR", test_dirs[2]):
-                    with patch("app.config.paths.TMP_GENERATED_DIR", test_dirs[3]):
-                        with patch("app.config.paths.DATA_GENERATED_DIR", test_dirs[4]):
-                            paths.ensure_dirs()
+        with patch("app.config.paths.SCRIPTS_DEV_DIR", test_dirs[0]), \
+             patch("app.config.paths.DOCS_REPORTS_DIR", test_dirs[1]), \
+             patch("app.config.paths.LOGS_GENERATED_DIR", test_dirs[2]), \
+             patch("app.config.paths.TMP_GENERATED_DIR", test_dirs[3]), \
+             patch("app.config.paths.DATA_GENERATED_DIR", test_dirs[4]):
+            paths.ensure_dirs()
 
-                            for d in test_dirs:
-                                assert d.exists()
+            for d in test_dirs:
+                assert d.exists()

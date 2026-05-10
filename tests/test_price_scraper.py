@@ -83,7 +83,7 @@ class TestExtractPrice:
 
     def test_regex_dollar(self):
         scraper = PriceScraper()
-        html = '<html><body>Price: $199.99</body></html>'
+        html = "<html><body>Price: $199.99</body></html>"
         soup = self._make_soup(html)
         result = scraper._extract_price(soup, html)
         assert result["price"] == 199
