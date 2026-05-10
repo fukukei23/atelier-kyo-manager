@@ -99,3 +99,9 @@ RegionRecommendation, RepeatCustomer, ShipmentNotification, StockCheck
 - `data/` に実行時データが生成される
 - Webhook受信は `warehouse_webhook.py` で処理
 - LLM呼び出しは `utils/ai_llm_controller.py` で一元管理
+
+## 作業記録ルール
+
+- プロジェクト固有の変更履歴は `docs/CHANGELOG.md` に記録すること
+- リファクタリングバックログの進捗は `docs/refactoring-backlog.md` に✅完了マークを付けること
+- SSOT側（`obsidian-ssot/01_DECISIONS/atelier-kyo-manager/`）には判断理由と技術的詳細を記録し、プロジェクト側（`docs/CHANGELOG.md`）には変更概要を記録する

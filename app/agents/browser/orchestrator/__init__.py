@@ -23,52 +23,26 @@ from app.models.result_models import DiscoveryResult
 from .config_and_metrics import ConfigAndMetricsMixin
 from .self_healing import SelfHealingMixin
 
-# Optional imports
+from app.agents.browser.telemetry import TelemetryClient
+from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
+from app.agents.failure_analysis_agent import FailureAnalysisAgent
+from app.agents.self_healing_patch_agent import SelfHealingPatchAgent
+from app.agents.self_healing_sandbox import SelfHealingSandbox
+from app.agents.self_healing_patch_applier import SelfHealingPatchApplier
+
+# self_healing_policy は未実装モジュール（optional import）
+try:
+    from app.agents.self_healing_policy import SelfHealingPolicy
+except ImportError:
+    SelfHealingPolicy = None  # type: ignore
+from app.agents.selector_repair_agent import SelectorRepairAgent
+
+# e2e_success_stage は未実装モジュール（optional import）
 try:
     from app.utils.e2e_success_stage import collect_run_artifacts, compute_success_stage
 except ImportError:
     compute_success_stage = None  # type: ignore
     collect_run_artifacts = None  # type: ignore
-
-try:
-    from app.agents.browser.telemetry import TelemetryClient
-except ImportError:
-    TelemetryClient = None  # type: ignore
-
-try:
-    from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
-except ImportError:
-    SelectorDiscoveryAgent = None  # type: ignore
-
-try:
-    from app.agents.failure_analysis_agent import FailureAnalysisAgent
-except ImportError:
-    FailureAnalysisAgent = None  # type: ignore
-
-try:
-    from app.agents.self_healing_patch_agent import SelfHealingPatchAgent
-except ImportError:
-    SelfHealingPatchAgent = None  # type: ignore
-
-try:
-    from app.agents.self_healing_sandbox import SelfHealingSandbox
-except ImportError:
-    SelfHealingSandbox = None  # type: ignore
-
-try:
-    from app.agents.self_healing_policy import SelfHealingPolicy
-except ImportError:
-    SelfHealingPolicy = None  # type: ignore
-
-try:
-    from app.agents.self_healing_patch_applier import SelfHealingPatchApplier
-except ImportError:
-    SelfHealingPatchApplier = None  # type: ignore
-
-try:
-    from app.agents.selector_repair_agent import SelectorRepairAgent
-except ImportError:
-    SelectorRepairAgent = None  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -96,55 +70,16 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
         self.runtime_kwargs: dict[str, Any] = runtime_kwargs or {}
         self.log = log or logger
 
-        if analysis_agent is not None:
-            self.analysis_agent = analysis_agent
-        elif FailureAnalysisAgent is not None:
-            self.analysis_agent = FailureAnalysisAgent(runtime_kwargs=self.runtime_kwargs)
-        else:
-            self.analysis_agent = None
-
-        if discovery_agent is not None:
-            self.discovery_agent = discovery_agent
-        elif SelectorDiscoveryAgent is not None:
-            self.discovery_agent = SelectorDiscoveryAgent(runtime_kwargs=self.runtime_kwargs)
-        else:
-            self.discovery_agent = None
-
-        if patch_agent is not None:
-            self.patch_agent = patch_agent
-        elif SelfHealingPatchAgent is not None:
-            self.patch_agent = SelfHealingPatchAgent(runtime_kwargs=self.runtime_kwargs)
-        else:
-            self.patch_agent = None
-
-        if sandbox is not None:
-            self.sandbox = sandbox
-        elif SelfHealingSandbox is not None:
-            self.sandbox = SelfHealingSandbox()
-        else:
-            self.sandbox = None
-
-        if policy is not None:
-            self.policy = policy
-        elif SelfHealingPolicy is not None:
-            policy_path = Path("app/config/self_healing_policy.json")
-            self.policy = SelfHealingPolicy.from_file(policy_path)
-        else:
-            self.policy = None
-
-        if patch_applier is not None:
-            self.patch_applier = patch_applier
-        elif SelfHealingPatchApplier is not None:
-            self.patch_applier = SelfHealingPatchApplier()
-        else:
-            self.patch_applier = None
-
-        if selector_repair_agent is not None:
-            self.selector_repair_agent = selector_repair_agent
-        elif SelectorRepairAgent is not None:
-            self.selector_repair_agent = SelectorRepairAgent(llm_client=llm_client)
-        else:
-            self.selector_repair_agent = None
+        self.analysis_agent = analysis_agent or FailureAnalysisAgent(runtime_kwargs=self.runtime_kwargs)
+        self.discovery_agent = discovery_agent or SelectorDiscoveryAgent(runtime_kwargs=self.runtime_kwargs)
+        self.patch_agent = patch_agent or SelfHealingPatchAgent(runtime_kwargs=self.runtime_kwargs)
+        self.sandbox = sandbox or SelfHealingSandbox()
+        self.policy = (
+            policy
+            or (SelfHealingPolicy.from_file(Path("app/config/self_healing_policy.json")) if SelfHealingPolicy else None)
+        )
+        self.patch_applier = patch_applier or SelfHealingPatchApplier()
+        self.selector_repair_agent = selector_repair_agent or SelectorRepairAgent(llm_client=llm_client)
 
         self._overrides_path = Path("app/config/sites/overrides.local.json")
 
@@ -185,7 +120,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
         )
 
         if telemetry is None:
-            telemetry = TelemetryClient(run_context=run_context) if TelemetryClient is not None else None
+            telemetry = TelemetryClient(run_context=run_context)
 
         navigation_driver = NavigationDriver(
             page=page,
@@ -327,7 +262,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
                     self.log.warning(f"[Orchestrator] Failed to record no PDP links: {te}", exc_info=True)
             try:
                 if telemetry is None:
-                    telemetry = TelemetryClient(run_context=run_context) if TelemetryClient is not None else None
+                    telemetry = TelemetryClient(run_context=run_context)
 
                 plp_driver = PlpDriver(
                     page=page,
@@ -550,7 +485,7 @@ class BrowserOrchestrator(SelfHealingMixin, ConfigAndMetricsMixin):
 
         telemetry_client = None
         try:
-            if TelemetryClient is not None:
+            if TelemetryClient:
                 telemetry_client = TelemetryClient(run_context=run_context)
         except Exception as te:
             self.log.warning(f"[Orchestrator] Failed to create TelemetryClient: {te}", exc_info=True)

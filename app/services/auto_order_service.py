@@ -66,11 +66,10 @@ class AutoOrderLog:
 class AutoOrderService:
     """自動発注ステートマシン"""
 
-    logs: list[AutoOrderLog] = []
-
     def __init__(self, order, notification_service=None) -> None:
         self.order = order
         self.notification_service = notification_service
+        self.logs: list[AutoOrderLog] = []
 
     # ---- 遷移 ----
 

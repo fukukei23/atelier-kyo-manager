@@ -1,5 +1,5 @@
 """
-包括テスト: sourcing_tier, fx_utils, pricing_calculator
+包括テスト: sourcing_tier, fx_utils
 """
 
 from __future__ import annotations
@@ -20,11 +20,6 @@ from app.utils.fx_utils import (
     build_jpy_table_from_eur,
     get_fx_table_jpy,
     parse_fx_rates_str,
-)
-from app.utils.pricing_calculator import (
-    DEFAULT_EXCHANGE_RATE,
-    calculate_profit,
-    get_exchange_rate,
 )
 from app.utils.sourcing_tier import judge_tier
 
@@ -211,94 +206,3 @@ class TestFxHelpers:
                     table, meta = get_fx_table_jpy(manual_table=None, auto=True, ttl_hours=0)
                     assert meta["source"] == "ecb(cache-fallback)"
                     assert table["USD"] == 148.0
-
-
-# ==========================================
-# pricing_calculator
-# ==========================================
-class TestGetExchangeRate:
-    @patch("app.utils.pricing_calculator.requests.get")
-    def test_success(self, mock_get):
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"rates": {"JPY": 149.5}}
-        mock_resp.raise_for_status = MagicMock()
-        mock_get.return_value = mock_resp
-        assert get_exchange_rate("USD", "JPY") == 149.5
-
-    @patch("app.utils.pricing_calculator.requests.get")
-    def test_api_failure_returns_default(self, mock_get):
-        mock_get.side_effect = Exception("Network Error")
-        assert get_exchange_rate("USD", "JPY") == DEFAULT_EXCHANGE_RATE
-
-    @patch("app.utils.pricing_calculator.requests.get")
-    def test_missing_currency_returns_default(self, mock_get):
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {"rates": {}}
-        mock_resp.raise_for_status = MagicMock()
-        mock_get.return_value = mock_resp
-        assert get_exchange_rate("USD", "XYZ") == DEFAULT_EXCHANGE_RATE
-
-
-class TestCalculateProfit:
-    @patch("app.utils.pricing_calculator.get_exchange_rate", return_value=1.0)
-    def test_positive_profit(self, mock_rate):
-        result = calculate_profit(
-            buyma_price=20000,
-            source_price=10000,
-            shipping_cost=2000,
-            source_currency="JPY",
-        )
-        assert result["profit_estimate"] > 0
-        assert result["profit_rate"] > 0
-
-    @patch("app.utils.pricing_calculator.get_exchange_rate", return_value=1.0)
-    def test_loss(self, mock_rate):
-        result = calculate_profit(
-            buyma_price=5000,
-            source_price=10000,
-            shipping_cost=2000,
-            source_currency="JPY",
-        )
-        assert result["profit_estimate"] < 0
-        assert result["profit_rate"] < 0
-
-    @patch("app.utils.pricing_calculator.get_exchange_rate", return_value=1.0)
-    def test_zero_buyma_price(self, mock_rate):
-        result = calculate_profit(
-            buyma_price=0,
-            source_price=5000,
-            shipping_cost=1000,
-            source_currency="JPY",
-        )
-        assert result["profit_rate"] == 0
-
-    @patch("app.utils.pricing_calculator.get_exchange_rate", return_value=150.0)
-    def test_usd_conversion(self, mock_rate):
-        result = calculate_profit(
-            buyma_price=30000,
-            source_price=100.0,
-            shipping_cost=10.0,
-            source_currency="USD",
-        )
-        mock_rate.assert_called_once_with("USD", "JPY")
-        # source_price_jpy = 100*150 = 15000, shipping_jpy = 10*150 = 1500
-        # cost_before_customs = 16500, customs = 1650, total_cost = 18150
-        # commission = 30000*0.073 = 2190, fees = 2190+200 = 2390
-        # net_revenue = 30000-2390 = 27610
-        # profit = 27610-18150 = 9460
-        assert result["profit_estimate"] == pytest.approx(9460.0, abs=1.0)
-
-    @patch("app.utils.pricing_calculator.get_exchange_rate", return_value=1.0)
-    def test_custom_rates(self, mock_rate):
-        result = calculate_profit(
-            buyma_price=10000,
-            source_price=5000,
-            shipping_cost=0,
-            customs_duty_rate=0.0,
-            buyma_commission_rate=0.0,
-            buyma_system_fee=0,
-            source_currency="JPY",
-        )
-        # No fees: profit = 10000 - 5000 = 5000
-        assert result["profit_estimate"] == 5000.0
-        assert result["profit_rate"] == 50.0

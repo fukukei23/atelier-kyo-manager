@@ -167,13 +167,12 @@ class TestAutoOrderServiceModel:
             assert ok is False
 
     def test_logs_recorded(self, app, sample_order):
-        AutoOrderService.logs.clear()
         with app.app_context():
             o = Order.query.get(sample_order.id)
             svc = AutoOrderService(o)
             svc.advance_to(OrderStatus.SOURCING)
-            assert len(AutoOrderService.logs) == 1
-            log = AutoOrderService.logs[-1]
+            assert len(svc.logs) == 1
+            log = svc.logs[-1]
             assert log.from_status == OrderStatus.PENDING
             assert log.to_status == OrderStatus.SOURCING
 
