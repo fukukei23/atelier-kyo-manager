@@ -26,67 +26,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-# Pydanticによる厳格なデータモデル定義
-try:
-    from pydantic import BaseModel, Field, ValidationError
-except ImportError:
-    print("Pydantic is not installed. Please run 'pip install pydantic'.")
+from pydantic import BaseModel, Field, ValidationError
 
-    # Pydanticがない場合は、ダミーのBaseModelで最低限動作させる
-    class _DummyBaseModel:
-        def __init__(self, **kwargs):
-            for k, v in kwargs.items():
-                setattr(self, k, v)
-
-    BaseModel = _DummyBaseModel
-
-    def Field(**kwargs):
-        return None
-
-    ValidationError = Exception
-
-# --- 既存の専門エージェントとユーティリティをインポート ---
-try:
-    from app.utils.ai_llm_controller import AILlmController
-
-    LLM_AVAILABLE = True
-except ImportError:
-    logging.warning("AILlmController not found. LLM-based summary will be disabled.")
-    AILlmController = None
-    LLM_AVAILABLE = False
-
-# --- Pricing Config（手数料率の一元管理）をインポート ---
-try:
-    from app.core.pricing.calculator import calculate_pricing
-    from app.core.pricing.rules import load_pricing_config
-    from app.core.pricing.schemas import PricingInput
-
-    PRICING_CONFIG_AVAILABLE = True
-except ImportError:
-    logging.warning("PricingConfig not found. Using hardcoded fee rates.")
-    load_pricing_config = None
-    calculate_pricing = None
-    PricingInput = None
-    PRICING_CONFIG_AVAILABLE = False
-
-try:
-    from app.utils.shipping_agent import ShippingAgent
-
-    SHIPPING_AGENT_AVAILABLE = True
-except ImportError:
-    logging.warning("ShippingAgent not found. Using fixed shipping costs.")
-    ShippingAgent = None
-    SHIPPING_AGENT_AVAILABLE = False
-
-try:
-    from app.utils.fx_utils import get_fx_table_jpy
-except ImportError:
-    from app.config.constants import DEFAULT_EXCHANGE_RATE_USDJPY as _FALLBACK_FX
-
-    logging.warning("fx_utils not found. Using dummy exchange rates.")
-
-    def get_fx_table_jpy(**kwargs) -> tuple[dict, dict]:
-        return {"USD": _FALLBACK_FX}, {}
+from app.utils.ai_llm_controller import AILlmController
+from app.core.pricing.calculator import calculate_pricing
+from app.core.pricing.rules import load_pricing_config
+from app.core.pricing.schemas import PricingInput
+from app.utils.shipping_agent import ShippingAgent
+from app.utils.fx_utils import get_fx_table_jpy
 
 # --- Pydanticによる入出力スキーマ定義 ---
 
@@ -118,10 +65,8 @@ class ProfitabilityAgent:
 
     def __init__(self, headless_shipping: bool = True):
         self.logger = logging.getLogger(__name__)
-        if LLM_AVAILABLE:
-            self.llm_controller = AILlmController()
-        if SHIPPING_AGENT_AVAILABLE:
-            self.shipping_agent = ShippingAgent(headless=headless_shipping)
+        self.llm_controller = AILlmController()
+        self.shipping_agent = ShippingAgent(headless=headless_shipping)
 
     def _get_exchange_rate_jpy(self, currency: str) -> float:
         """為替レートを取得し、失敗時にはフォールバック値を返す。"""
@@ -141,30 +86,13 @@ class ProfitabilityAgent:
             return DEFAULT_EXCHANGE_RATE_USDJPY
 
     def _resolve_customs_rate(self, category: str | None, material: str | None) -> float:
-        """商品情報に基づき、関税率を決定する。rules.py の一元化ロジックを使用。"""
-        try:
-            from app.core.pricing.rules import resolve_customs_rate
+        from app.core.pricing.rules import resolve_customs_rate
 
-            return resolve_customs_rate(category, material)
-        except ImportError:
-            # フォールバック: rules.py が利用できない場合
-            if material and any(m in material for m in ["レザー", "革", "leather"]):
-                return 0.12
-            if category and any(c in category for c in ["バッグ", "シューズ", "bag", "shoes"]):
-                return 0.11
-            return 0.10
+        return resolve_customs_rate(category, material)
 
     def _get_dynamic_shipping_cost(self, source_currency: str) -> float:
         """ShippingAgentと連携し、動的な送料を取得する。"""
-        if not SHIPPING_AGENT_AVAILABLE:
-            self.logger.info("Using fixed shipping cost: 30 USD")
-            return 30.0 if source_currency.upper() == "USD" else 4500.0
-        try:
-            self.logger.info("Dynamically fetching shipping info (using fixed cost for now).")
-            return 30.0  # 仮にUSDで30ドルとする
-        except Exception as e:
-            self.logger.error(f"Failed to get dynamic shipping cost: {e}. Falling back to fixed cost.")
-            return 30.0
+        return 30.0
 
     def _calculate_core_profit(self, market: MarketData, supplier: SupplierData) -> dict[str, Any]:
         """
@@ -176,46 +104,22 @@ class ProfitabilityAgent:
         exchange_rate = self._get_exchange_rate_jpy(supplier.currency)
         shipping_cost = self._get_dynamic_shipping_cost(supplier.currency)
 
-        # calculator.py が利用可能な場合はそちらに委譲
-        if PRICING_CONFIG_AVAILABLE and calculate_pricing and PricingInput:
-            inp = PricingInput(
-                purchase_price=supplier.price,
-                selling_price=market.buyma_price,
-                shipping_cost=shipping_cost,
-                original_currency=supplier.currency.upper(),
-                exchange_rate=exchange_rate,
-                item_category=supplier.category or "",
-                item_material=supplier.material or "",
-            )
-            result = calculate_pricing(inp, source_type="overseas")
-
-            return {
-                "profit_estimate": int(round(result.profit)),
-                "profit_rate": round(result.profit_rate * 100, 2),
-                "total_cost_jpy": int(round(result.total_cost)),
-                "exchange_rate_used": exchange_rate,
-                "source_currency": supplier.currency.upper(),
-            }
-
-        # フォールバック: calculator.py が利用できない場合の従来ロジック
-        customs_rate = self._resolve_customs_rate(supplier.category, supplier.material)
-        source_price_jpy = supplier.price * exchange_rate
-        shipping_cost_jpy = shipping_cost * exchange_rate
-        cost_before_customs = source_price_jpy + shipping_cost_jpy
-        customs_duty = cost_before_customs * customs_rate
-        total_cost_jpy = cost_before_customs + customs_duty
-        from app.config.constants import PLATFORM_FEE_RATE
-
-        platform_fee_rate = PLATFORM_FEE_RATE
-        buyma_commission = market.buyma_price * platform_fee_rate
-        net_revenue = market.buyma_price - buyma_commission
-        profit_estimate = net_revenue - total_cost_jpy
-        profit_rate = (profit_estimate / market.buyma_price) * 100 if market.buyma_price > 0 else 0
+        # calculator.py に委譲
+        inp = PricingInput(
+            purchase_price=supplier.price,
+            selling_price=market.buyma_price,
+            shipping_cost=shipping_cost,
+            original_currency=supplier.currency.upper(),
+            exchange_rate=exchange_rate,
+            item_category=supplier.category or "",
+            item_material=supplier.material or "",
+        )
+        result = calculate_pricing(inp, source_type="overseas")
 
         return {
-            "profit_estimate": int(round(profit_estimate)),
-            "profit_rate": round(profit_rate, 2),
-            "total_cost_jpy": int(round(total_cost_jpy)),
+            "profit_estimate": int(round(result.profit)),
+            "profit_rate": round(result.profit_rate * 100, 2),
+            "total_cost_jpy": int(round(result.total_cost)),
             "exchange_rate_used": exchange_rate,
             "source_currency": supplier.currency.upper(),
         }
@@ -227,10 +131,6 @@ class ProfitabilityAgent:
         # ルールベースの簡易判定
         if profit < 1500:
             return "推奨しません。推定利益が基準値（1500円）を下回っています。"
-
-        # LLMが利用できない、または失敗した場合のフォールバック
-        if not LLM_AVAILABLE:
-            return f"推奨します。推定利益: {profit}円 ({calc_result.get('profit_rate')}%)"
 
         prompt = f"""
 あなたはプロのEコマースアナリストです。以下の収益性評価データに基づき、この商品を買い付けるべきかどうかの最終判断を、簡潔な日本語で要約してください。

@@ -8,31 +8,31 @@
 
 ## 優先度P0（すぐやる）
 
-### P0-1. レガシー `pricing_calculator.py` の削除
+### P0-1. レガシー `pricing_calculator.py` の削除 ✅完了（2026-05-10）
 - **対象**: `app/utils/pricing_calculator.py`（79行）、`tests/test_pricing_calculator.py`、`tests/test_pricing_calculator_coverage.py`、`tests/test_utils_comprehensive.py` 内の該当import
 - **問題概要**: 旧 `pricing_calculator.py` は手数料率 7.3%（`BUYMA_COMMISSION_RATE = 0.073`）を定義しているが、正しい `core/pricing/` モジュールは `constants.py` で 7.7% を定義している。誰も旧モジュールをimportしていない（テストファイルのみ参照）ため、残存は混乱の元。
 - **修正方針**: 旧ファイルを削除し、テストファイル内のimport・テストケースを `core/pricing/` に一本化
 - **推定工数**: 1時間
 
-### P0-2. `AutoOrderService` のクラスレベル可変デフォルト引数バグ修正
+### P0-2. `AutoOrderService` のクラスレベル可変デフォルト引数バグ修正 ✅完了（2026-05-10）
 - **対象**: `app/services/auto_order_service.py` L69
 - **問題概要**: `logs: list[AutoOrderLog] = []` がクラス属性として定義されており、Pythonの可変デフォルト引数バグにより、全インスタンスでリストが共有される
 - **修正方針**: `logs` をインスタンス属性に移動（`__init__` 内で `self.logs: list[AutoOrderLog] = []` に初期化）。必要に応じて `dataclass` への移行も検討
 - **推定工数**: 0.5時間
 
-### P0-3. `browser_use_agent.py` と `navigation_driver.py` 間の重複関数除去
+### P0-3. `browser_use_agent.py` と `navigation_driver.py` 間の重複関数除去 ✅完了（2026-05-10）
 - **対象**: `app/agents/browser_use_agent.py`（L150 `is_same_origin`、L175 `_dedupe_keep_order`）、`app/agents/browser/navigation_driver.py`（L131 `is_same_origin`、L143 `_dedupe_keep_order`）
 - **問題概要**: 同一関数が2ファイルにコピペ実装されている（DRY違反）。`browser_use_agent.py` は `navigation_driver.py` をimportしているため、後者側に統一可能
 - **修正方針**: `navigation_driver.py` 側を正とし、`browser_use_agent.py` 側は `from app.agents.browser.navigation_driver import is_same_origin, _dedupe_keep_order` に変更
 - **推定工数**: 0.5時間
 
-### P0-4. `profitability_agent.py` の過剰 ImportError ガード整理
+### P0-4. `profitability_agent.py` の過剰 ImportError ガード整理 ✅完了（2026-05-10）
 - **対象**: `app/agents/profitability_agent.py`（L32, L53, L65, L76, L83, L149 — 計6箇所）
 - **問題概要**: 6つの `except ImportError` ブロックがインラインスタブ付きで定義されている。当ファイルはアプリケーション内部モジュールであり、依存先は常に存在する
 - **修正方針**: `try/except ImportError` を通常importに置き換え。`from __future__ import annotations` と `TYPE_CHECKING` を活用して循環参照を回避
 - **推定工数**: 1時間
 
-### P0-5. `orchestrator/__init__.py` の過剰 ImportError ガード整理
+### P0-5. `orchestrator/__init__.py` の過剰 ImportError ガード整理 ✅完了（2026-05-10）
 - **対象**: `app/agents/browser/orchestrator/__init__.py`（L29-L70 — 計9箇所）
 - **問題概要**: 9つの `try/except ImportError` が連続し、全て `None` フォールバック。アプリ内モジュールへのimportであり、失敗するのはインストール不備のみ
 - **修正方針**: 正常importに置き換え。`TYPE_CHECKING` を使って型チェック時のみimport（実行時は遅延import or 直import）

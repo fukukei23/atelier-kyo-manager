@@ -64,7 +64,12 @@ from app.agents.browser.extractor import (
     PDPSizeSelectPolicy,
     looks_like_product_url,
 )
-from app.agents.browser.navigation_driver import NavigationContext, NavigationDriver
+from app.agents.browser.navigation_driver import (
+    NavigationContext,
+    NavigationDriver,
+    _dedupe_keep_order,
+    is_same_origin,
+)
 from app.agents.browser.session_manager import EXTERNAL_BLOCKLIST_HOSTS, SessionManager
 
 # --- 専用パッチの動的インポート ---
@@ -147,15 +152,6 @@ PLUGIN_REGISTRY: dict[str, StrategyPlugin] = {}
 # ==============================================================================
 
 
-def is_same_origin(url: str, base: str) -> bool:
-    try:
-        u = urlparse(url)
-        b = urlparse(base)
-        return (u.scheme, u.netloc) == (b.scheme, b.netloc)
-    except Exception:
-        return False
-
-
 def _unpack_vrt(res, *, threshold: float | None = None):
     if isinstance(res, dict):
         d = float(res.get("diff_percent", 0.0))
@@ -170,10 +166,6 @@ def _unpack_vrt(res, *, threshold: float | None = None):
         ok = (threshold is None) or (d <= float(threshold or 0.0))
         return {"diff_percent": d, "is_ok": ok}
     return None
-
-
-def _dedupe_keep_order(items: list[str]) -> list[str]:
-    return list(dict.fromkeys([i for i in (items or []) if i]))
 
 
 # ==============================================================================
