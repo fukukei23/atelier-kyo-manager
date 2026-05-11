@@ -24,6 +24,16 @@ Flask MVC + Service Layer
 - 認証: Flask-Login（`/auth/login`, `/auth/logout`）
 - CSRF: Flask-WTF
 
+## 起動コマンド
+
+```bash
+# Flask 開発サーバー起動
+FLASK_APP=app ./venv/bin/python -m flask run   # http://localhost:5000
+
+# または Makefile.local 経由（推奨）
+make run   # FLASK_APP=app で flask run を実行
+```
+
 ## テスト実行
 
 ```bash
