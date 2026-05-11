@@ -2,6 +2,16 @@
 
 > プロジェクト固有の変更履歴。SSOT（`obsidian-ssot/01_DECISIONS/`）と併せて参照すること。
 
+## 2026-05-12
+
+### P2-6: テストカバレッジ底上げ（886→973テスト）
+- 新規87テスト追加で6モジュールのカバレッジ改善
+- `selector_validator.py` 27%→100%, `selector_ranker.py` 11%→100%, `product_csv_service.py` 46%→100%
+- `selector_prompt_builder.py` 9%→95%, `plp_trap.py` 30%→90%, `plp_evidence.py` 7%→87%
+- 新規テストファイル: `test_selector_validator.py`, `test_selector_ranker.py`, `test_selector_prompt_builder.py`, `test_product_csv_service.py`, `test_plp_trap_and_evidence.py`
+- テスト: 973 passed, 0 failures
+- **リファクタリングバックログ全項目完了**
+
 ## 2026-05-11
 
 ### P2-5: plp_driver.py 分割（1,344行→272行）
