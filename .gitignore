@@ -59,8 +59,8 @@ dist/
 
 # --- Framework Specific (フレームワーク固有) ---
 # 開発用のローカルデータベースなど。
-instance/site.db
-db.sqlite3
+instance/
+data/app.db
 
 
 # --- OS Generated Files (OSが自動生成するファイル) ---
@@ -184,3 +184,6 @@ data/exports/*.jsonl
 
 # Local input files (do not commit)
 data/imports/
+
+# Claude Code overrides backups
+.overrides_backups/
