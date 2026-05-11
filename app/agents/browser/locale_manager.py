@@ -34,13 +34,9 @@ from app.agents.browser.nav_types import (
 
 logger = logging.getLogger(__name__)
 
-# Stage 3A-2-1: extractor モジュールから looks_like_product_url を import
-try:
-    from app.agents.browser.navigation_helpers import (
-        normalize_abs_url as nav_normalize_abs_url,
-    )
-except ImportError:
-    nav_normalize_abs_url = None
+from app.agents.browser.navigation_helpers import (
+    normalize_abs_url as nav_normalize_abs_url,
+)
 
 
 class LocaleMixin:
@@ -711,17 +707,16 @@ class LocaleMixin:
         """
         if not href:
             return ""
-        if nav_normalize_abs_url is not None:
-            try:
-                out = nav_normalize_abs_url(base_url, href)
-                if out:
-                    parsed = urlparse(out)
-                    if parsed.scheme and parsed.scheme.lower() not in ("http", "https"):
-                        pass  # スキーム除外は下の自前処理へ
-                    else:
-                        return out
-            except Exception:
-                pass
+        try:
+            out = nav_normalize_abs_url(base_url, href)
+            if out:
+                parsed = urlparse(out)
+                if parsed.scheme and parsed.scheme.lower() not in ("http", "https"):
+                    pass  # スキーム除外は下の自前処理へ
+                else:
+                    return out
+        except Exception:
+            pass
         try:
             if href.startswith("//"):
                 base_parsed = urlparse(base_url)

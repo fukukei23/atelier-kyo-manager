@@ -25,16 +25,7 @@ from urllib.parse import quote_plus
 
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
-try:
-    from app.extractors.product_info_extractor import extract_product_info
-
-    EXTRACTOR_AVAILABLE = True
-except ImportError:
-    EXTRACTOR_AVAILABLE = False
-    logging.error("Fatal: product_info_extractor.pyが見つかりません。")
-
-    def extract_product_info(html: str, site_config: dict) -> dict:
-        return {}
+from app.extractors.product_info_extractor import extract_product_info
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -162,21 +153,17 @@ class PriceIntelligenceAgent:
 
     def _extract_from_pdp(self, site_config: dict[str, Any]) -> dict[str, Any]:
         html = self.page.content()
-        if EXTRACTOR_AVAILABLE:
-            try:
-                data = extract_product_info(html, site_config=site_config)
-                if data.get("price"):
-                    return data
-            except Exception as e:
-                logging.warning(f"Python extractor failed: {e}.")
+        try:
+            data = extract_product_info(html, site_config=site_config)
+            if data.get("price"):
+                return data
+        except Exception as e:
+            logging.warning(f"Python extractor failed: {e}.")
         return {}
 
     def run(
         self, brand_name: str, item_limit: int, site_config: dict[str, Any], browser_name: str = "chrome"
     ) -> list[dict]:
-        if not EXTRACTOR_AVAILABLE:
-            return []
-
         timeout_sec = site_config.get("discovery_settings", {}).get("timeout_sec", 20)
 
         try:

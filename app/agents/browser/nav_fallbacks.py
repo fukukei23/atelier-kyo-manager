@@ -33,27 +33,15 @@ from app.agents.browser.nav_types import NavigationContext
 if TYPE_CHECKING:
     pass
 
-# Stage 3A-2-1: extractor モジュールから looks_like_product_url を import
-try:
-    from app.agents.browser.extractor import (
-        VISIBLE_PRICE_SELECTORS,
-        extract_moncler_pdp_links,  # noqa: F401
-        looks_like_product_url,
-    )
-except ImportError:
+from app.agents.browser.extractor import (
+    VISIBLE_PRICE_SELECTORS,
+    extract_moncler_pdp_links,  # noqa: F401
+    looks_like_product_url,
+)
 
-    def looks_like_product_url(url: str) -> bool:
-        return True
-
-    VISIBLE_PRICE_SELECTORS = ["[itemprop=price]", "[class*=price]", "[data-testid*=price]"]
-
-# 責務分割: UI 操作・URL 正規化は ui_helpers / navigation_helpers に委譲
-try:
-    from app.agents.browser.ui_helpers import (
-        click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
-    )
-except ImportError:
-    ui_click_continue_shopping_if_present = None
+from app.agents.browser.ui_helpers import (
+    click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
+)
 
 logger = logging.getLogger(__name__)
 

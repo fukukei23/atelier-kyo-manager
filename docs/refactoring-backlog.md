@@ -72,14 +72,16 @@
   - Phase 2b/3 は引数差異が大きく委譲困難なため見送り（`_ensure_plp_materialized`, `_collect_pdp_links`, `_plp_header_search_fallback` 等）
 - **テスト**: 886 passed, 0 failures
 
-### P1-3. `products.py` ルート（475行）のサービス層抽出
+### P1-3. `products.py` ルート（475行→330行）のサービス層抽出 ✅完了（2026-05-11）
 - **対象**: `app/routes/products.py`
 - **問題概要**: Flaskルート関数内にビジネスロジックが混在。`import_csv()`（L140-206 ≒ 66行）や `export_csv()`（L207-289 ≒ 82行）等がルートに直接実装
-- **修正方針**:
-  - CSV入出力ロジックを `app/services/product_csv_service.py`（新規）に抽出
-  - パイプライン関連を `PipelineService` に集約（`run_pipeline`, `run_pipeline_batch`）
-  - ルートはHTTPリクエスト/レスポンスの処理のみに専念
-- **推定工数**: 3-4時間
+- **実施日**: 2026-05-11
+- **結果**: 476行→330行（146行削減、31%削減）:
+  - ✅ `app/services/product_csv_service.py`（新規、182行）— `import_products_from_csv`, `export_products_csv`, `export_candidates_csv` + ヘルパー
+  - ✅ `import_csv()` ルート — 40行のインラインCSV処理 → 3行のサービス呼び出しに委譲
+  - ✅ `export_csv()` ルート — 75行のインラインCSV生成 → 4行のサービス呼び出しに委譲
+  - ✅ `export_listing_candidates()` ルート — 44行のインラインCSV生成 → 4行のサービス呼び出しに委譲
+- **テスト**: 886 passed, 0 failures
 
 ### P1-4. `sys.path` 操作の集約・除去 ✅完了（2026-05-10）
 - **対象**: app/内7モジュール + テスト6ファイル（計14ファイル）。実際は22ファイルに散在していたが、スクリプト9ファイルは正当なエントリポイントとして保持
@@ -101,24 +103,21 @@
 - **推定工数**: 4-6時間（2ファイル合計）
 - **残タスク**: `app/utils/ai_image_crawler.py` の Playwright 移行後に requirements.txt から Selenium 除去可能
 
-### P1-6. 残存 ImportError ガードの段階的整理
-- **対象**: P0-4/P0-5以外の全ファイル（計25箇所）:
-  - `app/utils/ai_llm_controller.py`（4箇所）
-  - `app/utils/ai_background_remover.py`（1箇所）
-  - `app/utils/ai_image_crawler.py`（1箇所）
-  - `app/utils/shipping_agent.py`（1箇所）
-  - `app/agents/browser/session_manager.py`（1箇所）
-  - `app/agents/browser/navigation_driver.py`（2箇所）
-  - `app/agents/selector_repair_agent.py`（2箇所）
-  - `app/agents/plugins/base.py`（1箇所）
-  - `app/extractors/product_info_extractor.py`（1箇所）
-  - `app/core/run_context.py`（2箇所）
-  - `app/scripts/run_site.py`（3箇所）
-- **問題概要**: アプリ内部モジュールへの `try/except ImportError` が散在し、インラインスタブを多数定義。実行時にimport失敗するのは環境破壊時のみで、スタブ実行は逆にバグを隠蔽
-- **修正方針**:
-  - 内部モジュールimport → 通常importに変更
-  - 外部ライブラリ（`selenium`等）→ `TYPE_CHECKING` 内に移動または requirements.txt で保証
-  - `ruff.toml` の `E402` ignore を段階的に除外
+### P1-6. 残存 ImportError ガードの段階的整理 ✅完了（2026-05-11）
+- **対象**: P0-4/P0-5以外の全ファイル（計25箇所）→ 13箇所を削除、18箇所を保持
+- **実施日**: 2026-05-11
+- **結果**: 31箇所→18箇所（13箇所削除）。修正ファイル9ファイル:
+  - ✅ `selector_prompt_builder.py` — bs4 の try/except 削除、モジュールトップレベルimportに移動
+  - ✅ `selector_repair_agent.py` — 内部モジュールimport の try/except 削除（2箇所→1箇所）
+  - ✅ `moncler_nav.py` — extractor import の try/except 削除
+  - ✅ `locale_manager.py` — navigation_helpers import の try/except 削除 + None ガード除去
+  - ✅ `nav_fallbacks.py` — extractor/ui_helpers import の try/except 削除（2箇所）
+  - ✅ `navigation_driver.py` — extractor/ui_helpers import の try/except 削除（2箇所）
+  - ✅ `price_intelligence_agent.py` — extractor import の try/except 削除 + EXTRACTOR_AVAILABLE 変数除去
+  - ✅ `run_context.py` — playwright import の try/except 削除（2箇所）
+  - ✅ `ai_image_crawler.py` — Config import の try/except 削除
+- **保持18箇所**: オプション外部ライブラリ（genai/openai/transformers/pyoxipng等）、未実装モジュール、スクリプトエントリポイント
+- **テスト**: 886 passed, 0 failures
 - **推定工数**: 3-4時間
 
 ---
@@ -136,11 +135,9 @@
 - **バグ修正**: `_build_selector_repair_prompt` の重複 `feedback_section` 2重定義を除去、missing `previous_successes`/`previous_failures` パラメータを追加
 - **テスト**: 886 passed, 0 failures
 
-### P2-2. `buyma_catalog_manager.py` の Playwright 移行（P1-5の一部）
-- **対象**: `app/utils/buyma_catalog_manager.py`（452行）
-- **問題概要**: P1-5に含まれるが、独立した移行タスクとして実施可能
-- **修正方針**: Playwright async API へ移行
-- **推定工数**: 2-3時間
+### P2-2. `buyma_catalog_manager.py` の Playwright 移行 ✅完了（P1-5で実施済み）
+- **対象**: `app/utils/buyma_catalog_manager.py`（452行→430行）
+- **結果**: P1-5にて Playwright sync API に移行済み（v2.0.0）
 
 ### P2-3. `ruff.toml` ignore の段階的解消 ✅完了（2026-05-10）
 - **対象**: `ruff.toml` の `ignore` セクション

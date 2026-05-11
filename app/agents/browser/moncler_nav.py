@@ -20,13 +20,7 @@ from app.agents.browser.nav_types import LinkCandidate, NavigationContext
 
 logger = logging.getLogger(__name__)
 
-# Stage 3A-2-1: extractor モジュールから looks_like_product_url を import
-try:
-    from app.agents.browser.extractor import looks_like_product_url
-except ImportError:
-
-    def looks_like_product_url(url: str) -> bool:
-        return True
+from app.agents.browser.extractor import looks_like_product_url
 
 
 def is_same_origin(url1: str, url2: str) -> bool:

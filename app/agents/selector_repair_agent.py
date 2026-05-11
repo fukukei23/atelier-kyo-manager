@@ -19,10 +19,7 @@ from app.agents.browser.selector_ranker import rank_selectors
 from app.agents.browser.selector_validator import extract_json_from_text, normalize_proposal
 from app.core.run_context import RunContext
 
-try:
-    from app.utils.ai_llm_controller import AILlmController
-except ImportError:
-    AILlmController = None  # type: ignore
+from app.utils.ai_llm_controller import AILlmController
 
 try:
     if AILlmController is None:
