@@ -1,7 +1,7 @@
 # ======================================================================
 # ファイル名: app/utils/ai_image_crawler.py
 # 役割:
-#   - Selenium で対象サイト（config.pyの定義）を検索
+#   - Playwright で対象サイト（config.pyの定義）を検索
 #   - 商品ページから画像URLを収集
 #   - 自己テスト用エントリーポイントを搭載
 #   - 自己テスト結果を PNG 画像として保存（コンタクトシート + メタ情報）
@@ -20,13 +20,7 @@ from urllib.parse import quote_plus
 
 import requests
 from PIL import Image, ImageDraw, ImageFont
-from selenium import webdriver
-from selenium.common.exceptions import TimeoutException
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.remote.webdriver import WebDriver
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.support.ui import WebDriverWait
+from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
 from app.config.config import Config
 
@@ -44,26 +38,38 @@ class CrawlerService:
         self.headless = headless
         self.wait_time = wait_time
         self.logger = logging.getLogger(self.__class__.__name__)
+        self._pw = None
+        self._browser: Browser | None = None
 
-    def _init_driver(self) -> WebDriver:
-        """Chrome WebDriver の初期化"""
-        options = Options()
-        if self.headless:
-            options.add_argument("--headless=new")
-        options.add_argument("--disable-gpu")
-        options.add_argument("--no-sandbox")
-        options.add_argument("--disable-dev-shm-usage")
-        options.add_argument("--window-size=1200,1600")
-        driver = webdriver.Chrome(options=options)
-        driver.set_page_load_timeout(max(30, self.wait_time + 5))
-        return driver
+    def _ensure_browser(self) -> Browser:
+        if self._browser is None:
+            self._pw = sync_playwright().start()
+            self._browser = self._pw.chromium.launch(
+                headless=self.headless,
+                args=["--disable-gpu", "--no-sandbox"],
+            )
+        return self._browser
 
-    def _accept_cookie_if_any(self, driver: WebDriver, selector: str | None) -> None:
+    def _new_context(self) -> BrowserContext:
+        browser = self._ensure_browser()
+        return browser.new_context(
+            viewport={"width": 1200, "height": 1600},
+        )
+
+    def close(self) -> None:
+        if self._browser:
+            self._browser.close()
+            self._browser = None
+        if self._pw:
+            self._pw.stop()
+            self._pw = None
+
+    def _accept_cookie_if_any(self, page: Page, selector: str | None) -> None:
         if not selector:
             return
         try:
-            btn = WebDriverWait(driver, 5).until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
-            btn.click()
+            locator = page.locator(selector)
+            locator.first.click(timeout=5000)
             self.logger.info("Cookie consent accepted.")
         except Exception:
             self.logger.info("No cookie consent (or not clickable).")
@@ -76,7 +82,6 @@ class CrawlerService:
         except Exception:
             return out
 
-        # Product 直下 or @graph 配下に対応
         def _normalize_images(img_field) -> list[str]:
             if not img_field:
                 return []
@@ -113,7 +118,6 @@ class CrawlerService:
                         if images:
                             break
         elif isinstance(data, list):
-            # まれに配列で来る
             for node in data:
                 if isinstance(node, dict) and node.get("@type") in ("Product", ["Product"]):
                     images = _normalize_images(node.get("image"))
@@ -130,63 +134,62 @@ class CrawlerService:
         site_conf = self.sites_config[site_key]
         search_url = site_conf["search_url_template"].format(query=quote_plus(query))
 
-        driver = self._init_driver()
-        self.logger.info(f"Open search URL: {search_url}")
-        driver.get(search_url)
-        self._accept_cookie_if_any(driver, site_conf.get("cookie_accept_selector"))
+        context = self._new_context()
+        page = context.new_page()
+        page.set_default_timeout((max(30, self.wait_time + 5)) * 1000)
 
-        # 検索結果リンク要素の取得
         try:
-            result_links = WebDriverWait(driver, self.wait_time).until(
-                EC.presence_of_all_elements_located((By.CSS_SELECTOR, site_conf["search_result_link_selector"]))
-            )
-        except TimeoutException:
-            self.logger.error("Search results not found within wait time.")
-            driver.quit()
-            return []
+            self.logger.info(f"Open search URL: {search_url}")
+            page.goto(search_url, wait_until="domcontentloaded")
+            self._accept_cookie_if_any(page, site_conf.get("cookie_accept_selector"))
 
-        product_links = []
-        for link_elem in result_links[: max(1, max_results * 3)]:  # 多少多めに拾っておく
-            href = link_elem.get_attribute("href")
-            if href:
-                product_links.append(href)
-
-        self.logger.info(f"Candidate product links: {len(product_links)}")
-
-        # 各商品ページから JSON-LD を読み取って画像を集める
-        image_urls: list[str] = []
-        for href in product_links[:max_results]:
+            # 検索結果リンク要素の取得
             try:
-                driver.execute_script("window.open(arguments[0], '_blank');", href)
-                driver.switch_to.window(driver.window_handles[-1])
-                self._accept_cookie_if_any(driver, site_conf.get("cookie_accept_selector"))
+                locator = page.locator(site_conf["search_result_link_selector"])
+                locator.first.wait_for(timeout=self.wait_time * 1000)
+                link_elements = locator.all()
+            except Exception:
+                self.logger.error("Search results not found within wait time.")
+                return []
 
-                # JSON-LD をすべて拾う（複数あるケースあり）
-                scripts = driver.find_elements(By.CSS_SELECTOR, site_conf["structured_data_selector"])
-                got = False
-                for sc in scripts:
-                    text = sc.get_attribute("innerText") or sc.get_attribute("innerHTML")
-                    urls = self._extract_images_from_jsonld(text or "")
-                    if urls:
-                        image_urls.extend(urls)
-                        got = True
-                if not got:
-                    self.logger.warning(f"No JSON-LD images on: {href}")
+            product_links = []
+            for link_elem in link_elements[: max(1, max_results * 3)]:
+                href = link_elem.get_attribute("href")
+                if href:
+                    product_links.append(href)
 
-            except Exception as e:
-                self.logger.warning(f"Fail on product page {href}: {e}")
-            finally:
-                # タブを閉じて検索結果に戻る
-                if len(driver.window_handles) > 1:
-                    driver.close()
-                    driver.switch_to.window(driver.window_handles[0])
+            self.logger.info(f"Candidate product links: {len(product_links)}")
 
-        driver.quit()
+            # 各商品ページから JSON-LD を読み取って画像を集める
+            image_urls: list[str] = []
+            for href in product_links[:max_results]:
+                product_page = context.new_page()
+                try:
+                    product_page.goto(href, wait_until="domcontentloaded")
+                    self._accept_cookie_if_any(product_page, site_conf.get("cookie_accept_selector"))
 
-        # 重複除去
-        deduped = list(dict.fromkeys(image_urls))
-        self.logger.info(f"Collected image URLs: {len(deduped)}")
-        return deduped
+                    scripts = product_page.locator(site_conf["structured_data_selector"]).all()
+                    got = False
+                    for sc in scripts:
+                        text = sc.inner_text()
+                        urls = self._extract_images_from_jsonld(text or "")
+                        if urls:
+                            image_urls.extend(urls)
+                            got = True
+                    if not got:
+                        self.logger.warning(f"No JSON-LD images on: {href}")
+
+                except Exception as e:
+                    self.logger.warning(f"Fail on product page {href}: {e}")
+                finally:
+                    product_page.close()
+
+            # 重複除去
+            deduped = list(dict.fromkeys(image_urls))
+            self.logger.info(f"Collected image URLs: {len(deduped)}")
+            return deduped
+        finally:
+            context.close()
 
 
 # =========================
@@ -242,7 +245,6 @@ def save_selftest_report_png(
     """
     outfile.parent.mkdir(parents=True, exist_ok=True)
 
-    # メタ情報描画用フォント（非依存でOKなデフォルト）
     try:
         font_title = ImageFont.truetype("arial.ttf", 28)
         font_text = ImageFont.truetype("arial.ttf", 18)
@@ -252,13 +254,11 @@ def save_selftest_report_png(
         font_text = ImageFont.load_default()
         font_small = ImageFont.load_default()
 
-    # まず上部にメタ情報、その下にグリッド
     padding = 24
-    meta_height = 220  # タイトル & URL一覧領域（必要に応じて増減）
+    meta_height = 220
     bg = Image.new("RGB", (thumb_cols * (thumb_size + padding) + padding, meta_height), "white")
     d = ImageDraw.Draw(bg)
 
-    # タイトル
     title = "Crawler Self Test Report"
     dt = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     d.text((padding, padding), title, fill="black", font=font_title)
@@ -267,13 +267,11 @@ def save_selftest_report_png(
     d.text((padding, padding + 96), f"Collected: {len(image_urls)} images", fill="black", font=font_text)
     d.text((padding, padding + 122), f"Generated at: {dt}", fill="black", font=font_text)
 
-    # URL の一部を表示（長すぎると溢れるので3件まで）
     max_show = 3
     y = padding + 150
     w = bg.size[0] - padding * 2
     if image_urls:
         for i, u in enumerate(image_urls[:max_show], 1):
-            # 1行に収まらない時は折返し
             lines = _text_wrap(d, f"{i}. {u}", font_small, w)
             for line in lines:
                 d.text((padding, y), line, fill="gray20", font=font_small)
@@ -281,7 +279,6 @@ def save_selftest_report_png(
     else:
         d.text((padding, y), "(No image URLs were collected)", fill="gray30", font=font_small)
 
-    # 画像を最大 9 枚（3x3 デフォルト）まで並べる
     max_thumbs = thumb_cols * thumb_cols
     grid_urls = image_urls[:max_thumbs]
     rows = math.ceil(len(grid_urls) / thumb_cols)
@@ -291,7 +288,6 @@ def save_selftest_report_png(
     canvas.paste(bg, (0, 0))
     d2 = ImageDraw.Draw(canvas)
 
-    # サムネイル描画
     _x0, y0 = padding, bg.size[1] + padding
     for idx, url in enumerate(grid_urls):
         col = idx % thumb_cols
@@ -301,7 +297,6 @@ def save_selftest_report_png(
 
         thumb = _fetch_image(url)
         if thumb is None:
-            # 取得失敗時は灰色のプレースホルダ
             ph = Image.new("RGB", (thumb_size, thumb_size), "#e6e6e6")
             dph = ImageDraw.Draw(ph)
             msg = "Failed\nto load"
@@ -315,10 +310,7 @@ def save_selftest_report_png(
             )
             thumb = ph
         else:
-            # 余白あり縮小（サムネイル化）
             thumb.thumbnail((thumb_size, thumb_size))
-
-            # 正方形カンバスに中央寄せ
             sq = Image.new("RGB", (thumb_size, thumb_size), "white")
             ox = (thumb_size - thumb.size[0]) // 2
             oy = (thumb_size - thumb.size[1]) // 2
@@ -326,7 +318,6 @@ def save_selftest_report_png(
             thumb = sq
 
         canvas.paste(thumb, (x, y))
-        # 枠線
         d2.rectangle([x, y, x + thumb_size, y + thumb_size], outline="lightgray", width=1)
 
     canvas.save(outfile, "PNG")
@@ -365,6 +356,8 @@ if __name__ == "__main__":
     except Exception as e:
         logging.exception(f"Self-test failed: {e}")
         urls = []
+    finally:
+        crawler.close()
     t1 = time.time()
 
     logging.info(f"Collected {len(urls)} image URLs in {t1 - t0:.2f}s")
@@ -384,13 +377,12 @@ if __name__ == "__main__":
             site=test_site,
             query=test_query,
             image_urls=urls,
-            thumb_cols=3,  # 3x3 グリッド
+            thumb_cols=3,
             thumb_size=256,
         )
         logging.info(f"[SELF-TEST] Report saved: {outpath.resolve()}")
     except Exception as e:
         logging.exception(f"Failed to save self-test report: {e}")
-        # 画像がゼロの場合など、最低限のテキストだけでも PNG にして残す
         try:
             fallback = Image.new("RGB", (1000, 360), "white")
             d = ImageDraw.Draw(fallback)
@@ -412,5 +404,4 @@ if __name__ == "__main__":
             logging.exception(f"Fallback image save also failed: {ee}")
             raise
 
-    # プロセス終了コード: 画像 0件でも成功扱い（テスト容易性のため）
     logging.info("Self-test finished.")
