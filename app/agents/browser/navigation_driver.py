@@ -44,47 +44,30 @@ from app.agents.browser.nav_types import (
 if TYPE_CHECKING:
     from app.agents.browser.telemetry import TelemetryClient
 
-# Stage 3A-2-1: extractor モジュールから looks_like_product_url を import
-try:
-    from app.agents.browser.extractor import (
-        VISIBLE_PRICE_SELECTORS,
-        extract_moncler_pdp_links,  # noqa: F401
-        looks_like_product_url,
-    )
-except ImportError:
+from app.agents.browser.extractor import (
+    VISIBLE_PRICE_SELECTORS,
+    extract_moncler_pdp_links,  # noqa: F401
+    looks_like_product_url,
+)
 
-    def looks_like_product_url(url: str) -> bool:
-        return True
-
-    VISIBLE_PRICE_SELECTORS = ["[itemprop=price]", "[class*=price]", "[data-testid*=price]"]
-
-# 責務分割: UI 操作・URL 正規化は ui_helpers / navigation_helpers に委譲
-try:
-    from app.agents.browser.navigation_helpers import (
-        normalize_abs_url as nav_normalize_abs_url,
-    )
-    from app.agents.browser.navigation_helpers import (
-        normalize_url as nav_normalize_url,
-    )
-    from app.agents.browser.ui_helpers import (
-        accept_cookies_if_present as ui_accept_cookies_if_present,
-    )
-    from app.agents.browser.ui_helpers import (
-        click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
-    )
-    from app.agents.browser.ui_helpers import (
-        kill_overlays as ui_kill_overlays,
-    )
-    from app.agents.browser.ui_helpers import (
-        safe_wait_selector as ui_safe_wait_selector,
-    )
-except ImportError:
-    ui_safe_wait_selector = None
-    ui_accept_cookies_if_present = None
-    ui_click_continue_shopping_if_present = None
-    ui_kill_overlays = None
-    nav_normalize_url = None
-    nav_normalize_abs_url = None
+from app.agents.browser.navigation_helpers import (
+    normalize_abs_url as nav_normalize_abs_url,
+)
+from app.agents.browser.navigation_helpers import (
+    normalize_url as nav_normalize_url,
+)
+from app.agents.browser.ui_helpers import (
+    accept_cookies_if_present as ui_accept_cookies_if_present,
+)
+from app.agents.browser.ui_helpers import (
+    click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
+)
+from app.agents.browser.ui_helpers import (
+    kill_overlays as ui_kill_overlays,
+)
+from app.agents.browser.ui_helpers import (
+    safe_wait_selector as ui_safe_wait_selector,
+)
 
 # P1-1 Phase 2: URL検証 pure functions を url_rules から import
 from app.agents.browser.url_rules import (

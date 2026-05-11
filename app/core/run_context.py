@@ -13,14 +13,8 @@ import json
 import logging
 from pathlib import Path
 
-try:
-    from playwright.async_api import Page as AsyncPage
-except ImportError:
-    AsyncPage = type(None)
-try:
-    from playwright.sync_api import Page as SyncPage
-except ImportError:
-    SyncPage = type(None)
+from playwright.async_api import Page as AsyncPage
+from playwright.sync_api import Page as SyncPage
 
 PageObject = AsyncPage | SyncPage
 

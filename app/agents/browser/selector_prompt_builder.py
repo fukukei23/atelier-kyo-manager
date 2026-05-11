@@ -6,6 +6,8 @@ import json
 import re
 from typing import Any
 
+from bs4 import BeautifulSoup, Comment
+
 
 def build_selector_repair_prompt(
     *,
@@ -195,28 +197,6 @@ def optimize_dom_snippet(
     max_chars: int = 8000,
 ) -> str:
     """DOM Snippet を最適化する（script/style/comment除去、セレクタ周辺に焦点）."""
-    try:
-        from bs4 import BeautifulSoup, Comment
-    except ImportError:
-        # BeautifulSoup が利用できない場合、正規表現で簡易処理
-        html = re.sub(r"<script[^>]*>.*?</script>", "", html, flags=re.DOTALL | re.IGNORECASE)
-        html = re.sub(r"<style[^>]*>.*?</style>", "", html, flags=re.DOTALL | re.IGNORECASE)
-        html = re.sub(r"<!--.*?-->", "", html, flags=re.DOTALL)
-
-        if failed_selector:
-            lines = html.split("\n")
-            for i, line in enumerate(lines):
-                if failed_selector in line:
-                    start = max(0, i - 50)
-                    end = min(len(lines), i + 50)
-                    html = "\n".join(lines[start:end])
-                    break
-
-        if len(html) > max_chars:
-            html = html[:max_chars]
-
-        return html
-
     soup = BeautifulSoup(html, "html.parser")
 
     for tag in soup.find_all(["script", "style"]):

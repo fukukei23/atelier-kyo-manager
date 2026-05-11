@@ -2,6 +2,19 @@
 
 > プロジェクト固有の変更履歴。SSOT（`obsidian-ssot/01_DECISIONS/`）と併せて参照すること。
 
+## 2026-05-11
+
+### P1-3: products.py サービス層抽出（476行→330行）
+- CSV入出力ロジックを新規 `app/services/product_csv_service.py`（182行）に抽出
+- `import_products_from_csv()`, `export_products_csv()`, `export_candidates_csv()` + ヘルパー関数
+- 3ルート（import_csv, export_csv, export_listing_candidates）をサービス委譲に変更
+- テスト: 886 passed, 0 failures
+
+### P1-6: 残存 ImportError ガード整理（31箇所→18箇所）
+- 9ファイルの内部モジュールimport 13箇所を通常importに変更
+- 保持18箇所: オプション外部ライブラリ、未実装モジュール、スクリプトエントリポイント
+- テスト: 886 passed, 0 failures
+
 ## 2026-05-10
 
 ### P2-1: selector_repair_agent.py 分割（755行→170行）
