@@ -152,11 +152,19 @@
 - **実施日**: 2026-05-10
 - **結果**: 既に `.gitignore` に登録済み、実ファイルも未追跡のため作業不要
 
-### P2-5. `plp_driver.py`（1,340行）の分割検討
+### P2-5. `plp_driver.py`（1,344行→272行）の分割 ✅完了（2026-05-11）
 - **対象**: `app/agents/browser/plp_driver.py`
-- **問題概要**: 1,340行の単一ファイル。PLP巡回・ページネーション・抽出等が混在
-- **修正方針**: P1-1のnavigation_driver分割完了後に、同様の観点で分割を検討。プラグインパターン（`plugins/base.py` 参考）の適用余地あり
-- **推定工数**: 3-4時間
+- **問題概要**: 1,344行の単一ファイル。PLP巡回・ページネーション・抽出等が混在
+- **実施日**: 2026-05-11
+- **結果**: 1,344行→272行（80%削減）。Mixin パターン + pure functions で6モジュールに分割:
+  - ✅ `browser/plp_config.py`（66行）— `get_plp_config`, `get_overlay_config`, `get_trap_config` pure functions
+  - ✅ `browser/plp_evidence.py`（142行）— `save_materialize_failure_evidence` 独立関数
+  - ✅ `browser/plp_overlay.py`（219行）— `PlpOverlayMixin`（cookie/geo/generic overlay + legacy wrappers）
+  - ✅ `browser/plp_trap.py`（96行）— `PlpTrapMixin`（trap検出/回復）
+  - ✅ `browser/plp_tile_materializer.py`（159行）— `PlpTileMaterializerMixin`（scroll/wait/count）
+  - ✅ `browser/plp_navigation.py`（200行）— `PlpNavigationMixin`（tile click/PDP遷移/race detection）
+- **外部importer**: `orchestrator/__init__.py`, `orchestrator/self_healing.py` は変更不要（re-exportで対応）
+- **テスト**: 886 passed, 0 failures
 
 ### P2-6. テストカバレッジの底上げ
 - **対象**: `tests/` 全体

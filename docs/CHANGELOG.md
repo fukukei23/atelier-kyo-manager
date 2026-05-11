@@ -4,6 +4,12 @@
 
 ## 2026-05-11
 
+### P2-5: plp_driver.py 分割（1,344行→272行）
+- Mixin パターン + pure functions で6モジュールに分割
+- 新規ファイル: `plp_config.py`(66行), `plp_evidence.py`(142行), `plp_overlay.py`(219行), `plp_trap.py`(96行), `plp_tile_materializer.py`(159行), `plp_navigation.py`(200行)
+- PlpDriver は4つのMixinを継承するthin coreに変更
+- テスト: 886 passed, 0 failures
+
 ### P1-3: products.py サービス層抽出（476行→330行）
 - CSV入出力ロジックを新規 `app/services/product_csv_service.py`（182行）に抽出
 - `import_products_from_csv()`, `export_products_csv()`, `export_candidates_csv()` + ヘルパー関数
