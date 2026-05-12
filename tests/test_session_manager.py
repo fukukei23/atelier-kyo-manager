@@ -1,6 +1,7 @@
 import pytest
 
 from app.agents.browser.session_manager import SessionManager
+from app.agents.browser import session_proxy as sp_mod
 from app.core.run_context import RunContext
 
 
@@ -85,7 +86,7 @@ async def test_session_manager_open_and_close(monkeypatch, tmp_path):
     import app.agents.browser.session_manager as sm_mod
 
     monkeypatch.setattr(sm_mod, "async_playwright", lambda: _AsyncPlaywrightFactory())
-    monkeypatch.setattr(sm_mod, "PROXY_POOL_PATH", tmp_path / "proxy_pool.json")
+    monkeypatch.setattr(sp_mod, "PROXY_POOL_PATH", tmp_path / "proxy_pool.json")
     sessions_dir = tmp_path / "sessions"
     sessions_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr(sm_mod, "SESSION_DIR", sessions_dir)
