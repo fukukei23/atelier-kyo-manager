@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
-from app.agents.browser.extractor import (
+from app.agents.browser.moncler_plp_link_extractor import (
     _get_moncler_rejection_reason,
     _is_valid_moncler_pdp_url,
     extract_moncler_pdp_links,
