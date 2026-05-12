@@ -17,7 +17,7 @@ from typing import Any
 from urllib.parse import urljoin
 
 from app.agents.browser_use_agent import BrowserUseAgent
-from app.agents.failure_analysis_agent import FailureAnalysisAgent
+from app.agents.healing.failure_analysis_agent import FailureAnalysisAgent
 from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
 from app.core.run_context import RunContext
 from app.models.result_models import DiscoveryResult

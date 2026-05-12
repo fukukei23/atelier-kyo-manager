@@ -20,8 +20,8 @@ from typing import Any
 
 from playwright.async_api import BrowserContext, Page, async_playwright
 
-from app.agents.failure_analysis_agent import FailureAnalysisAgent
-from app.agents.self_healing_agent import SelfHealingAgent
+from app.agents.healing.failure_analysis_agent import FailureAnalysisAgent
+from app.agents.healing.self_healing_agent import SelfHealingAgent
 from app.core.run_context import RunContext
 from app.extractors.product_info_extractor import extract_product_info
 from app.models.result_models import DiscoveryResult

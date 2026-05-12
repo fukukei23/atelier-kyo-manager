@@ -12,7 +12,7 @@ APP_ROOT = Path(__file__).resolve().parents[1]
 
 def test_self_healing_agent_module_exists():
     """モジュールファイルが存在することを確認"""
-    agent_path = APP_ROOT / "app" / "agents" / "self_healing_agent.py"
+    agent_path = APP_ROOT / "app" / "agents" / "healing" / "self_healing_agent.py"
     assert agent_path.exists(), f"self_healing_agent.py not found at {agent_path}"
 
 
@@ -20,7 +20,7 @@ def test_self_healing_agent_has_required_attributes():
     """必要な属性が存在するか確認（Playwright依存なし）"""
     import ast
 
-    agent_path = APP_ROOT / "app" / "agents" / "self_healing_agent.py"
+    agent_path = APP_ROOT / "app" / "agents" / "healing" / "self_healing_agent.py"
     with open(agent_path) as f:
         ast.parse(f.read())
 
@@ -84,7 +84,7 @@ def test_fkb_has_minimum_coverage():
 
 def test_self_healing_agent_execute_method_signature():
     """executeメソッドのシグネチャを確認"""
-    agent_path = APP_ROOT / "app" / "agents" / "self_healing_agent.py"
+    agent_path = APP_ROOT / "app" / "agents" / "healing" / "self_healing_agent.py"
     source = agent_path.read_text()
 
     # async def execute(...) が存在すること
@@ -96,7 +96,7 @@ def test_self_healing_agent_execute_method_signature():
 
 def test_self_healing_agent_has_circuit_breaker():
     """Circuit Breaker関連の属性・定数を確認"""
-    agent_path = APP_ROOT / "app" / "agents" / "self_healing_agent.py"
+    agent_path = APP_ROOT / "app" / "agents" / "healing" / "self_healing_agent.py"
     source = agent_path.read_text()
 
     # CB定数

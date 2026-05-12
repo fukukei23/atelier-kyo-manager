@@ -111,7 +111,7 @@ class ProxyScrapeAgent:
         from pathlib import Path
 
         from app.agents.code_update_agent import CodeUpdateAgent
-        from app.agents.self_healing_agent import SelfHealingAgent
+        from app.agents.healing.self_healing_agent import SelfHealingAgent
 
         proxy = site_conf.get("proxy_agent", {}) or {}
         allow_code_changes = bool(proxy.get("allow_code_changes", False))

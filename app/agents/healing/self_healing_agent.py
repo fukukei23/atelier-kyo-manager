@@ -19,9 +19,9 @@ from typing import Any
 
 from playwright.async_api import Page
 
-from app.agents.failure_analysis_agent import FKB
-from app.agents.page_recovery_agent import PageRecoveryAgent
-from app.agents.selector_repair_agent import SelectorRepairAgent
+from app.agents.healing.failure_analysis_agent import FKB
+from app.agents.healing.page_recovery_agent import PageRecoveryAgent
+from app.agents.healing.selector_repair_agent import SelectorRepairAgent
 from app.core.run_context import RunContext
 
 logger = logging.getLogger(__name__)

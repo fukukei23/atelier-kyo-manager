@@ -14,7 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from app.agents.self_healing_patch_adapter import SelfHealingPatchAdapter
+from app.agents.healing.self_healing_patch_adapter import SelfHealingPatchAdapter
 
 logger = logging.getLogger(__name__)
 

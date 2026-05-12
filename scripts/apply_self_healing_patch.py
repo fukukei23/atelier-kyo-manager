@@ -19,7 +19,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from app.agents.self_healing_patch_applier import SelfHealingPatchApplier
+from app.agents.healing.self_healing_patch_applier import SelfHealingPatchApplier
 
 logging.basicConfig(
     level=logging.INFO,

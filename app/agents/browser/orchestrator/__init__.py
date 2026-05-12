@@ -25,17 +25,17 @@ from .self_healing import SelfHealingMixin
 
 from app.agents.browser.telemetry import TelemetryClient
 from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
-from app.agents.failure_analysis_agent import FailureAnalysisAgent
-from app.agents.self_healing_patch_agent import SelfHealingPatchAgent
-from app.agents.self_healing_sandbox import SelfHealingSandbox
-from app.agents.self_healing_patch_applier import SelfHealingPatchApplier
+from app.agents.healing.failure_analysis_agent import FailureAnalysisAgent
+from app.agents.healing.self_healing_patch_agent import SelfHealingPatchAgent
+from app.agents.healing.self_healing_sandbox import SelfHealingSandbox
+from app.agents.healing.self_healing_patch_applier import SelfHealingPatchApplier
 
 # self_healing_policy は未実装モジュール（optional import）
 try:
-    from app.agents.self_healing_policy import SelfHealingPolicy
+    from app.agents.healing.self_healing_policy import SelfHealingPolicy
 except ImportError:
     SelfHealingPolicy = None  # type: ignore
-from app.agents.selector_repair_agent import SelectorRepairAgent
+from app.agents.healing.selector_repair_agent import SelectorRepairAgent
 
 # e2e_success_stage は未実装モジュール（optional import）
 try:
