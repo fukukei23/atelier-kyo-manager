@@ -14,6 +14,7 @@ from app.config.constants import (
     PAYMENT_METHOD_EXTENSION_DAYS,
 )
 from app.core.pricing import PricingInput, calculate_pricing
+from app.core.pricing.schemas import nz
 from app.extensions import db
 
 
@@ -77,9 +78,6 @@ class Order(db.Model):
 
     def calc_profit(self) -> None:
         """利益・手数料を自動計算"""
-
-        def nz(x):
-            return float(x or 0.0)
 
         inp = PricingInput(
             purchase_price=nz(self.purchase_cost),

@@ -18,6 +18,7 @@ from app.config.constants import (
     TRANSFER_FEE,
 )
 from app.core.pricing import PricingInput, calculate_pricing
+from app.core.pricing.schemas import nz
 from app.extensions import db
 
 # ブランド階層判定キーワード
@@ -152,9 +153,6 @@ class Product(db.Model):
     def _calculate_pricing(self):
         """価格計算の内部メソッド"""
 
-        def nz(x):
-            return float(x or 0.0)
-
         inp = PricingInput(
             purchase_price=nz(self.purchase_price),
             selling_price=nz(self.selling_price),
@@ -172,9 +170,6 @@ class Product(db.Model):
 
     def recommended_selling_price(self) -> float | None:
         """目標利益率を満たす推奨売価"""
-
-        def nz(x):
-            return float(x or 0.0)
 
         cost = nz(self.purchase_price) + nz(self.customs_duty) + nz(self.shipping_cost) + nz(self.procurement_fee)
         if cost <= 0:

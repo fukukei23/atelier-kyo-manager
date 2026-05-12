@@ -8,9 +8,9 @@
 # - 収益性分析とエクスポート機能を追加。
 #
 # 変更点 (v2.0):
-# - [収益性分析] 仕入れ価格、销售価格、利益率を表示
+# - [収益性分析] 仕入れ価格、販売価格、利益率を表示
 # - [エクスポート] CSV/JSON エクスポート機能
-# - [トレンド分析] 价格趋势と最适合点を算出
+# - [トレンド分析] 価格トレンドと最適価格ポイントを算出
 # - [信頼区間] EMAの信頼区間を追加
 # ======================================================================
 from __future__ import annotations
@@ -75,7 +75,7 @@ class HistoryRow:
 
 @dataclass
 class ProfitabilityMetrics:
-    """収益性分析结果"""
+    """収益性分析結果"""
 
     current_profit: float | None = None
     current_profit_rate: float | None = None
@@ -186,11 +186,11 @@ def calculate_profitability_metrics(
 
     # 推奨アクション
     if trend == "rising":
-        metrics.recommendation = "价格上涨中 - 仕入れ的最佳時期"
+        metrics.recommendation = "価格上昇中 - 仕入れの最適タイミング"
     elif trend == "falling":
-        metrics.recommendation = "价格下跌中 - 销售的最佳時期"
+        metrics.recommendation = "価格下落中 - 販売の最適タイミング"
     else:
-        metrics.recommendation = "价格稳定 - 監視を継続"
+        metrics.recommendation = "価格安定 - 監視を継続"
 
     return metrics
 
