@@ -78,8 +78,8 @@ def overrides_json():
 @pytest.fixture
 def orchestrator_with_sandbox():
     """Sandbox 付き BrowserOrchestrator インスタンス"""
-    from app.agents.self_healing_patch_agent import SelfHealingPatchAgent
-    from app.agents.self_healing_sandbox import SelfHealingSandbox
+    from app.agents.healing.self_healing_patch_agent import SelfHealingPatchAgent
+    from app.agents.healing.self_healing_sandbox import SelfHealingSandbox
 
     sandbox = SelfHealingSandbox()
     patch_agent = SelfHealingPatchAgent(runtime_kwargs={})
@@ -320,7 +320,7 @@ async def test_run_with_self_healing_once_no_sandbox(
     overrides_json,
 ):
     """Sandbox が利用できない場合、再実行しないことを確認"""
-    from app.agents.self_healing_patch_agent import SelfHealingPatchAgent
+    from app.agents.healing.self_healing_patch_agent import SelfHealingPatchAgent
 
     patch_agent = SelfHealingPatchAgent(runtime_kwargs={})
     orchestrator = BrowserOrchestrator(

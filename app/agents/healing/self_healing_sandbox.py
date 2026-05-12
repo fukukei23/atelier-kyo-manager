@@ -11,8 +11,8 @@ import copy
 import logging
 from typing import Any
 
-from app.agents.self_healing_patch_adapter import SelfHealingPatchAdapter
-from app.agents.self_healing_patch_applier import SelfHealingPatchApplier
+from app.agents.healing.self_healing_patch_adapter import SelfHealingPatchAdapter
+from app.agents.healing.self_healing_patch_applier import SelfHealingPatchApplier
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ CR-ATELIER-002 Step 6: Moncler Self-Healing Agent のテスト
 
 import pytest
 
-from app.agents.self_healing_agent import SelfHealingAgent
+from app.agents.healing.self_healing_agent import SelfHealingAgent
 
 
 class TestMonclerSelfHealing:

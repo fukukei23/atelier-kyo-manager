@@ -218,7 +218,7 @@ class MonclerNavMixin:
         try:
             from app.agents.moncler_patch_builder import process_moncler_self_healing_results
             from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
-            from app.agents.self_healing_agent import SelfHealingAgent
+            from app.agents.healing.self_healing_agent import SelfHealingAgent
 
             dom_snapshot_path = None
             if ctx.run_context:
