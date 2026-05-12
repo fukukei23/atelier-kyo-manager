@@ -463,61 +463,23 @@ async def extract_title_price(page) -> dict[str, Any]:
     except Exception:
         logger.debug("extract_title_price: price セレクタ取得に失敗")
 
-    # 通貨推定（簡易）
+    # 通貨推定（辞書マッチ）
+    _CURRENCY_PREFIXES: list[tuple[str, str]] = [
+        ("NZ$", "NZD"), ("NT$", "TWD"), ("MX$", "MXN"), ("HK$", "HKD"),
+        ("S$", "SGD"), ("C$", "CAD"), ("CA$", "CAD"), ("A$", "AUD"),
+        ("R$", "BRL"), ("AR$", "ARS"), ("CHF", "CHF"), ("Fr", "CHF"),
+        ("kr", "SEK"), ("zł", "PLN"), ("Ft", "HUF"), ("Kč", "CZK"),
+        ("د.إ", "AED"), ("﷼", "SAR"), ("ر.س", "SAR"),
+    ]
     if price_text:
         stripped = price_text.strip()
-        if stripped.startswith("£"):
-            currency = "GBP"
-        elif stripped.startswith("$"):
-            currency = "USD"
-        elif stripped.startswith("€"):
-            currency = "EUR"
-        elif stripped.startswith("¥") or stripped.startswith("￥"):
-            currency = "JPY"
-        elif stripped.startswith("₩"):
-            currency = "KRW"
-        elif stripped.startswith("₹"):
-            currency = "INR"
-        elif stripped.startswith("₽"):
-            currency = "RUB"
-        elif stripped.startswith("₱"):
-            currency = "PHP"
-        elif stripped.startswith("C$") or stripped.startswith("CA$"):
-            currency = "CAD"
-        elif stripped.startswith("A$"):
-            currency = "AUD"
-        elif stripped.startswith("NZ$"):
-            currency = "NZD"
-        elif stripped.startswith("S$"):
-            currency = "SGD"
-        elif stripped.startswith("HK$"):
-            currency = "HKD"
-        elif stripped.startswith("NT$"):
-            currency = "TWD"
-        elif stripped.startswith("MX$"):
-            currency = "MXN"
-        elif stripped.startswith("R$"):
-            currency = "BRL"
-        elif stripped.startswith("AR$"):
-            currency = "ARS"
-        elif stripped.startswith("CHF") or stripped.startswith("Fr"):
-            currency = "CHF"
-        elif stripped.startswith("kr"):
-            currency = "SEK"  # 北欧通貨で曖昧だが簡易推定
-        elif stripped.startswith("zł"):
-            currency = "PLN"
-        elif stripped.startswith("Ft"):
-            currency = "HUF"
-        elif stripped.startswith("Kč"):
-            currency = "CZK"
-        elif stripped.startswith("฿"):
-            currency = "THB"
-        elif stripped.startswith("₺"):
-            currency = "TRY"
-        elif stripped.startswith("د.إ"):
-            currency = "AED"
-        elif stripped.startswith("﷼") or stripped.startswith("ر.س"):
-            currency = "SAR"
+        for prefix, code in _CURRENCY_PREFIXES:
+            if stripped.startswith(prefix):
+                currency = code
+                break
+        else:
+            first = stripped[0] if stripped else ""
+            currency = CURRENCY_SYMBOLS.get(first)
 
     return {
         "title": title_text.strip(),

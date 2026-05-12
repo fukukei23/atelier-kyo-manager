@@ -3,6 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+def nz(value: float | int | None) -> float:
+    """None を 0 に変換するヘルパー（価格計算用）。"""
+    return value if value is not None else 0.0
+
+
 @dataclass
 class PricingInput:
     """
