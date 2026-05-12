@@ -20,13 +20,17 @@ from playwright.async_api import (
     async_playwright,
 )
 
+from app.agents.browser.session_proxy import (
+    MAX_PROXY_RETRIES_PER_RUN,
+    ProxyEntry,
+    ProxyManager,
+)
 from app.core.run_context import RunContext
 
 # Stealth モジュールをインポート
 try:
     from scraping.stealth import apply_stealth_to_context, build_stealth_params_from_site_config
 except ImportError:
-    # scraping/stealth.py が存在しない場合のフォールバック
     build_stealth_params_from_site_config = None
     apply_stealth_to_context = None
 
@@ -43,8 +47,6 @@ VIEWPORT_POOL = [
     {"width": 1920, "height": 1080},
     {"width": 1280, "height": 800},
 ]
-PROXY_POOL_PATH = Path("app/config/proxy_pool.json")
-MAX_PROXY_RETRIES_PER_RUN = 3
 SESSION_DIR = Path("instance/sessions")
 EXTERNAL_BLOCKLIST_HOSTS = (
     "line.me",
@@ -66,16 +68,6 @@ EXTERNAL_BLOCKLIST_HOSTS = (
 )
 
 UrlNormalizer = Callable[[str], str] | None
-
-
-@dataclass
-class ProxyEntry:
-    label: str
-    server: str
-    username: str | None = None
-    password: str | None = None
-    country: str | None = None
-    active: bool = True
 
 
 @dataclass
@@ -123,8 +115,7 @@ class SessionManager:
         self._page: Page | None = None
         self._handles: _SessionHandles | None = None
 
-        self._proxy_pool: dict[str, list[ProxyEntry]] = self._load_proxy_pool()
-        self._proxy_index: dict[str, int] = {}
+        self._proxy_mgr = ProxyManager()
 
     @property
     def context(self) -> BrowserContext | None:
@@ -220,7 +211,7 @@ class SessionManager:
             source = "discovery_settings"
         # 4. 明示指定が無い場合のみ、proxy_poolの存在でデフォルト決定
         else:
-            if self._get_proxy_list_for_site(self.site):
+            if self._proxy_mgr.get_list_for_site(self.site):
                 use_proxy_value = True
                 source = "default (proxies configured)"
             else:
@@ -238,7 +229,7 @@ class SessionManager:
         )
 
         # proxyが有効だがproxy_poolにproxyが無い場合の警告
-        if use_proxy_flag and not self._get_proxy_list_for_site(self.site):
+        if use_proxy_flag and not self._proxy_mgr.get_list_for_site(self.site):
             self.logger.warning(
                 "[SessionManager] use_proxy=True but no proxies configured for %s. Falling back to direct connection.",
                 self.site,
@@ -254,9 +245,9 @@ class SessionManager:
             proxy_arg = None
             proxy_entry: ProxyEntry | None = None
             if use_proxy_flag:
-                proxy_entry = self._get_proxy_for_site(self.site, self.site_config)
+                proxy_entry = self._proxy_mgr.get_for_site(self.site, self.site_config, self.runtime_kwargs)
                 if proxy_entry:
-                    proxy_arg = self._build_playwright_proxy_arg(proxy_entry)
+                    proxy_arg = ProxyManager.build_playwright_arg(proxy_entry)
                     self.logger.info(
                         "[SessionManager] attempt %d/%d using proxy=%s (%s)",
                         attempt,
@@ -597,90 +588,6 @@ class SessionManager:
           })();
         """
         )
-
-    def _get_proxy_list_for_site(self, site: str) -> list[ProxyEntry]:
-        if not site:
-            return []
-        candidates: list[str] = [site, site.upper(), site.lower()]
-        base = site
-        for suffix in ["_OFFICIAL", "-OFFICIAL", "_official", "-official"]:
-            if base.endswith(suffix):
-                base = base[: -len(suffix)]
-                break
-        if base and base != site:
-            candidates.extend([base, base.upper(), base.lower()])
-        seen: set[str] = set()
-        ordered_candidates: list[str] = []
-        for cand in candidates:
-            if cand not in seen:
-                seen.add(cand)
-                ordered_candidates.append(cand)
-        for key in ordered_candidates:
-            key_norm = key.upper()
-            if key_norm in self._proxy_pool:
-                return self._proxy_pool[key_norm]
-        return self._proxy_pool.get("DEFAULT", [])
-
-    def _choose_proxy_for_site(self, site: str) -> ProxyEntry | None:
-        proxies = self._get_proxy_list_for_site(site)
-        if not proxies:
-            return None
-        site_key = (site or "").upper()
-        idx = self._proxy_index.get(site_key, 0)
-        for _ in range(len(proxies)):
-            entry = proxies[idx % len(proxies)]
-            idx += 1
-            if entry.active:
-                self._proxy_index[site_key] = idx % len(proxies)
-                return entry
-        return None
-
-    def _get_proxy_for_site(self, site: str, site_config: dict[str, Any]) -> ProxyEntry | None:
-        if not self._proxy_pool:
-            return None
-        site_key = site or site_config.get("id") or self.runtime_kwargs.get("site_name")
-        self._get_proxy_list_for_site(site_key or "")
-        chosen = self._choose_proxy_for_site(site_key or "")
-        if chosen:
-            self.logger.info("[SessionManager] chosen proxy for site=%s → %s", site_key, chosen.server)
-        return chosen
-
-    def _build_playwright_proxy_arg(self, entry: ProxyEntry) -> dict[str, str]:
-        proxy: dict[str, str] = {"server": entry.server}
-        if entry.username:
-            proxy["username"] = entry.username
-        if entry.password:
-            proxy["password"] = entry.password
-        return proxy
-
-    def _load_proxy_pool(self) -> dict[str, list[ProxyEntry]]:
-        if not PROXY_POOL_PATH.exists():
-            return {}
-        try:
-            raw = json.loads(PROXY_POOL_PATH.read_text(encoding="utf-8"))
-        except Exception as e:
-            self.logger.warning(f"[SessionManager] failed to load proxy pool: {e}")
-            return {}
-        pool: dict[str, list[ProxyEntry]] = {}
-        for key, cfg in (raw or {}).items():
-            entries: list[ProxyEntry] = []
-            for p in (cfg or {}).get("proxies") or []:
-                try:
-                    entries.append(
-                        ProxyEntry(
-                            label=p.get("label") or f"{key}_proxy",
-                            server=p["server"],
-                            username=p.get("username"),
-                            password=p.get("password"),
-                            country=p.get("country"),
-                            active=bool(p.get("active", True)),
-                        )
-                    )
-                except Exception as e:
-                    self.logger.warning(f"[SessionManager] invalid proxy entry under '{key}': {p} ({e})")
-            if entries:
-                pool[key.upper()] = entries
-        return pool
 
     def _get_session_file(self) -> Path:
         ds = self.site_config.get("discovery_settings") or {}
