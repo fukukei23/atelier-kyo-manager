@@ -359,7 +359,7 @@ class TestStreamCall:
 
 
 # ==============================
-# _save_chat_history のテスト
+# save_chat_history のテスト（chat_history_saver.py に移動済み）
 # ==============================
 
 
@@ -370,19 +370,18 @@ class TestSaveChatHistory:
         return ctrl
 
     def test_import_error_skips_silently(self):
-        ctrl = self._make_ctrl()
         result = GenerateResult(text="test", tokens={"input": 10, "output": 5})
 
         with patch.dict("sys.modules", {"app": None, "app.models": None}):
-            ctrl._save_chat_history("hello", result)
+            from app.utils.chat_history_saver import save_chat_history
+            save_chat_history("hello", result)
 
-    @patch("app.utils.ai_llm_controller.datetime")
+    @patch("app.utils.chat_history_saver.datetime")
     def test_saves_user_and_assistant_messages(self, mock_dt):
         mock_dt.utcnow.return_value = "2026-05-10T00:00:00"
         mock_db = MagicMock()
         mock_chat_history = MagicMock()
 
-        ctrl = self._make_ctrl()
         result = GenerateResult(
             text="AI response",
             tokens={"input": 100, "output": 50},
@@ -397,18 +396,18 @@ class TestSaveChatHistory:
                 "app.models": MagicMock(ChatHistory=mock_chat_history),
             },
         ):
-            ctrl._save_chat_history("hello", result)
+            from app.utils.chat_history_saver import save_chat_history
+            save_chat_history("hello", result)
 
         assert mock_db.session.add.call_count == 2
         mock_db.session.commit.assert_called_once()
 
-    @patch("app.utils.ai_llm_controller.datetime")
+    @patch("app.utils.chat_history_saver.datetime")
     def test_db_error_rolls_back(self, mock_dt):
         mock_dt.utcnow.return_value = "2026-05-10T00:00:00"
         mock_db = MagicMock()
         mock_db.session.commit.side_effect = RuntimeError("DB error")
 
-        ctrl = self._make_ctrl()
         result = GenerateResult(text="test", tokens={})
 
         with patch.dict(
@@ -418,14 +417,14 @@ class TestSaveChatHistory:
                 "app.models": MagicMock(ChatHistory=MagicMock()),
             },
         ):
-            ctrl._save_chat_history("hello", result)
+            from app.utils.chat_history_saver import save_chat_history
+            save_chat_history("hello", result)
 
         mock_db.session.rollback.assert_called_once()
 
     def test_handles_int_tokens(self):
         mock_db = MagicMock()
 
-        # ChatHistory が実際の kwargs を保持するようにする
         created = []
 
         def fake_chat_history(**kwargs):
@@ -436,7 +435,6 @@ class TestSaveChatHistory:
             created.append(m)
             return m
 
-        ctrl = self._make_ctrl()
         result = GenerateResult(text="test", tokens=150)
 
         with patch.dict(
@@ -446,9 +444,9 @@ class TestSaveChatHistory:
                 "app.models": MagicMock(ChatHistory=fake_chat_history),
             },
         ):
-            ctrl._save_chat_history("hello", result)
+            from app.utils.chat_history_saver import save_chat_history
+            save_chat_history("hello", result)
 
-        # 2件目が assistant メッセージ
         assert created[1]._kwargs.get("tokens") == 150
 
 
@@ -466,7 +464,8 @@ class TestGenerate:
     @patch("app.utils.ai_llm_controller.CACHE")
     @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
     @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
-    def test_cache_hit_returns_cached(self, mock_cache):
+    @patch("app.utils.chat_history_saver.save_chat_history")
+    def test_cache_hit_returns_cached(self, mock_save, mock_cache):
         mock_cache.get.return_value = {
             "text": "cached result",
             "tokens": {"input": 10, "output": 5},
@@ -475,9 +474,7 @@ class TestGenerate:
             "sentiment": "NEUTRAL",
         }
         ctrl = self._make_ctrl()
-
-        with patch.object(ctrl, "_save_chat_history"):
-            result = ctrl.generate("hello")
+        result = ctrl.generate("hello")
 
         assert result.text == "cached result"
         assert result.cached is True
@@ -486,7 +483,8 @@ class TestGenerate:
     @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
     @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
     @patch.object(AILlmController, "_generate_with_retry")
-    def test_cache_miss_generates_and_saves(self, mock_retry, mock_cache):
+    @patch("app.utils.chat_history_saver.save_chat_history")
+    def test_cache_miss_generates_and_saves(self, mock_save, mock_retry, mock_cache):
         mock_cache.get.return_value = None
         mock_retry.return_value = GenerateResult(
             text="new result",
@@ -495,9 +493,7 @@ class TestGenerate:
             model_family="openai",
         )
         ctrl = self._make_ctrl()
-
-        with patch.object(ctrl, "_save_chat_history") as mock_save:
-            result = ctrl.generate("hello")
+        result = ctrl.generate("hello")
 
         assert result.text == "new result"
         assert result.cached is False
@@ -508,13 +504,12 @@ class TestGenerate:
     @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
     @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
     @patch.object(AILlmController, "_generate_with_retry")
-    def test_task_type_selects_family(self, mock_retry, mock_cache):
+    @patch("app.utils.chat_history_saver.save_chat_history")
+    def test_task_type_selects_family(self, mock_save, mock_retry, mock_cache):
         mock_cache.get.return_value = None
         mock_retry.return_value = GenerateResult(text="ok", model_family="gemini")
         ctrl = self._make_ctrl()
-
-        with patch.object(ctrl, "_save_chat_history"):
-            ctrl.generate("analyze this", task_type="analysis")
+        ctrl.generate("analyze this", task_type="analysis")
 
         mock_retry.assert_called_once()
         assert mock_retry.call_args[0][0] == "gemini"

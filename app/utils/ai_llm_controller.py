@@ -18,7 +18,6 @@ import logging
 import os
 import time
 from collections.abc import Callable
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Literal
 
@@ -34,8 +33,6 @@ from opentelemetry import trace
 tracer = trace.get_tracer("ai_llm_controller")
 
 # ---------- キャッシュ ----------
-import contextlib
-
 import diskcache
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / "instance" / "llm_cache"
@@ -50,20 +47,10 @@ try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
-try:
-    from transformers import pipeline
 
-    LOCAL_NLP = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
-except ImportError:
-    LOCAL_NLP = None
-try:
-    from llama_cpp import Llama
-
-    # 注意: モデルパスは環境に合わせて調整してください
-    model_path = Path(__file__).resolve().parents[2] / "models" / "llama-7b-q4_0.gguf"
-    LOCAL_LLAMA = Llama(model_path=str(model_path), n_ctx=2048) if model_path.exists() else None
-except Exception:
-    LOCAL_LLAMA = None
+# Heavy imports — 遅延初期化（アプリ起動をブロックしない）
+LOCAL_NLP = None
+LOCAL_LLAMA = None
 
 
 # ---------- 設定ローダ ----------
@@ -186,7 +173,8 @@ class AILlmController:
             CACHE.set(cache_key, result.to_dict(), expire=2592000)  # 30日TTL
 
             # チャット履歴をデータベースに保存
-            self._save_chat_history(prompt, result)
+            from app.utils.chat_history_saver import save_chat_history
+            save_chat_history(prompt, result)
 
             return result
 
@@ -201,8 +189,14 @@ class AILlmController:
     ) -> GenerateResult:
         families = [family, "openai", "deepseek", "local"] if family != "local" else ["local"]
         for attempt, fam in enumerate(families, 1):
-            if fam == "local" and not LOCAL_LLAMA:
-                continue  # ローカルモデルがなければスキップ
+            if fam == "local" and LOCAL_LLAMA is None:
+                try:
+                    from llama_cpp import Llama
+                except ImportError:
+                    continue
+                model_path = Path(__file__).resolve().parents[2] / "models" / "llama-7b-q4_0.gguf"
+                if not model_path.exists():
+                    continue
             try:
                 logger.info(f"Attempt {attempt} with {fam}")
                 if stream and fam != "local":
@@ -238,7 +232,18 @@ class AILlmController:
             txt = cmpl.choices[0].message.content or ""
             usage = cmpl.usage.model_dump() if cmpl.usage else {}
             return txt, usage
-        if fam == "local" and LOCAL_LLAMA:
+        if fam == "local":
+            global LOCAL_LLAMA
+            if LOCAL_LLAMA is None:
+                try:
+                    from llama_cpp import Llama
+                    model_path = Path(__file__).resolve().parents[2] / "models" / "llama-7b-q4_0.gguf"
+                    if model_path.exists():
+                        LOCAL_LLAMA = Llama(model_path=str(model_path), n_ctx=2048)
+                except Exception:
+                    pass
+            if LOCAL_LLAMA is None:
+                raise RuntimeError("Local Llama model not available")
             out = LOCAL_LLAMA(prompt, max_tokens=512, temperature=0.3)
             txt = out["choices"][0]["text"]
             usage = {"input": len(prompt) // 4, "output": len(txt) // 4}
@@ -272,63 +277,18 @@ class AILlmController:
         return inp * c["input"] + out * c["output"]
 
     def _sentiment(self, text: str) -> Literal["POSITIVE", "NEGATIVE", "NEUTRAL"]:
-        if LOCAL_NLP:
+        global LOCAL_NLP
+        if LOCAL_NLP is None:
             try:
-                label = LOCAL_NLP(text[:512])[0]["label"]
-                return "POSITIVE" if label == "POSITIVE" else "NEGATIVE"
+                from transformers import pipeline
+                LOCAL_NLP = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
             except Exception:
-                pass
-        return "NEUTRAL"
-
-    def _save_chat_history(self, prompt: str, result: GenerateResult) -> None:
-        """
-        チャット履歴をデータベースに保存
-        再起動後も履歴が保持されるようにする
-        """
+                return "NEUTRAL"
         try:
-            import os
-            import uuid  # noqa: F401
-
-            from app import db
-            from app.models import ChatHistory
-
-            # セッションIDを取得（環境変数から、またはデフォルト）
-            session_id = os.getenv("CHAT_SESSION_ID", "default")
-
-            # トークン数の計算
-            total_tokens = None
-            if result.tokens:
-                if isinstance(result.tokens, dict):
-                    total_tokens = result.tokens.get("input", 0) + result.tokens.get("output", 0)
-                    if total_tokens == 0:
-                        total_tokens = result.tokens.get("prompt_tokens", 0) + result.tokens.get("completion_tokens", 0)
-                elif isinstance(result.tokens, (int, float)):
-                    total_tokens = int(result.tokens)
-
-            # ユーザーのメッセージを保存
-            user_msg = ChatHistory(session_id=session_id, role="user", content=prompt, created_at=datetime.utcnow())
-            db.session.add(user_msg)
-
-            # アシスタントのレスポンスを保存
-            assistant_msg = ChatHistory(
-                session_id=session_id,
-                role="assistant",
-                content=result.text,
-                model_family=result.model_family,
-                tokens=total_tokens,
-                cost_usd=result.cost_usd,
-                created_at=datetime.utcnow(),
-            )
-            db.session.add(assistant_msg)
-
-            db.session.commit()
-            logger.info(f"Chat history saved for session {session_id}")
-        except ImportError:
-            logger.debug("ChatHistory model not available, skipping database save")
-        except Exception as e:
-            logger.warning(f"Failed to save chat history: {e}")
-            with contextlib.suppress(BaseException):
-                db.session.rollback()
+            label = LOCAL_NLP(text[:512])[0]["label"]
+            return "POSITIVE" if label == "POSITIVE" else "NEGATIVE"
+        except Exception:
+            return "NEUTRAL"
 
     # ---- クラスメソッド：簡易呼び出し ----
     @classmethod
