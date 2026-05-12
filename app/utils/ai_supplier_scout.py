@@ -1,30 +1,16 @@
 """
 ai_supplier_scout.py (プロダクション・レディネス版)
 ======================================================================
-Registry: app/utils/ai_supplier_scout.py
-Rev: 2025-09-08 10:13 JST
+Playwright(sync)による価格スカウトCLI。
 
-機能概要:
-- Playwright(sync)による価格スカウトCLIの完成形。
-- ★戦略更新★「プロダクション・レディネス・アップデート」:
-  - 高速化: --speed-upフラグで画像/広告等をブロックし、動作を高速化。
-  - 安定性向上: PDP遷移後にURLパターン待機を追加し、描画遅延への耐性を強化。
-  - 分析性向上: Timeoutとその他エラーを区別し、ログと結果の粒度を向上。
-  - 既存のbot対策、運用安定性、後方互換性はすべて維持。
-
---- 操作するソフト/前提 ---
-- Python 3.10 以上
-- Playwright 1.42.0 (`pip install "playwright==1.42.0"`)
-- playwright install chromium
-
---- 使用方法 (コマンドプロンプト or PowerShell) ---
-# 1. 通常実行 (SSENSE, 人間のようにトップページから)
+--- 使用方法 ---
+# 通常実行
 python -m app.utils.ai_supplier_scout "Gucci Horsebit 1955" --sites SSENSE --headful
 
-# 2. 高速モードで実行
+# 高速モード
 python -m app.utils.ai_supplier_scout "Gucci Horsebit 1955" --sites SSENSE --speed-up
 
-# 3. PDPのURLを直接指定
+# PDP直指定
 python -m app.utils.ai_supplier_scout "DUMMY" --pdp-url "https://www.ssense.com/..."
 ======================================================================
 """
@@ -39,8 +25,6 @@ import random
 import re
 import sys
 import time
-from dataclasses import asdict, dataclass, field
-from dataclasses import fields as dataclass_fields
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote_plus, urlparse
@@ -48,25 +32,19 @@ from urllib.parse import quote_plus, urlparse
 from playwright.sync_api import Browser, BrowserContext, Page, Route, sync_playwright
 from playwright.sync_api import TimeoutError as PWTimeout
 
-# === FXユーティリティ（分離モジュール） ===
-from app.utils.fx_utils import (
-    get_fx_table_jpy,
-    parse_fx_rates_str,
-)
+from app.utils.fx_utils import get_fx_table_jpy, parse_fx_rates_str
+from app.utils.scout_config import APP_ROOT, load_config_sites
+from app.utils.scout_currency import convert_price, detect_currency, to_number
+from app.utils.scout_models import SiteConfig, SiteSelectors
 
 # ---------------------------------------------------------
 # パス/出力設定
 # ---------------------------------------------------------
-APP_ROOT = Path(__file__).resolve().parents[2]
 INSTANCE_ROOT = APP_ROOT / "instance"
 LOG_DIR = INSTANCE_ROOT / "logs"
 SS_DIR = LOG_DIR / "screenshots"
 ERR_JSON = LOG_DIR / "supplier_scout_last_error.json"
 USER_DATA_DIR = INSTANCE_ROOT / "pw_profile" / "supplier_scout"
-CFG_LEGACY = APP_ROOT / "config" / "crawler_sites.json"
-SITES_DIR = APP_ROOT / "config" / "sites"
-CFG_BASE = SITES_DIR / "base.json"
-CFG_OVR = SITES_DIR / "overrides.local.json"
 SS_DIR.mkdir(parents=True, exist_ok=True)
 USER_DATA_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -86,245 +64,6 @@ def save_last_error(site: str, kind: str, message: str, screenshot: str | None =
         payload.update(extra)
     with open(ERR_JSON, "w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
-
-
-# ---------------------------------------------------------
-# 通貨/価格ユーティリティ
-# ---------------------------------------------------------
-_CURRENCY_SIGNS = {
-    "¥": "JPY",
-    "￥": "JPY",
-    "$": "USD",
-    "€": "EUR",
-    "£": "GBP",
-    "₩": "KRW",
-    "₫": "VND",
-    "A$": "AUD",
-    "C$": "CAD",
-}
-_CURR_WORDS = {"JPY": ["JPY", "円"], "USD": ["USD"], "EUR": ["EUR"], "GBP": ["GBP"], "AUD": ["AUD"], "CAD": ["CAD"]}
-
-
-def detect_currency(text: str, currency_hint: str | None = None) -> str:
-    if currency_hint:
-        return currency_hint.upper()
-    for sign, code in _CURRENCY_SIGNS.items():
-        if sign in text:
-            return code
-    up = text.upper()
-    for code, words in _CURR_WORDS.items():
-        if any(w in up for w in words):
-            return code
-    return "UNKNOWN"
-
-
-_PRICE_RE = re.compile(r"([0-9][0-9\.,\s]*)")
-
-
-def to_number(price_text: str) -> int | None:
-    t = price_text.replace("\u00a0", " ")
-    m = _PRICE_RE.search(t)
-    if not m:
-        return None
-    digits = re.sub(r"[^\d]", "", m.group(1))
-    return int(digits) if digits else None
-
-
-def convert_price(price: int, currency: str, fx_to: str | None, fx_table: dict[str, float]) -> float | None:
-    if not fx_to:
-        return None
-    fx_to, currency = fx_to.upper(), (currency or "").upper()
-    if fx_to == "JPY":
-        if currency == "JPY":
-            return float(price)
-        rate = fx_table.get(currency)
-        return price * rate if rate else None
-    return None
-
-
-# ---------------------------------------------------------
-# サイト設定モデル
-# ---------------------------------------------------------
-@dataclass
-class SiteSelectors:
-    search_open: list[str] = field(default_factory=list)
-    search_input: list[str] = field(default_factory=list)
-    search_submit: list[str] = field(default_factory=list)
-    results_item: str | None = None
-    first_product_link: str | None = None
-    pdp_title: list[str] = field(default_factory=list)
-    pdp_price: list[str] = field(default_factory=list)
-
-
-@dataclass
-class SiteConfig:
-    name: str
-    home_url: str
-    domains: list[str] = field(default_factory=list)
-    search_mode: str = "human"
-    search_template: str | None = None
-    wait_until: str = "domcontentloaded"
-    timeout_sec: int = 25
-    currency_hint: str | None = None
-    selectors: SiteSelectors = field(default_factory=SiteSelectors)
-    force_ui_search: bool = False
-    notes: str | None = None
-
-
-# ---------------------------------------------------------
-# デフォルトサイト（内蔵）
-# ---------------------------------------------------------
-def default_sites() -> list[SiteConfig]:
-    return [
-        SiteConfig(
-            name="SSENSE",
-            home_url="https://www.ssense.com/ja-jp",
-            domains=["ssense.com"],
-            search_template="https://www.ssense.com/ja-jp/search?q={q}",
-            selectors=SiteSelectors(
-                search_open=[
-                    "a.mobile-header-search",
-                    "i.fa-ssense-magnifier",
-                    "a[data-test='mobileNavigationSearchLink']",
-                    "button[aria-label='Open Search']",
-                ],
-                search_input=[
-                    "#search-form-input",
-                    "input[data-testid='search-input']",
-                    "input[type='search']",
-                    "input[name='q']",
-                ],
-                search_submit=["#searchSubmitIcon", "button[type='submit']"],
-                results_item="a[href*='/product/']",
-                first_product_link="a[href*='/product/']",
-                pdp_title=["h1", "h2#pdpProductNameText", ".pdp-product-title__name"],
-                pdp_price=[
-                    "[data-test='pdpRegularPriceText']",
-                    ".product-price__sale",
-                    "span:has-text('¥')",
-                    "span:has-text('￥')",
-                ],
-            ),
-        ),
-        SiteConfig(
-            name="BUYMA",
-            home_url="https://www.buyma.com/",
-            domains=["buyma.com"],
-            search_template="https://www.buyma.com/r/-/search/?q={q}",
-            selectors=SiteSelectors(
-                search_input=["#search_txt", "input.fab-search-txtarea", "input#srchTxt"],
-                search_submit=["form#search_form", "button#srchBtn"],
-                results_item="a[href*='/item/']",
-                first_product_link="a[href*='/item/']",
-                pdp_title=["h1[itemprop='name']", "h1.product_title", "h1"],
-                pdp_price=["span.Price_Txt", "#price", ".product_price .Price_Txt", "span[itemprop='price']"],
-            ),
-        ),
-        SiteConfig(
-            name="FARFETCH",
-            home_url="https://www.farfetch.com/",
-            domains=["farfetch.com"],
-            search_template="https://www.farfetch.com/shopping/men/items.aspx?q={q}",
-            selectors=SiteSelectors(
-                results_item="a[data-testid='productCard-link'], a[href*='/shopping/']",
-                first_product_link="a[data-testid='productCard-link'], a[href*='/shopping/']",
-                pdp_title=["h1[data-tstid='product-name']", "h1", "span[itemprop='name']"],
-                pdp_price=[
-                    "[data-tstid='priceInfo-original']",
-                    "[data-tstid='priceInfo-onsale']",
-                    "p[data-tstid='priceInfo']",
-                    "span[data-tstid='current-price']",
-                ],
-            ),
-        ),
-        SiteConfig(
-            name="MATCHES",
-            home_url="https://www.matchesfashion.com/",
-            domains=["matchesfashion.com"],
-            search_template="https://www.matchesfashion.com/intl/search?text={q}",
-            selectors=SiteSelectors(
-                results_item="a[href*='/products/']",
-                first_product_link="a[href*='/products/']",
-                pdp_title=["h1", "h1[data-test='pdp-title']", "div[data-test='pdp-title']"],
-                pdp_price=["span[data-test='pdp-price']", "div.prices span.price", "span.now", "span.was"],
-            ),
-        ),
-        SiteConfig(
-            name="GENERIC_PDP",
-            home_url="",
-            domains=[],
-            selectors=SiteSelectors(
-                pdp_title=["h1", "title"],
-                pdp_price=["meta[itemprop='price']", "span[itemprop='price']", "span:has-text('¥')"],
-            ),
-            notes="--pdp-url",
-        ),
-    ]
-
-
-# ---------------------------------------------------------
-# 設定レイヤー読み込み
-# ---------------------------------------------------------
-def _update_dict_recursive(d, u):
-    for k, v in u.items():
-        if isinstance(v, dict):
-            d[k] = _update_dict_recursive(d.get(k, {}), v)
-        else:
-            d[k] = v
-    return d
-
-
-def _load_json_if_exists(path: Path) -> dict:
-    if not path.exists():
-        return {}
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logging.warning(f"Could not load/parse JSON {path.name}: {e}")
-        return {}
-
-
-def _dict_to_siteconfig(d: dict) -> SiteConfig:
-    base_obj = SiteConfig(name="", home_url="")
-    full_dict = asdict(base_obj)
-    full_dict = _update_dict_recursive(full_dict, d)
-    sel_dict = asdict(SiteSelectors())
-    sel_dict = _update_dict_recursive(sel_dict, full_dict.get("selectors", {}))
-    full_dict["selectors"] = SiteSelectors(**sel_dict)
-    valid_keys = {f.name for f in dataclass_fields(SiteConfig)}
-    final_dict = {k: v for k, v in full_dict.items() if k in valid_keys}
-    return SiteConfig(**final_dict)
-
-
-def load_config_sites() -> list[SiteConfig]:
-    log = logging.getLogger("ConfigLoader")
-    loaded_files = []
-    sites_dict_map = {s.name.upper(): asdict(s) for s in default_sites()}
-    base_data = _load_json_if_exists(CFG_BASE)
-    if base_data:
-        loaded_files.append(str(CFG_BASE.relative_to(APP_ROOT)))
-        for site_conf in base_data.get("sites", []):
-            name = (site_conf.get("name") or "").upper()
-            if name in sites_dict_map:
-                sites_dict_map[name] = _update_dict_recursive(sites_dict_map[name], site_conf)
-    overrides_data = _load_json_if_exists(CFG_OVR)
-    if overrides_data:
-        loaded_files.append(str(CFG_OVR.relative_to(APP_ROOT)))
-        for site_conf in overrides_data.get("sites", []):
-            name = (site_conf.get("name") or "").upper()
-            if name in sites_dict_map:
-                sites_dict_map[name] = _update_dict_recursive(sites_dict_map[name], site_conf)
-    legacy_data = _load_json_if_exists(CFG_LEGACY)
-    if legacy_data:
-        loaded_files.append(str(CFG_LEGACY.relative_to(APP_ROOT)))
-        for site_conf in legacy_data.get("sites", []):
-            name = (site_conf.get("name") or "").upper()
-            if name not in sites_dict_map:
-                sites_dict_map[name] = site_conf
-                log.info(f"Loaded '{name}' from legacy config as fallback.")
-    log.info(f"Config loaded from: {', '.join(loaded_files) if loaded_files else 'defaults only'}")
-    return [_dict_to_siteconfig(d) for d in sites_dict_map.values()]
 
 
 # ---------------------------------------------------------
@@ -401,7 +140,6 @@ class SupplierScout:
                 pass
 
     def _block_resources(self, route: Route):
-        """画像、フォント、動画、広告などをブロックする"""
         req = route.request
         rtype = req.resource_type
         url = req.url
@@ -412,7 +150,6 @@ class SupplierScout:
             route.continue_()
 
     def _setup_page(self, page: Page):
-        """ページ共通のセットアップ（リソースブロックなど）"""
         if self.speed_up:
             page.route("**/*", self._block_resources)
 

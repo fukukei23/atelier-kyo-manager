@@ -87,6 +87,41 @@ async def _fill_first(page_or_frame, selectors: list[str], text: str, timeout_ms
 class ShippingAgent:
     """転送倉庫の情報を取得するエージェント（Playwright, Async, 永続セッション対応, UIテキスト優先ログイン）"""
 
+    # ログイン関連セレクタ（UIテキスト優先）
+    _COOKIE_CONSENT_SELECTORS = [
+        "button:has-text('同意')",
+        "button:has-text('Accept')",
+        "button[aria-label='Close']",
+        "button.bs-cookie-consent-accept",
+    ]
+    _LOGIN_PANEL_SELECTORS = [
+        "a:has-text('ログイン')",
+        "a:has-text('登録 / ログイン')",
+        "button:has-text('ログイン')",
+        "button:has-text('登録 / ログイン')",
+    ]
+    _EMAIL_SELECTORS = [
+        "input[placeholder='メールアドレス']",
+        "input[aria-label='メールアドレス']",
+        "input[type='email']",
+        "input[name='email']",
+        "#email, #user_email, input[id*='email']",
+    ]
+    _NEXT_SELECTORS = [
+        "button:has-text('次へ進む')",
+        "button:has-text('次へ')",
+        "button:has-text('ログイン')",
+        "button[type='submit']",
+    ]
+    _PASSWORD_SELECTORS = [
+        "input[placeholder*='パスワード']",
+        "input[aria-label*='パスワード']",
+        "input[type='password']",
+        "input[name='password']",
+        "#password, input[id*='pass']",
+    ]
+    _SUBMIT_SELECTORS = ["button:has-text('ログイン')", "button[type='submit']", "button:has-text('次へ')"]
+
     def __init__(
         self,
         headless: bool | None = None,  # None の場合は環境変数 PLAYWRIGHT_HEADFUL で制御
@@ -205,13 +240,11 @@ class ShippingAgent:
         return page
 
     # ----------------------------
-    # ログイン（必要時のみ）- UIテキスト優先 + 段階フォールバック + パネル起動 + 同意対応
+    # ログインチェック
     # ----------------------------
     async def _login_if_needed(self, page: Page, context: BrowserContext) -> None:
-        """
-        Buyandship ログインが必要なら行う（UI変化に強いセレクタで対応）
-        """
-        # 0) 既ログイン簡易チェック（見出し/ユーザーメニュー）
+        """既ログインならスキップ、未ログインならログインフローを実行"""
+        # 既ログイン簡易チェック
         try:
             if await page.locator("text=Buyandship倉庫住所一覧, text=倉庫住所一覧, text=倉庫住所").first.is_visible(
                 timeout=3000
@@ -230,76 +263,45 @@ class ShippingAgent:
             pass
 
         self.logger.info("ログインが必要です。UIテキスト優先のセレクタでログインを試みます。")
+        await self._do_login_flow(page)
 
-        # 1) Cookie 同意/ダイアログのクローズ
-        await _click_first(
-            page,
-            [
-                "button:has-text('同意')",
-                "button:has-text('Accept')",
-                "button[aria-label='Close']",
-                "button.bs-cookie-consent-accept",
-            ],
-        )
+    # ----------------------------
+    # 純粋ログインフロー
+    # ----------------------------
+    async def _do_login_flow(self, page: Page) -> None:
+        """Cookie同意 → パネル起動 → メール → 次へ → パスワード → 送信 → 完了待ち"""
+        creds = self._get_credentials()
+
+        # 1) Cookie 同意
+        await _click_first(page, self._COOKIE_CONSENT_SELECTORS)
 
         # 2) ログインパネルの起動
         try:
-            login_panel_open = await page.locator("input[placeholder='メールアドレス']").first.is_visible(timeout=2000)
+            login_panel_open = await page.locator(self._EMAIL_SELECTORS[0]).first.is_visible(timeout=2000)
         except Exception:
             login_panel_open = False
-
-        if not login_panel_open and await _click_first(
-            page,
-            [
-                "a:has-text('ログイン')",
-                "a:has-text('登録 / ログイン')",
-                "button:has-text('ログイン')",
-                "button:has-text('登録 / ログイン')",
-            ],
-        ):
+        if not login_panel_open and await _click_first(page, self._LOGIN_PANEL_SELECTORS):
             await page.wait_for_timeout(500)
 
         # 3) メール入力
-        creds = self._get_credentials()
-        EMAIL_SELECTORS = [
-            "input[placeholder='メールアドレス']",
-            "input[aria-label='メールアドレス']",
-            "input[type='email']",
-            "input[name='email']",
-            "#email, #user_email, input[id*='email']",
-        ]
         await page.wait_for_timeout(300)
-        if not await _fill_first(page, EMAIL_SELECTORS, creds["email"], timeout_ms=12000):
+        if not await _fill_first(page, self._EMAIL_SELECTORS, creds["email"], timeout_ms=12000):
             filled_in_frame = any(
-                await _fill_first(frame, EMAIL_SELECTORS, creds["email"], timeout_ms=8000) for frame in page.frames
+                await _fill_first(frame, self._EMAIL_SELECTORS, creds["email"], timeout_ms=8000)
+                for frame in page.frames
             )
             if not filled_in_frame:
                 raise RuntimeError("メール入力欄が見つかりませんでした。UIが変わっている可能性があります。")
 
         # 4) 「次へ進む」
-        await _click_first(
-            page,
-            [
-                "button:has-text('次へ進む')",
-                "button:has-text('次へ')",
-                "button:has-text('ログイン')",
-                "button[type='submit']",
-            ],
-        )
+        await _click_first(page, self._NEXT_SELECTORS)
 
         # 5) パスワード入力
-        PASS_SELECTORS = [
-            "input[placeholder*='パスワード']",
-            "input[aria-label*='パスワード']",
-            "input[type='password']",
-            "input[name='password']",
-            "#password, input[id*='pass']",
-        ]
         await page.wait_for_timeout(600)
-        if not await _fill_first(page, PASS_SELECTORS, creds["password"], timeout_ms=15000):
+        if not await _fill_first(page, self._PASSWORD_SELECTORS, creds["password"], timeout_ms=15000):
             try:
                 filled_in_frame = any(
-                    await _fill_first(frame, PASS_SELECTORS, creds["password"], timeout_ms=8000)
+                    await _fill_first(frame, self._PASSWORD_SELECTORS, creds["password"], timeout_ms=8000)
                     for frame in page.frames
                 )
                 if not filled_in_frame:
@@ -316,8 +318,8 @@ class ShippingAgent:
                     self.logger.error(f"デバッグ情報の保存中にエラー: {e}")
                 raise
 
-        # 6) 送信（ログイン）
-        await _click_first(page, ["button:has-text('ログイン')", "button[type='submit']", "button:has-text('次へ')"])
+        # 6) 送信
+        await _click_first(page, self._SUBMIT_SELECTORS)
 
         # 7) 完了待ち
         await page.wait_for_load_state("networkidle")
