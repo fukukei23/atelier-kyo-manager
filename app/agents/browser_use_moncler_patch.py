@@ -375,43 +375,19 @@ async def _handle_location_modal(page: Page) -> None:
 # ---------------- メイン: リカバリー ----------------
 
 
-async def moncler_plp_recovery(page: Page, site_config: dict[str, Any] | None, query: Any = None) -> None:
-    """
-    1) ロケール強制(Cookie/localStorage)と同意バナー(OneTrust)クリック
-    2) URL正規化 (page.goto) - en-de 等からの脱出
-    3) 商品リンク候補を総ざらい
-    4) 直接遷移（page.goto）で PDP へ
-    5) 失敗時はカードクリックの強制発火
-    6) 最後の手段として window.location で直叩き
-    """
-
-    # --- Config読み込み ---
-    cfg = site_config or {}
-    ds = cfg.get("discovery_settings") or {}
-
-    # 設定からターゲットを取得 (デフォルトは GB / en-int)
-    ship_to: str = cfg.get("shipToCountry") or ds.get("shipToCountry") or "GB"
-    force_locale: str = cfg.get("force_locale") or ds.get("forceLocale") or "en-int"
-
-    # Cookie用の言語コード (例: en-int -> en)
-    lang_code = force_locale.split("-")[0] if "-" in force_locale else "en"
-
-    logger.info(f"[MonclerPatch] Starting recovery. Target: {force_locale} / {ship_to}")
-
-    # --- 1. Cookie & LocalStorage Injection (最優先) ---
-    # サイトが参照する正規のCookieをセットする
+async def _inject_moncler_cookies(
+    page: Page, ship_to: str, lang_code: str, force_locale: str,
+) -> list[dict[str, str]]:
+    """Cookie & LocalStorage injection for Moncler locale enforcement."""
+    cookies = [
+        {"name": "moncler-shipping-country", "value": ship_to, "domain": ".moncler.com", "path": "/"},
+        {"name": "moncler-shipping-language", "value": lang_code, "domain": ".moncler.com", "path": "/"},
+        {"name": "store-country-code", "value": ship_to, "domain": ".moncler.com", "path": "/"},
+        {"name": "store-language-code", "value": lang_code, "domain": ".moncler.com", "path": "/"},
+    ]
     try:
-        # ドメインは .moncler.com で広域にセット
-        cookies = [
-            {"name": "moncler-shipping-country", "value": ship_to, "domain": ".moncler.com", "path": "/"},
-            {"name": "moncler-shipping-language", "value": lang_code, "domain": ".moncler.com", "path": "/"},
-            {"name": "store-country-code", "value": ship_to, "domain": ".moncler.com", "path": "/"},  # 追加
-            {"name": "store-language-code", "value": lang_code, "domain": ".moncler.com", "path": "/"},  # 追加
-        ]
         await page.context.add_cookies(cookies)
         logger.info("[MonclerPatch] Injected shipping cookies.")
-
-        # LocalStorage も念のため
         await page.evaluate(
             """(data) => {
               try {
@@ -424,8 +400,11 @@ async def moncler_plp_recovery(page: Page, site_config: dict[str, Any] | None, q
         )
     except Exception as e:
         logger.warning(f"[MonclerPatch] Cookie/Storage injection failed: {e}")
+    return cookies
 
-    # --- 2. OneTrust等の同意バナーを潰す ---
+
+async def _dismiss_consent_banner(page: Page) -> None:
+    """OneTrust等の同意バナーをクリックして閉じる。"""
     async def _try_click(sel: str) -> bool:
         try:
             await page.locator(sel).click(timeout=1000)
@@ -434,7 +413,6 @@ async def moncler_plp_recovery(page: Page, site_config: dict[str, Any] | None, q
             return False
 
     try:
-        clicked_once = False
         for sel in (
             "#onetrust-accept-btn-handler",
             "button#onetrust-accept-btn-handler",
@@ -443,22 +421,94 @@ async def moncler_plp_recovery(page: Page, site_config: dict[str, Any] | None, q
             "[id^='onetrust-'] button",
         ):
             if await _try_click(sel):
-                clicked_once = True
-                break
-
-        if clicked_once:
-            await asyncio.sleep(0.5)
-            # 念押し
-            await _try_click("#onetrust-accept-btn-handler")
+                await asyncio.sleep(0.5)
+                await _try_click("#onetrust-accept-btn-handler")
+                return
     except Exception as e:
         logger.warning(f"[MonclerPatch] OneTrust click failed: {e}")
 
-    # --- 3. ロケーションモーダル対応 ---
+
+async def _normalize_locale_url(
+    page: Page, force_locale: str, ship_to: str, cookies: list[dict[str, str]],
+) -> None:
+    """現在のURLがターゲットロケールと異なる場合、強制的に遷移する。"""
+    try:
+        url = page.url
+        current_path = urlparse(url).path
+
+        is_wrong_locale = (
+            f"/{force_locale}/" not in current_path
+            and re.search(r"/en-[a-z]{2}/", current_path)
+            and force_locale not in current_path
+        )
+        if is_wrong_locale:
+            logger.warning(f"[MonclerPatch] Wrong locale detected: {current_path} (Target: {force_locale})")
+
+        has_params = f"forceLocale={force_locale}" in url and f"shipToCountry={ship_to}" in url
+
+        if is_wrong_locale or not has_params:
+            new_path = re.sub(r"/en-[a-z]{2}/", f"/{force_locale}/", current_path)
+            if new_path == current_path and f"/{force_locale}/" not in new_path:
+                new_path = f"/{force_locale}" + current_path
+
+            base = urljoin(url, new_path).split("?")[0].rstrip("/") + "/"
+            params = f"forceLocale={force_locale}&shipToCountry={ship_to}"
+            new_url = base + ("?" if "?" not in url else "&") + params
+
+            logger.info(f"[MonclerPatch] Forcing navigation to: {new_url}")
+            await page.goto(new_url, wait_until="domcontentloaded", timeout=20000)
+            await _sleep(1000)
+            await page.context.add_cookies(cookies)
+    except Exception as e:
+        logger.warning(f"[MonclerPatch] URL normalization failed: {e}")
+
+
+async def _try_dom_fragment_nav(page: Page) -> bool:
+    """DOM から URL 断片を抽出して直接遷移を試みる。"""
+    try:
+        fragment = await page.evaluate(
+            """(pat) => {
+              try {
+                const re = new RegExp(pat, 'g');
+                const html = (document.body && document.body.innerHTML) || '';
+                const m = html.match(re);
+                return m ? m[0] : null;
+              } catch (e) { return null; }
+            }""",
+            _URL_RE.pattern,
+        )
+        if fragment:
+            await page.goto(urljoin(page.url, fragment), wait_until="domcontentloaded", timeout=15000)
+            return True
+    except Exception:
+        pass
+    return False
+
+
+async def moncler_plp_recovery(page: Page, site_config: dict[str, Any] | None, query: Any = None) -> None:
+    """
+    1) ロケール強制(Cookie/localStorage)と同意バナー(OneTrust)クリック
+    2) URL正規化 (page.goto) - en-de 等からの脱出
+    3) 商品リンク候補を総ざらい
+    4) 直接遷移（page.goto）で PDP へ
+    5) 失敗時はカードクリックの強制発火
+    6) 最後の手段として window.location で直叩き
+    """
+    cfg = site_config or {}
+    ds = cfg.get("discovery_settings") or {}
+    ship_to: str = cfg.get("shipToCountry") or ds.get("shipToCountry") or "GB"
+    force_locale: str = cfg.get("force_locale") or ds.get("forceLocale") or "en-int"
+    lang_code = force_locale.split("-")[0] if "-" in force_locale else "en"
+
+    logger.info(f"[MonclerPatch] Starting recovery. Target: {force_locale} / {ship_to}")
+
+    cookies = await _inject_moncler_cookies(page, ship_to, lang_code, force_locale)
+    await _dismiss_consent_banner(page)
+
     try:
         await _handle_location_modal(page)
     except Exception as e:
         logger.warning(f"[MonclerPatch] location modal handling failed: {e}")
-        # タイムアウト時は動画を確定させ、早期に落とす
         try:
             Path("instance/logs").mkdir(parents=True, exist_ok=True)
             stuck_path = Path("instance/logs/moncler_gate_stuck.png")
@@ -470,122 +520,33 @@ async def moncler_plp_recovery(page: Page, site_config: dict[str, Any] | None, q
             await page.context.close()
         raise RuntimeError("Gate dismissal failed -> aborting session") from None
 
-    # --- 4. URL正規化 & リダイレクト脱出 ---
-    # 現在のURLがターゲットロケールと異なる場合、強制的に遷移する
-    try:
-        url = page.url
+    await _normalize_locale_url(page, force_locale, ship_to, cookies)
 
-        # 悪いロケール (例: /en-de/) を検知
-        # ターゲットが en-int なのに en-de, en-fr などにいる場合
-        current_path = urlparse(url).path
-
-        is_wrong_locale = False
-        # 例: /en-de/ が含まれていて、かつ force_locale が en-int の場合
-        if (
-            f"/{force_locale}/" not in current_path
-            and re.search(r"/en-[a-z]{2}/", current_path)
-            and force_locale not in current_path
-        ):
-            is_wrong_locale = True
-            logger.warning(f"[MonclerPatch] Wrong locale detected: {current_path} (Target: {force_locale})")
-
-        # パラメータ不足の検知
-        has_params = f"forceLocale={force_locale}" in url and f"shipToCountry={ship_to}" in url
-
-        if is_wrong_locale or not has_params:
-            # URLを書き換え
-            # 1. 既存のロケール部分を force_locale に置換
-            new_path = re.sub(r"/en-[a-z]{2}/", f"/{force_locale}/", current_path)
-            if new_path == current_path and f"/{force_locale}/" not in new_path:
-                # ロケールがない場合は挿入 (簡易的)
-                new_path = f"/{force_locale}" + current_path
-
-            base = urljoin(url, new_path).split("?")[0].rstrip("/") + "/"
-            params = f"forceLocale={force_locale}&shipToCountry={ship_to}"
-            new_url = base + ("?" if "?" not in url else "&") + params
-
-            logger.info(f"[MonclerPatch] Forcing navigation to: {new_url}")
-            await page.goto(new_url, wait_until="domcontentloaded", timeout=20000)
-            await _sleep(1000)  # 遷移後の安定待ち
-
-            # 遷移後に再度Cookieをセット (リダイレクトで消されることがあるため)
-            await page.context.add_cookies(cookies)
-
-    except Exception as e:
-        logger.warning(f"[MonclerPatch] URL normalization failed: {e}")
-
-    # PLP のロード完了を待つ
     with contextlib.suppress(Exception):
         await page.wait_for_selector("img, [data-testid]", timeout=8000)
 
-    # --- 5. URL候補収集 ---
     urls = await _collect_candidate_urls(page)
     logger.info(f"[MonclerPatch] PLP prepared (tiles={len(urls)})")
 
-    # tiles=0 なら即 PDP直行を試みる
     if not urls:
         logger.warning("[MonclerPatch] tiles=0 -> direct PDP hop attempts")
-        # --- クリック強制 ---
         if await _try_router_click(page):
             with contextlib.suppress(Exception):
                 await page.wait_for_load_state("domcontentloaded", timeout=8000)
             return
-        # --- DOM 断片直叩き ---
-        try:
-            pattern = _URL_RE.pattern
-            fragment = await page.evaluate(
-                """
-              (pat) => {
-                try {
-                  const re = new RegExp(pat, 'g');
-                  const html = (document.body && document.body.innerHTML) || '';
-                  const m = html.match(re);
-                  return m ? m[0] : null;
-                } catch (e) { return null; }
-              }
-            """,
-                pattern,
-            )
-            if fragment:
-                await page.goto(urljoin(page.url, fragment), wait_until="domcontentloaded", timeout=15000)
-                return
-        except Exception:
-            pass
+        if await _try_dom_fragment_nav(page):
+            return
         raise RuntimeError("Moncler PLP recovery: no tiles and no fallback URL found.")
 
-    # --- 6. 直接遷移 ---
-    if urls:
-        ok = await _goto_first_working(page, urls)
-        if ok:
-            return
+    if urls and await _goto_first_working(page, urls):
+        return
 
-    # --- 7. クリック強制 ---
     if await _try_router_click(page):
         with contextlib.suppress(Exception):
             await page.wait_for_load_state("domcontentloaded", timeout=8000)
         return
 
-    # --- 8. 最後の手段：DOM から URL 断片を直叩き ---
-    try:
-        pattern = _URL_RE.pattern
-        fragment = await page.evaluate(
-            """
-          (pat) => {
-            try {
-              const re = new RegExp(pat, 'g');
-              const html = (document.body && document.body.innerHTML) || '';
-              const m = html.match(re);
-              return m ? m[0] : null;
-            } catch (e) { return null; }
-          }
-        """,
-            pattern,
-        )
-        if fragment:
-            await page.goto(urljoin(page.url, fragment), wait_until="domcontentloaded", timeout=15000)
-            return
-    except Exception:
-        pass
+    if await _try_dom_fragment_nav(page):
+        return
 
-    # ここまで来たら諦め
     raise RuntimeError("Moncler PLP recovery could not navigate to any PDP.")
