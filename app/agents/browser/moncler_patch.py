@@ -1,37 +1,35 @@
-"""
-moncler_patch.py - Moncler-specific URL normalization and recovery logic
-
-This module handles:
-- URL normalization to en-int locale
-- Force en-int locale
-- PLP recovery navigation
-- Trap/legal page detection
-"""
-
+"""Moncler URL normalization and trap/legal page detection."""
 from __future__ import annotations
 
 import contextlib
 import logging
 import re
+from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunparse, urlunsplit
 
 from playwright.async_api import Page
 
 logger = logging.getLogger(__name__)
+
 _LOCALE_SEG_RE = re.compile(r"^[a-z]{2}-[a-z]{2}$", re.IGNORECASE)
+
+_LEGAL_KEYWORDS = (
+    "/cookie-policy", "/cookies", "/privacy", "/legal", "/help",
+    "/customer-service", "/customer_service", "/support", "/account",
+    "/login", "/accessibility-statement", "/client-service/",
+)
+
+_LOCALE_GATE_PATHS = frozenset({"/en-int", "/en-int/", "/en-gb", "/en-gb/", "/en-us", "/en-us/"})
+
+_LOCALE_COOKIES = [
+    {"name": "moncler-shipping-country", "value": "GB", "domain": ".moncler.com", "path": "/"},
+    {"name": "moncler-shipping-language", "value": "en", "domain": ".moncler.com", "path": "/"},
+]
 
 
 def normalize_to_en_int_url(url: str) -> str:
-    """
-    Normalize URL to en-int locale.
-
-    - Replace /en-gb/ with /en-int/
-    - Remove duplicate locale segments
-    - Add forceLocale and shipToCountry query params
-    """
     u = urlparse(url)
-    path = (u.path or "/").replace("//", "/")
-    path = path.replace("/en-gb/", "/en-int/")
+    path = (u.path or "/").replace("//", "/").replace("/en-gb/", "/en-int/")
     seg = [s for s in path.split("/") if s]
     i = 0
     while i < len(seg) and _LOCALE_SEG_RE.match(seg[i] or ""):
@@ -47,15 +45,9 @@ def normalize_to_en_int_url(url: str) -> str:
 
 
 async def force_en_int(page: Page) -> None:
-    """Force page to en-int locale by setting cookies and navigating."""
     try:
         if page.context:
-            await page.context.add_cookies(
-                [
-                    {"name": "moncler-shipping-country", "value": "GB", "domain": ".moncler.com", "path": "/"},
-                    {"name": "moncler-shipping-language", "value": "en", "domain": ".moncler.com", "path": "/"},
-                ]
-            )
+            await page.context.add_cookies(_LOCALE_COOKIES)
     except Exception:
         pass
     try:
@@ -68,115 +60,45 @@ async def force_en_int(page: Page) -> None:
         pass
 
 
-async def force_plp_recover(
-    page: Page,
-    site_config: dict[str, Any],
-    target_url: str | None,
-    logger: Any,
-) -> None:
-    """
-    Force navigation to PLP URL.
-
-    Tries in order:
-    1. target_url
-    2. plp_hard_nav
-    3. seed_plp_url
-    4. fallback_url
-    5. home_url
-    """
+async def force_plp_recover(page: Page, site_config: dict[str, Any], target_url: str | None, log: Any) -> None:
+    plp = target_url or site_config.get("plp_hard_nav") or site_config.get("seed_plp_url") or site_config.get("fallback_url") or site_config.get("home_url")
+    if not plp:
+        log.debug("[recover] no PLP candidate; skip")
+        return
+    plp = normalize_to_en_int_url(plp)
+    log.info("[recover] Forcing PLP: %s", plp)
     try:
-        plp = (
-            target_url
-            or site_config.get("plp_hard_nav")
-            or site_config.get("seed_plp_url")
-            or site_config.get("fallback_url")
-            or site_config.get("home_url")
-        )
-        if not plp:
-            logger.debug("[recover] no PLP candidate found; skip")
-            return
-        # Normalize locale
-        plp = normalize_to_en_int_url(plp)
-        logger.info("[recover] Forcing PLP navigation: %s", plp)
         await page.goto(url=plp, wait_until="domcontentloaded")
     except Exception as e:
-        logger.debug("[recover] force PLP failed: %r", e)
+        log.debug("[recover] force PLP failed: %r", e)
 
 
-def looks_like_trap_or_legal(url: str, logger: Any) -> bool:
-    """
-    Detect if URL is a trap/legal page (not a product page).
-
-    Returns True if URL looks like:
-    - Legal/help pages (/cookie-policy, /privacy, etc.)
-    - Corporate site redirects
-    - Japanese locale pages (/en-jp)
-    - Moncler locale gate/home pages
-    """
+def _normalize_locale_url(url: str) -> str:
     try:
-        # Normalize URL first
         sp = urlsplit(url)
-        path = sp.path or ""
-        # Fix double locale
-        path = path.replace("/en-jp/en-int/", "/en-int/").replace("/en-jp/", "/en-int/")
-        # Remove fragment
-        sp = sp._replace(path=path, fragment="")
-        url = urlunsplit(sp)
+        path = (sp.path or "").replace("/en-jp/en-int/", "/en-int/").replace("/en-jp/", "/en-int/")
+        return urlunsplit(sp._replace(path=path, fragment=""))
     except Exception:
-        pass  # Continue with original URL if normalization fails
+        return url
 
-    try:
-        u = urlparse(url)
-        full_lower = url.lower()
-        path_lower = (u.path or "").lower()
-        host = (u.netloc or "").lower()
 
-        # /en-jp (Japanese locale)
-        jp_locale = "moncler.com" in full_lower and "/en-jp" in path_lower
+def _detect_trap_flags(url: str) -> dict[str, bool]:
+    u = urlparse(url)
+    path_lower = (u.path or "").lower()
+    host = (u.netloc or "").lower()
+    full_lower = url.lower()
+    return {
+        "jp_locale": "moncler.com" in full_lower and "/en-jp" in path_lower,
+        "corporate": "monclergroup.com" in host or "/brands/moncler" in path_lower,
+        "legal": any(k in path_lower for k in _LEGAL_KEYWORDS),
+        "locale_gate": "moncler.com" in host and path_lower in _LOCALE_GATE_PATHS,
+    }
 
-        # Corporate site
-        corporate = "monclergroup.com" in host or "/brands/moncler" in path_lower
 
-        # Moncler locale gate/home
-        moncler_locale_gate = "moncler.com" in host and path_lower in (
-            "/en-int",
-            "/en-int/",
-            "/en-gb",
-            "/en-gb/",
-            "/en-us",
-            "/en-us/",
-        )
-
-        # Legal keywords
-        legal_kw = any(
-            k in path_lower
-            for k in (
-                "/cookie-policy",
-                "/cookies",
-                "/privacy",
-                "/legal",
-                "/help",
-                "/customer-service",
-                "/customer_service",
-                "/support",
-                "/account",
-                "/login",
-                "/accessibility-statement",
-                "/client-service/",
-            )
-        )
-
-        # Log warnings
-        if jp_locale:
-            logger.warning(f"[_looks_like_trap] Detected /en-jp locale trap: {url}")
-        if corporate:
-            logger.warning(f"[_looks_like_trap] Detected corporate site redirect/path: {url}")
-        if legal_kw:
-            logger.warning(f"[_looks_like_trap] Detected legal/help keyword trap: {url}")
-        if moncler_locale_gate:
-            logger.warning(f"[_looks_like_trap] Detected Moncler locale gate/home: {url}")
-
-        return jp_locale or corporate or legal_kw or moncler_locale_gate
-
-    except Exception:
-        return False
+def looks_like_trap_or_legal(url: str, log: Any) -> bool:
+    url = _normalize_locale_url(url)
+    flags = _detect_trap_flags(url)
+    for name, matched in flags.items():
+        if matched:
+            log.warning(f"[_looks_like_trap] Detected {name}: {url}")
+    return any(flags.values())
