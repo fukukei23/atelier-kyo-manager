@@ -52,6 +52,81 @@ def _dedupe_keep_order(items: list[str]) -> list[str]:
     return list(dict.fromkeys([i for i in (items or []) if i]))
 
 
+async def click_and_capture_nav(
+    click_coro,
+    page: Page,
+    context: BrowserContext,
+    *,
+    url_regex: re.Pattern | None = None,
+    wait_state: str = "domcontentloaded",
+    timeout_ms: int = 5000,
+) -> Page | None:
+    """Click and capture navigation (popup / same-tab / SPA race)."""
+    if url_regex is None:
+        url_regex = re.compile(r"/product[s]?/|/p/|/pp/", re.I)
+
+    popup_task = asyncio.create_task(context.wait_for_event("page", timeout=timeout_ms))
+    same_tab_nav_task = asyncio.create_task(page.wait_for_event("framenavigated", timeout=timeout_ms))
+    spa_url_task = asyncio.create_task(page.wait_for_url(url_regex, timeout=timeout_ms)) if url_regex else None
+    sel_spa = (
+        ", ".join(VISIBLE_PRICE_SELECTORS)
+        if VISIBLE_PRICE_SELECTORS
+        else "[itemprop=price],[class*=price],[data-testid*=price]"
+    )
+    spa_price_task = asyncio.create_task(page.wait_for_selector(sel_spa, state="visible", timeout=timeout_ms))
+
+    try:
+        await click_coro()
+    except Exception:
+        for t in (popup_task, same_tab_nav_task, spa_url_task, spa_price_task):
+            if t and not t.done():
+                t.cancel()
+        return None
+
+    tasks = {popup_task, same_tab_nav_task, spa_price_task}
+    if spa_url_task:
+        tasks.add(spa_url_task)
+
+    try:
+        done, pending = await asyncio.wait(tasks, timeout=timeout_ms / 1000, return_when=asyncio.FIRST_COMPLETED)
+        for t in pending:
+            t.cancel()
+        if not done:
+            return None
+        winner = next(iter(done))
+        new_page = winner.result() if winner is popup_task else page
+        log_msg = (
+            "popup"
+            if winner is popup_task
+            else "framenav"
+            if winner is same_tab_nav_task
+            else "SPA URL"
+            if winner is spa_url_task
+            else "SPA Price"
+        )
+        logger.debug(f"[click_and_capture_nav] {log_msg}")
+        try:
+            if new_page.url == "about:blank":
+                await new_page.wait_for_load_state("domcontentloaded", timeout=1500)
+        except Exception as e_blank:
+            logger.debug(f"[click_and_capture_nav] Wait for about:blank failed: {e_blank}")
+        with contextlib.suppress(Exception):
+            await new_page.wait_for_load_state(wait_state, timeout=max(500, timeout_ms // 10))
+        if url_regex:
+            try:
+                await new_page.wait_for_url(url_regex, timeout=max(1000, timeout_ms // 4))
+            except Exception as e_url_final:
+                logger.debug(f"[click_and_capture_nav] Final wait_for_url failed: {e_url_final}")
+        return new_page
+    except Exception as e_wait:
+        logger.warning(f"[click_and_capture_nav] Nav race failed: {e_wait}")
+        return None
+    finally:
+        for t in (popup_task, same_tab_nav_task, spa_url_task, spa_price_task):
+            if t and not t.done():
+                t.cancel()
+
+
 class FallbackMixin:
     """
     PLP フォールバックナビゲーションメソッドの Mixin。
@@ -247,73 +322,11 @@ class FallbackMixin:
         wait_state: str = "domcontentloaded",
         timeout_ms: int = 5000,
     ) -> Page | None:
-        """
-        Stage 3A-2-4:
-        クリック操作を実行し、ナビゲーション（ポップアップ、SPA遷移など）をキャプチャする。
-        """
-        if url_regex is None:
-            url_regex = re.compile(r"/product[s]?/|/p/|/pp/", re.I)
-
-        popup_task = asyncio.create_task(context.wait_for_event("page", timeout=timeout_ms))
-        same_tab_nav_task = asyncio.create_task(page.wait_for_event("framenavigated", timeout=timeout_ms))
-        spa_url_task = asyncio.create_task(page.wait_for_url(url_regex, timeout=timeout_ms)) if url_regex else None
-        sel_spa = (
-            ", ".join(VISIBLE_PRICE_SELECTORS)
-            if VISIBLE_PRICE_SELECTORS
-            else "[itemprop=price],[class*=price],[data-testid*=price]"
+        """Click and capture navigation — delegates to module-level helper."""
+        return await click_and_capture_nav(
+            click_coro, page, context,
+            url_regex=url_regex, wait_state=wait_state, timeout_ms=timeout_ms,
         )
-        spa_price_task = asyncio.create_task(page.wait_for_selector(sel_spa, state="visible", timeout=timeout_ms))
-
-        try:
-            await click_coro()
-        except Exception:
-            for t in (popup_task, same_tab_nav_task, spa_url_task, spa_price_task):
-                if t and not t.done():
-                    t.cancel()
-            return None
-
-        tasks = {popup_task, same_tab_nav_task, spa_price_task}
-        if spa_url_task:
-            tasks.add(spa_url_task)
-
-        try:
-            done, pending = await asyncio.wait(tasks, timeout=timeout_ms / 1000, return_when=asyncio.FIRST_COMPLETED)
-            for t in pending:
-                t.cancel()
-            if not done:
-                return None
-            winner = next(iter(done))
-            new_page = winner.result() if winner is popup_task else page
-            log_msg = (
-                "popup"
-                if winner is popup_task
-                else "framenav"
-                if winner is same_tab_nav_task
-                else "SPA URL"
-                if winner is spa_url_task
-                else "SPA Price"
-            )
-            logger.debug(f"[_click_and_capture] Winner: {log_msg}")
-            try:
-                if new_page.url == "about:blank":
-                    await new_page.wait_for_load_state("domcontentloaded", timeout=1500)
-            except Exception as e_blank:
-                logger.debug(f"[_click_and_capture] Wait for about:blank failed: {e_blank}")
-            with contextlib.suppress(Exception):
-                await new_page.wait_for_load_state(wait_state, timeout=max(500, timeout_ms // 10))
-            if url_regex:
-                try:
-                    await new_page.wait_for_url(url_regex, timeout=max(1000, timeout_ms // 4))
-                except Exception as e_url_final:
-                    logger.debug(f"[_click_and_capture] Final wait_for_url failed: {e_url_final}")
-            return new_page
-        except Exception as e_wait:
-            logger.warning(f"[_click_and_capture] Nav race failed: {e_wait}")
-            return None
-        finally:
-            for t in (popup_task, same_tab_nav_task, spa_url_task, spa_price_task):
-                if t and not t.done():
-                    t.cancel()
 
     async def header_search_fallback(self, ctx: NavigationContext) -> bool:
         """

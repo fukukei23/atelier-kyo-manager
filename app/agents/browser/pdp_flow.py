@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import re
 from typing import Any
@@ -197,45 +196,12 @@ class PdpFlowMixin:
         wait_state: str = "domcontentloaded",
         timeout_ms: int = 5000,
     ) -> Page | None:
-        popup_task = asyncio.create_task(context.wait_for_event("page", timeout=timeout_ms))
-        same_tab_nav_task = asyncio.create_task(page.wait_for_event("framenavigated", timeout=timeout_ms))
-        spa_url_task = asyncio.create_task(page.wait_for_url(url_regex, timeout=timeout_ms)) if url_regex else None
-        sel_spa = ", ".join(VISIBLE_PRICE_SELECTORS) or "[itemprop=price],[class*=price],[data-testid*=price]"
-        spa_price_task = asyncio.create_task(page.wait_for_selector(sel_spa, state="visible", timeout=timeout_ms))
-        try:
-            await click_coro()
-        except Exception:
-            [t.cancel() for t in (popup_task, same_tab_nav_task, spa_url_task, spa_price_task) if t and not t.done()]
-            return None
-        tasks = {popup_task, same_tab_nav_task, spa_price_task}
-        tasks.add(spa_url_task) if spa_url_task else None
-        try:
-            done, pending = await asyncio.wait(tasks, timeout=timeout_ms / 1000, return_when=asyncio.FIRST_COMPLETED)
-            [t.cancel() for t in pending]
-            if not done:
-                return None
-            winner = next(iter(done))
-            new_page = winner.result() if winner is popup_task else page
-            log_msg = f"Winner: {'popup' if winner is popup_task else 'framenav' if winner is same_tab_nav_task else 'SPA URL' if winner is spa_url_task else 'SPA Price'}"
-            self.logger.debug(f"[_click_and_capture] {log_msg}")
-            try:
-                if new_page.url == "about:blank":
-                    await new_page.wait_for_load_state("domcontentloaded", timeout=1500)
-            except Exception as e_blank:
-                self.logger.debug(f"[_click_and_capture] Wait for about:blank failed: {e_blank}")
-            with contextlib.suppress(Exception):
-                await new_page.wait_for_load_state(wait_state, timeout=max(500, timeout_ms // 10))
-            if url_regex:
-                try:
-                    await new_page.wait_for_url(url_regex, timeout=max(1000, timeout_ms // 4))
-                except Exception as e_url_final:
-                    self.logger.debug(f"[_click_and_capture] Final wait_for_url failed: {e_url_final}")
-            return new_page
-        except Exception as e_wait:
-            self.logger.warning(f"[_click_and_capture] Nav race failed: {e_wait}")
-            return None
-        finally:
-            [t.cancel() for t in (popup_task, same_tab_nav_task, spa_url_task, spa_price_task) if t and not t.done()]
+        """Detect navigation after click — delegates to shared helper."""
+        from app.agents.browser.nav_fallbacks import click_and_capture_nav
+        return await click_and_capture_nav(
+            click_coro, page, context,
+            url_regex=url_regex, wait_state=wait_state, timeout_ms=timeout_ms,
+        )
 
     async def _click_first_card_or_link(
         self, page: Page, site_config: dict, settings: dict, context: BrowserContext
