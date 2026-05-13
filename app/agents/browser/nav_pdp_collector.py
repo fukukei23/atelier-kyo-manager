@@ -4,7 +4,7 @@ import asyncio
 import json
 import logging
 import re
-from typing import Any
+from typing import Any, TypedDict
 
 from playwright.async_api import Page
 
@@ -19,14 +19,37 @@ from app.agents.browser.url_rules import (
     normalize_candidate_url,
 )
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
 
+
+# ── Types ────────────────────────────────────────────────
+
+class ValidationStats(TypedDict, total=False):
+    reject_reason_counts: dict[str, int]
+    top_reject_reasons: dict[str, int]
+    domain_rejected_count: int
+    path_rejected_count: int
+    allow_path_matched_count: int
+    forbidden_path_matched_count: int
+    allow_path_pattern_counts: dict[str, int]
+    forbidden_path_pattern_counts: dict[str, int]
+
+
+class LinkEvidence(TypedDict, total=False):
+    total_candidates: int
+    total_valid: int
+    top_reject_reasons: dict[str, int]
+    sample_candidates: list[dict[str, Any]]
+    error: str
+
+
+# ── Helpers ─────────────────────────────────────────────
 
 def _dedupe_keep_order(items: list[str]) -> list[str]:
     return list(dict.fromkeys([i for i in (items or []) if i]))
 
 
-async def _extract_url_from_node(node) -> str | None:
+async def _extract_url_from_node(node: Any) -> str | None:
     return (
         await node.get_attribute("href")
         or await node.get_attribute("data-href")
@@ -49,7 +72,9 @@ def _candidate_to_dict(candidate: LinkCandidate) -> dict[str, Any]:
     }
 
 
-_DEFAULT_PDP_SELECTORS = [
+# ── Constants ────────────────────────────────────────────
+
+_DEFAULT_PDP_SELECTORS: tuple[str, ...] = (
     "a[href*='/products/']",
     "a[href*='/product/']",
     "a[href*='/p/']",
@@ -60,11 +85,11 @@ _DEFAULT_PDP_SELECTORS = [
     "[data-testid*='product-card'] a[href]",
     "a[data-product-url]",
     "[data-qa='product-tile'] a[href]",
-]
+)
 
-_NOISE_RX = re.compile(r"/(collections?|seasons?|client-service|login|legal|cart|wishlist|search)/", re.I)
-_PDP_RX = re.compile(r"/(products?|p)/", re.I)
-_HTML_PDP_RX = re.compile(r"/(?:en-int|en-jp/en-int)/[^/]+/[^/]+/[^/]+\.html", re.I)
+_NOISE_RX: re.Pattern[str] = re.compile(r"/(collections?|seasons?|client-service|login|legal|cart|wishlist|search)/", re.IGNORECASE)
+_PDP_RX: re.Pattern[str] = re.compile(r"/(products?|p)/", re.IGNORECASE)
+_HTML_PDP_RX: re.Pattern[str] = re.compile(r"/(?:en-int|en-jp/en-int)/[^/]+/[^/]+/[^/]+\.html", re.IGNORECASE)
 
 
 class NavPdpCollectorMixin:
@@ -75,7 +100,7 @@ class NavPdpCollectorMixin:
         phase: str,
         source_selector: str,
         target_url: str,
-        site_config: dict,
+        site_config: dict[str, Any],
         all_candidates: list[LinkCandidate],
         found_links: set[str],
     ) -> LinkCandidate:
@@ -92,7 +117,7 @@ class NavPdpCollectorMixin:
         return candidate
 
     async def _phase1a_global_sweep(
-        self, page: Page, target_url: str, site_config: dict,
+        self, page: Page, target_url: str, site_config: dict[str, Any],
         all_candidates: list[LinkCandidate], found_links: set[str],
     ) -> None:
         try:
@@ -100,7 +125,7 @@ class NavPdpCollectorMixin:
                 "() => Array.from(document.querySelectorAll('a[href]')).map(a => a.getAttribute('href')).filter(Boolean)"
             )
         except Exception as e:
-            logger.warning(f"[PLP→PDP][1a] Sweep failed: {e}")
+            logger.warning("[PLP→PDP][1a] Sweep failed: %s", e)
             raw_hrefs = []
 
         for href in raw_hrefs:
@@ -110,17 +135,17 @@ class NavPdpCollectorMixin:
                 self._create_candidate(href, "1a", "global_sweep", target_url, site_config, all_candidates, found_links)
 
         if found_links:
-            logger.info(f"[PLP→PDP][1a] Sweep found {len(found_links)} links.")
+            logger.info("[PLP→PDP][1a] Sweep found %d links.", len(found_links))
 
     async def _phase1b_selector_based(
-        self, page: Page, target_url: str, site_config: dict,
+        self, page: Page, target_url: str, site_config: dict[str, Any],
         all_candidates: list[LinkCandidate], found_links: set[str],
     ) -> list[str]:
         plp = (site_config.get("selectors", {}) or {}).get("plp", {}) or {}
         pdp = (site_config.get("selectors", {}) or {}).get("pdp", {}) or {}
         selectors = _dedupe_keep_order(
             (plp.get("pdp_link_selectors", []) or []) + (pdp.get("pdp_link_selectors", []) or [])
-        ) or _DEFAULT_PDP_SELECTORS
+        ) or list(_DEFAULT_PDP_SELECTORS)
 
         for sel in selectors:
             try:
@@ -145,15 +170,15 @@ class NavPdpCollectorMixin:
                     else:
                         rejected += 1
                 if matched > 0:
-                    logger.info(f"[PLP→PDP][1b] selector='{sel}' added {matched} links.")
+                    logger.info("[PLP→PDP][1b] selector='%s' added %d links.", sel, matched)
                 elif nodes and rejected > 0:
-                    logger.warning(f"[PLP→PDP][1b] selector='{sel}' found {len(nodes)} elements, but {rejected} were rejected.")
+                    logger.warning("[PLP→PDP][1b] selector='%s' found %d elements, but %d were rejected.", sel, len(nodes), rejected)
             except Exception as e:
-                logger.warning(f"[PLP→PDP][1b] selector='{sel}' failed: {e}")
+                logger.warning("[PLP→PDP][1b] selector='%s' failed: %s", sel, e)
         return selectors
 
     async def _phase2_deep_extraction(
-        self, page: Page, target_url: str, site_config: dict,
+        self, page: Page, target_url: str, site_config: dict[str, Any],
         all_candidates: list[LinkCandidate], found_links: set[str],
     ) -> None:
         if found_links:
@@ -164,13 +189,13 @@ class NavPdpCollectorMixin:
             for href in deep_hrefs:
                 self._create_candidate(href, "2", "deep_extraction", target_url, site_config, all_candidates, found_links)
             if found_links:
-                logger.info(f"[PLP→PDP][2] Deep Extraction found {len(found_links)} links.")
+                logger.info("[PLP→PDP][2] Deep Extraction found %d links.", len(found_links))
         except Exception as e:
-            logger.error(f"[PLP→PDP][2] Deep Extraction failed: {e}")
+            logger.error("[PLP→PDP][2] Deep Extraction failed: %s", e)
 
     def _refilter_candidates(
         self, all_candidates: list[LinkCandidate], found_links: set[str],
-        target_url: str, site_config: dict,
+        target_url: str, site_config: dict[str, Any],
     ) -> None:
         if found_links or not all_candidates:
             return
@@ -179,11 +204,12 @@ class NavPdpCollectorMixin:
             return
 
         logger.info(
-            f"[PLP→PDP][Refilter] {len(all_candidates)} candidates found but all rejected. "
-            "Attempting evidence-based relaxed filtering..."
+            "[PLP→PDP][Refilter] %d candidates found but all rejected. "
+            "Attempting evidence-based relaxed filtering...",
+            len(all_candidates),
         )
 
-        product_card_keywords = ["product", "card", "tile", "item"]
+        product_card_keywords = ("product", "card", "tile", "item")
 
         for candidate in all_candidates:
             if not candidate.normalized_url:
@@ -201,7 +227,7 @@ class NavPdpCollectorMixin:
                 candidate.notes = (candidate.notes or "") + " [Refilter: product card source]"
 
         if found_links:
-            logger.info(f"[PLP→PDP][Refilter] Evidence-based relaxed filtering accepted {len(found_links)} links.")
+            logger.info("[PLP→PDP][Refilter] Evidence-based relaxed filtering accepted %d links.", len(found_links))
             return
 
         if refilter_config.get("allow_same_site_only", False):
@@ -242,12 +268,10 @@ class NavPdpCollectorMixin:
     async def _diagnose_no_links(
         self, page: Page, target_url: str, selectors: list[str], ctx: NavigationContext,
     ) -> None:
-        log_file_path = None
-        if ctx and ctx.run_context:
-            log_file_path = ctx.run_context.get_path("system.log")
         logger.error(
-            f"[PLP→PDP] No PDP hrefs found after all phases. Target URL: {target_url}. "
-            "This indicates a selector mismatch or URL validation failure."
+            "[PLP→PDP] No PDP hrefs found after all phases. Target URL: %s. "
+            "This indicates a selector mismatch or URL validation failure.",
+            target_url,
         )
         try:
             total = 0
@@ -265,13 +289,13 @@ class NavPdpCollectorMixin:
                                 "data-product-url": await sample.get_attribute("data-product-url"),
                                 "class": await sample.get_attribute("class"),
                             }
-                            logger.debug(f"[PLP→PDP] Sample element from selector '{sel}': {attrs}")
+                            logger.debug("[PLP→PDP] Sample element from selector '%s': %s", sel, attrs)
                 except Exception:
                     pass
             if total > 0:
-                logger.warning(f"[PLP→PDP] Found {total} elements matching selectors, but none passed validation.")
+                logger.warning("[PLP→PDP] Found %d elements matching selectors, but none passed validation.", total)
         except Exception as e:
-            logger.debug(f"[PLP→PDP] Diagnostic info collection failed: {e}")
+            logger.debug("[PLP→PDP] Diagnostic info collection failed: %s", e)
 
     async def collect_pdp_links(self, ctx: NavigationContext) -> list[str]:
         page: Page = self.page  # type: ignore[attr-defined]
@@ -291,7 +315,7 @@ class NavPdpCollectorMixin:
             await self._diagnose_no_links(page, target_url, selectors, ctx)
 
         cleaned = [u for u in links if not _NOISE_RX.search(u)]
-        logger.info(f"[PLP→PDP] collected {len(cleaned)} PDP-like links (raw={len(links)})")
+        logger.info("[PLP→PDP] collected %d PDP-like links (raw=%d)", len(cleaned), len(links))
 
         link_collection_summary = await self._save_link_collection_evidence(
             all_candidates=all_candidates, accepted_links=cleaned, run_context=run_context, ctx=ctx,
@@ -313,11 +337,11 @@ class NavPdpCollectorMixin:
                     if asyncio.iscoroutine(res):
                         await res
         except Exception as e:
-            logger.debug(f"[PLP→PDP] TelemetryClient.save_raw_hrefs failed: {e}")
+            logger.debug("[PLP→PDP] TelemetryClient.save_raw_hrefs failed: %s", e)
 
         return cleaned
 
-    def _compute_validation_stats(self, all_candidates: list[LinkCandidate]) -> dict[str, Any]:
+    def _compute_validation_stats(self, all_candidates: list[LinkCandidate]) -> ValidationStats:
         reject_reason_counts: dict[str, int] = {}
         domain_rejected = 0
         path_rejected = 0
@@ -360,14 +384,14 @@ class NavPdpCollectorMixin:
     def _save_report_safely(self, run_context: Any, report: dict[str, Any]) -> None:
         try:
             run_context.save_json("pdp_link_validation_report.json", report)
-        except Exception as e:
-            logger.error(f"[PLP→PDP] Failed to save validation report: {e}", exc_info=True)
+        except OSError as e:
+            logger.error("[PLP→PDP] Failed to save validation report: %s", e, exc_info=True)
             try:
                 path = run_context.get_path("pdp_link_validation_report.json")
                 with open(path, "w", encoding="utf-8") as f:
                     json.dump(report, f, indent=2, ensure_ascii=False)
-            except Exception as e2:
-                logger.error(f"[PLP→PDP] Failed to write validation report directly: {e2}", exc_info=True)
+            except OSError as e2:
+                logger.error("[PLP→PDP] Failed to write validation report directly: %s", e2, exc_info=True)
 
     async def _save_link_collection_evidence(
         self,
@@ -375,8 +399,8 @@ class NavPdpCollectorMixin:
         accepted_links: list[str],
         run_context: Any | None,
         ctx: NavigationContext,
-    ) -> dict[str, Any]:
-        summary: dict[str, Any] = {
+    ) -> LinkEvidence:
+        summary: LinkEvidence = {
             "total_candidates": len(all_candidates),
             "total_valid": len(accepted_links),
             "top_reject_reasons": {},
@@ -423,11 +447,12 @@ class NavPdpCollectorMixin:
             summary["sample_candidates"] = [_candidate_to_dict(c) for c in all_candidates[:10]]
 
             logger.info(
-                f"[PLP→PDP][CR-E2E-003A] Collected {len(all_candidates)} candidates, "
-                f"accepted {len(accepted_links)}, rejected {len(rejected)}"
+                "[PLP→PDP][CR-E2E-003A] Collected %d candidates, "
+                "accepted %d, rejected %d",
+                len(all_candidates), len(accepted_links), len(rejected),
             )
         except Exception as e:
-            logger.warning(f"[PLP→PDP][CR-E2E-003A] Failed to save link collection evidence: {e}", exc_info=True)
+            logger.warning("[PLP→PDP][CR-E2E-003A] Failed to save link collection evidence: %s", e, exc_info=True)
             summary["error"] = str(e)
 
         return summary
