@@ -1,67 +1,20 @@
-# ==============================================================================
-# File Name : app/agents/browser_use_agent.py
-# Version   : 88.6.2J (Hotfix SyntaxError and minor refactors)
-# Date (JST): 2025年11月7日 07:54
-# Usage     : drop-in replacement for previous BrowserUseAgent
-# ------------------------------------------------------------------------------
-# 変更要旨
-#  - ★ 88.6.2: (BugFix) _run_deep_extraction_phase2 内の
-#    `container_sels` 代入行にあった致命的な SyntaxError (括弧過剰) を修正。
-#  - ★ 88.6.2: (Refactor) _click_first_card_or_link 内の
-#    `tile_selectors` の定義を読みやすさのため整形 (動作変更なし)。
-#  - ★ 88.6.1: (Refactor) _force_plp_recover 内の正規化メソッド呼び出しを
-#    `_normalize_en_int_url` から `_normalize_to_en_int_url` に統一。
-#  - ★ 88.6.1: (Refactor) 不要になった `_normalize_en_int_url` を削除。
-#  - ★ 88.6.1: (BugFix) _force_plp_recover 内の `goto` に `url=` を明記。
-#  - ★ 88.6.1: (BugFix) _handle_run_failure が参照するDOMファイル名を
-#    `fail_dom.html` から `failure_dom.html` に修正 (可観測性)。
-#  - ★ 88.6.0: (BugFix) _force_plp_recover メソッドの定義欠落を修正済。
-# ==============================================================================
-
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import logging
-import os
 import re
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, quote_plus, urlencode, urljoin, urlparse, urlsplit, urlunparse, urlunsplit
+from urllib.parse import parse_qsl, quote_plus, urlencode, urlparse, urlunparse
 
-# --- Playwright imports (robust) ---
-from playwright.async_api import BrowserContext, ElementHandle, Locator, Page
-
-try:
-    from playwright.async_api import Error as PlaywrightError
-except Exception:
-    try:
-        from playwright.sync_api import Error as PlaywrightError
-    except Exception:
-        try:
-            from playwright._impl._errors import Error as PlaywrightError
-        except Exception:
-
-            class PlaywrightError(Exception):
-                pass
-
-
-# === InteractiveRepairSession (Atlas-style guided loop) tentative import ===
-try:
-    from app.agents.interactive_repair_session import InteractiveRepairSession
-except Exception:
-    InteractiveRepairSession = None  # will be injected later
-# --- End of robust imports ---
-
-# --- Session manager (Stage 1 extraction) ---
-import contextlib
+from playwright.async_api import BrowserContext, Page
 
 from app.agents.browser.extractor import (
-    DEFAULT_PDP_PARALLEL_LIMIT,
     VISIBLE_PRICE_SELECTORS,
     BrowserExtractionService,
-    PDPSizeSelectPolicy,
     looks_like_product_url,
 )
 from app.agents.browser.navigation_driver import (
@@ -70,9 +23,7 @@ from app.agents.browser.navigation_driver import (
     _dedupe_keep_order,
     is_same_origin,
 )
-from app.agents.browser.session_manager import EXTERNAL_BLOCKLIST_HOSTS, SessionManager
-
-# P1-2 Phase 1: UI helpers 委譲
+from app.agents.browser.session_manager import SessionManager
 from app.agents.browser.ui_helpers import (
     accept_cookies_if_present as ui_accept_cookies_if_present,
     click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
@@ -88,71 +39,20 @@ from app.agents.browser.settings import (
     resolve_run_settings as settings_resolve_run_settings,
     time_left_ms as settings_time_left_ms,
 )
+from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
+from app.core.run_context import RunContext
+from app.models.result_models import DiscoveryResult
+from app.utils.observability import count_selectors, save_dom, save_raw_hrefs, write_fail_snapshot
 
-# --- 専用パッチの動的インポート ---
+try:
+    from app.agents.interactive_repair_session import InteractiveRepairSession
+except Exception:
+    InteractiveRepairSession = None
+
 try:
     from app.agents.browser_use_moncler_patch import moncler_plp_recovery
 except Exception:
     moncler_plp_recovery = None
-# ---
-
-# --- Strategy Plugins ---
-try:
-    from app.agents.plugins.base import StrategyPlugin
-    from app.agents.plugins.moncler_plp_v1 import MonclerPLPStrategy
-except Exception:
-    StrategyPlugin = None  # type: ignore
-    MonclerPLPStrategy = None  # type: ignore
-# ---
-
-# 堅牢なインポート試行
-try:
-    from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
-    from app.core.run_context import RunContext
-    from app.models.result_models import DiscoveryResult
-    from app.utils.observability import count_selectors, save_dom, save_raw_hrefs, write_fail_snapshot
-    from app.utils.visual_regression import compare_and_maybe_update
-    # V88.5.1: (Patch) AiLlmController は run_with_repair 内部でのみ import
-    # from app.utils.ai_llm_controller import AiLlmController
-except ImportError:
-    # 実行環境によってはパスが通っていない可能性を考慮
-    logging.warning("Failed to import modules from standard paths. Trying relative imports...")
-    try:
-        from ..core.run_context import RunContext
-        from ..models.result_models import DiscoveryResult
-        from ..utils.observability import count_selectors, save_dom, save_raw_hrefs, write_fail_snapshot
-        from ..utils.visual_regression import compare_and_maybe_update
-        from .selector_discovery_agent import SelectorDiscoveryAgent
-    except ImportError as e:
-        logging.critical(f"Relative import also failed: {e}. Some functionalities might be broken.")
-
-        # 最低限動作するためのモックやプレースホルダを定義する (必要に応じて)
-        class RunContext:
-            pass  # type: ignore
-
-        class DiscoveryResult:
-            pass  # type: ignore
-
-        def compare_and_maybe_update(*args, **kwargs):
-            pass
-
-        def extract_title_price(*args, **kwargs):
-            return {}
-
-        class SelectorDiscoveryAgent:
-            pass
-
-        def save_dom(*args, **kwargs):
-            pass
-
-        def count_selectors(*args, **kwargs):
-            pass
-
-        def save_raw_hrefs(*args, **kwargs):
-            pass
-
-        def write_fail_snapshot(*args, **kwargs):
-            pass
 
 
 logger = logging.getLogger(__name__)
@@ -160,13 +60,33 @@ _LOCALE_SEG_RE = re.compile(r"^[a-z]{2}-[a-z]{2}$", re.IGNORECASE)
 
 OVERALL_PLP_BUDGET_MS_DEFAULT = 120000  # 120s watchdog
 
-# Pluginレジストリは遅延読み込みで自動登録
-PLUGIN_REGISTRY: dict[str, StrategyPlugin] = {}
 
 # ==============================================================================
 # Helper Functions
 # (V88.6.0: _looks_like_trap_or_legal はクラスメソッドに移動)
 # ==============================================================================
+
+
+# ==============================================================================
+# Module-level helpers
+# ==============================================================================
+
+
+def _merge_learned_selectors(site: str, site_config: dict[str, Any], run_context: RunContext) -> None:
+    """学習済みセレクタを site_config にマージ。"""
+    try:
+        instance_dir = Path(run_context.run_path).parent.parent
+        learned_path = instance_dir / "sites" / site.upper() / "learned_selectors.json"
+        if learned_path.exists():
+            learned = json.loads(learned_path.read_text(encoding="utf-8"))
+            sc_sel = site_config.setdefault("selectors", {}).setdefault("pdp", {})
+            for k in ("price_selectors", "title_selectors", "pdp_link_selectors"):
+                v = learned.get(k)
+                if v:
+                    sc_sel[k] = list(dict.fromkeys(list(v) + list(sc_sel.get(k, []))))
+            logger.info(f"[LEARN] loaded and merged selectors: {learned_path}")
+    except Exception as e:
+        logger.warning(f"[LEARN] merge skipped: {e}")
 
 
 # ==============================================================================
@@ -371,9 +291,6 @@ class BrowserUseAgent:
         finally:
             self._detach_session()
 
-    # --- V88.5.0: `run_with_repair` (Full Implementation) ---
-    # --- V88.5.1: (User Patch) Applied robustness patches ---
-    # --- V88.5.2: (User Patch) Applied governance (timeout, result eval) ---
     async def run_with_repair(
         self,
         *,
@@ -384,60 +301,62 @@ class BrowserUseAgent:
         target_url: str,
         likely_plp: bool,
         max_steps: int = 5,
-        repair_budget_ms: int = 60000,  # V88.5.2: 修復予算の時間（ミリ秒）
+        repair_budget_ms: int = 60000,
     ) -> DiscoveryResult:
-        """
-        Atlas型の「自己修復つきスクレイピング」フロー（実ブラウザ継続）。
-        1. Playwrightセッションを開く
-        2. 通常のPLP/PDP抽出を試す (VRT, Patch含む)
-        3. ダメなら LLM駆動のインタラクティブ修復ループ (時間・ステップ監視付き)
-        4. 成果セレクタを overrides.local.json 等へセーブ
-        5. セッションを閉じる
-        """
+        """Atlas型の「自己修復つきスクレイピング」フロー。"""
         settings = self._resolve_run_settings(site_config)
-        timeout_ms = int(settings.get("timeout_sec", 60)) * 1000
         self.run_context = run_context
         self.runtime_kwargs["site_config"] = site_config
         self.runtime_kwargs["site"] = site
-        mode = (self.runtime_kwargs or {}).get("mode", "run").lower()  # 'learn' は run() で処理
+        _merge_learned_selectors(site, site_config, run_context)
 
-        # Merge learned selectors (V88.5.0: Moved from run() to here and run())
-        try:
-            instance_dir = Path(run_context.run_path).parent.parent
-            learned_path = instance_dir / "sites" / site.upper() / "learned_selectors.json"
-            if learned_path.exists():
-                learned = json.loads(learned_path.read_text(encoding="utf-8"))
-                sc_sel = site_config.setdefault("selectors", {}).setdefault("pdp", {})
-                for k in ("price_selectors", "title_selectors", "pdp_link_selectors"):
-                    v = learned.get(k)
-                    if v:
-                        sc_sel[k] = list(dict.fromkeys(list(v) + list(sc_sel.get(k, []))))
-                logger.info(f"[LEARN] loaded and merged selectors: {learned_path}")
-        except Exception as e:
-            logger.warning(f"[LEARN] merge skipped: {e}")
+        base_result = await self._repair_initial_run(
+            site=site, query=query, site_config=site_config,
+            run_context=run_context, target_url=target_url,
+            likely_plp=likely_plp, settings=settings,
+        )
 
-        page: Page | None = None
-        base_result: DiscoveryResult | None = None
-        healed_result: DiscoveryResult | None = None  # V88.5.2: 修復結果を格納
+        if getattr(base_result, "ok", False):
+            try:
+                await self._close_session(run_context, settings)
+            finally:
+                if hasattr(self, "run_context"):
+                    del self.run_context
+            return base_result
 
-        ### PHASE 1: 通常フローを試す（ブラウザは開くがまだ閉じない）
+        return await self._run_interactive_repair(
+            base_result=base_result, site=site, query=query,
+            site_config=site_config, run_context=run_context,
+            settings=settings, max_steps=max_steps,
+            repair_budget_ms=repair_budget_ms, target_url=target_url,
+        )
+
+    async def _repair_initial_run(
+        self,
+        *,
+        site: str,
+        query: str,
+        site_config: dict[str, Any],
+        run_context: RunContext,
+        target_url: str,
+        likely_plp: bool,
+        settings: dict[str, Any],
+    ) -> DiscoveryResult:
+        """Phase 1: セッション開始 → PLP/PDP抽出の初回試行。"""
+        timeout_ms = int(settings.get("timeout_sec", 60)) * 1000
+        mode = (self.runtime_kwargs or {}).get("mode", "run").lower()
+
         try:
             page = await self._open_session(
-                site=site,
-                site_config=site_config,
-                run_context=run_context,
-                settings=settings,
-                target_url=target_url,
-                timeout_ms=timeout_ms,
-                likely_plp=likely_plp,
+                site=site, site_config=site_config, run_context=run_context,
+                settings=settings, target_url=target_url,
+                timeout_ms=timeout_ms, likely_plp=likely_plp,
             )
 
-            # 直前フック (VRT / Moncler回復パッチ 等)
             await run_context.take_screenshot(page, "20_pre_vrt_and_extraction")
             if settings.get("enable_visual_regression_check") and "plp" in (settings.get("vrt_scope") or ""):
                 await self._perform_vrt(page, "plp", settings)
 
-            # Moncler legacy patch is PDP-only; PLP flows rely on plugin/target URL normalization.
             if site.upper() == "MONCLER_OFFICIAL" and moncler_plp_recovery and not likely_plp:
                 try:
                     await moncler_plp_recovery(page, site_config, {"query": query, "shipTo": "GB"})
@@ -452,75 +371,85 @@ class BrowserUseAgent:
                 settings.get("overall_plp_budget_ms", OVERALL_PLP_BUDGET_MS_DEFAULT)
             )
 
-            # mode='learn' は run() 側専用。明示的に弾く。
             if mode == "learn":
                 raise ValueError("mode='learn' is not supported in run_with_repair. Use run() instead.")
 
             if likely_plp:
-                # ★ V88.5.9: target_url を _run_plp_flow に渡す
-                base_result = await self._run_plp_flow(
-                    page,
-                    context,
-                    site,
-                    query,
-                    site_config,
-                    settings,
-                    run_context,
-                    target_url=target_url,  # ★ 回復試行のため
-                    start_t=start_t,
-                    budget_ms=budget_ms,
+                return await self._run_plp_flow(
+                    page, context, site, query, site_config,
+                    settings, run_context, target_url=target_url,
+                    start_t=start_t, budget_ms=budget_ms,
                 )
             else:
-                base_result = await self._run_pdp_flow(page, site, query, settings, run_context, site_config)
+                return await self._run_pdp_flow(page, site, query, settings, run_context, site_config)
 
         except Exception as e:
-            # run本体が途中で死んだ場合でも base_result を必ず構築
-            # V88.5.1: (Patch) _open_session() 自体が失敗した場合、 self._page は None の可能性がある
-            # _handle_run_failure は None を受け取れる
-            base_result = await self._handle_run_failure(e, site, query, site_config, run_context, self._page)
+            return await self._handle_run_failure(e, site, query, site_config, run_context, self._page)
 
-        ### PHASE 2: 成功してたらここで終了。修復は不要。
-        if getattr(base_result, "ok", False):
-            try:
-                await self._close_session(run_context, settings)
-            finally:
-                if hasattr(self, "run_context"):
-                    del self.run_context
-            return base_result
-
-        # 5. 失敗→ インタラクティブ修復
+    async def _run_interactive_repair(
+        self,
+        *,
+        base_result: DiscoveryResult,
+        site: str,
+        query: str,
+        site_config: dict[str, Any],
+        run_context: RunContext,
+        settings: dict[str, Any],
+        max_steps: int,
+        repair_budget_ms: int,
+        target_url: str,
+    ) -> DiscoveryResult:
+        """Phase 3: インタラクティブ修復ループ + 成果物評価。"""
         self.logger.warning(
-            f"[run_with_repair] Initial run failed. Entering guided repair loop (Atlas-style). Reason: {base_result.message}"
+            f"[run_with_repair] Initial run failed. Entering guided repair loop. Reason: {base_result.message}"
         )
 
-        ### PHASE 3: 失敗なのでインタラクティブ修復に入る
         if InteractiveRepairSession is None:
             self.logger.error("[run_with_repair] InteractiveRepairSession not available, cannot self-heal.")
-            try:
-                await self._close_session(run_context, settings)
-            finally:
-                if hasattr(self, "run_context"):
-                    del self.run_context
+            await self._close_session_safely(run_context, settings)
             return base_result
 
-        # LLMコントローラを用意
         try:
             from app.utils.ai_llm_controller import AiLlmController
-
             llm_ctrl = AiLlmController(mode="Chat/Default")
         except Exception as e:
             self.logger.error(f"[run_with_repair] Failed to instantiate AiLlmController: {e}. Aborting repair.")
-            try:
-                await self._close_session(run_context, settings)
-            finally:
-                if hasattr(self, "run_context"):
-                    del self.run_context
+            await self._close_session_safely(run_context, settings)
             return base_result
 
-        # failure_contextをまとめて InteractiveRepairSession に渡すために整形
+        failure_ctx = self._build_repair_failure_context(base_result, site_config)
+
+        repair_out, repair_status, healed_result = await self._execute_repair_loop(
+            site=site, query=query, run_context=run_context,
+            max_steps=max_steps, repair_budget_ms=repair_budget_ms,
+            base_result=base_result, failure_ctx=failure_ctx, llm_ctrl=llm_ctrl,
+        )
+
+        if healed_result is None:
+            healed_result = self._evaluate_repair_result(
+                repair_out=repair_out, repair_status=repair_status,
+                site=site, query=query, site_config=site_config,
+                run_context=run_context, target_url=target_url,
+                base_result=base_result,
+            )
+
+        await self._close_session_safely(run_context, settings)
+        return healed_result
+
+    async def _close_session_safely(self, run_context: RunContext, settings: dict[str, Any]) -> None:
+        """セッションを閉じ、self.run_context を削除する。"""
+        try:
+            await self._close_session(run_context, settings)
+        finally:
+            if hasattr(self, "run_context"):
+                del self.run_context
+
+    @staticmethod
+    def _build_repair_failure_context(base_result: DiscoveryResult, site_config: dict[str, Any]) -> dict[str, Any]:
+        """InteractiveRepairSession に渡す failure_context を構築。"""
         failure_ev = base_result.evidence or {}
         failure_ctx_from_run = failure_ev.get("failure_context", {})
-        failure_ctx = {
+        return {
             "final_url": failure_ev.get("final_url"),
             "page_html_path": failure_ctx_from_run.get("dom_snapshot_path"),
             "screenshot_path": (failure_ctx_from_run.get("screenshots") or [None])[0],
@@ -533,168 +462,142 @@ class BrowserUseAgent:
             ),
         }
 
-        self.logger.info(
-            f"[run_with_repair] Starting InteractiveRepairSession with failure context (Error: {failure_ctx['exception_message']})"
-        )
-
-        # --- V88.5.2: ここで Atlasループ開始 (タイムアウト監視付き) ---
+    async def _execute_repair_loop(
+        self,
+        *,
+        site: str,
+        query: str,
+        run_context: RunContext,
+        max_steps: int,
+        repair_budget_ms: int,
+        base_result: DiscoveryResult,
+        failure_ctx: dict[str, Any],
+        llm_ctrl: Any,
+    ) -> tuple[Any, str, DiscoveryResult | None]:
+        """Atlas修復ループを実行し、(repair_out, repair_status, healed_result_on_error) を返す。"""
         repair_out = None
-        repair_status = "unknown_error"  # デフォルト
+        repair_status = "unknown_error"
+        healed_result: DiscoveryResult | None = None
 
         try:
-            # NOTE: InteractiveRepairSession はファイル先頭でimport済み
             repair_session = InteractiveRepairSession(
-                ai_controller=llm_ctrl,
-                run_context=run_context,
-                max_steps=max_steps,  # V88.5.2: ステップ上限を渡す
+                ai_controller=llm_ctrl, run_context=run_context, max_steps=max_steps,
             )
-
-            # run_repair_loop が sync の場合/async の場合どっちも耐えるラッパー
             maybe_coro = repair_session.run_repair_loop(
-                page=self._page,  # ★ セッション中のpageを引き継ぐ
-                site_key=site,
+                page=self._page, site_key=site,
                 intent="Collect PLP items and PDP prices",
-                initial_failure=failure_ctx,  # V88.5.2: v88.5.1 のリッチなコンテキストを維持
+                initial_failure=failure_ctx,
             )
-
-            # V88.5.2: ユーザー要求の repair_budget_ms でタイムアウト監視
             repair_budget_sec = max(5.0, float(repair_budget_ms) / 1000.0)
 
             if asyncio.iscoroutine(maybe_coro):
                 self.logger.info(f"[run_with_repair] Waiting for async repair loop (budget: {repair_budget_sec}s)")
                 repair_out = await asyncio.wait_for(maybe_coro, timeout=repair_budget_sec)
             else:
-                # 同期版のタイムアウト監視は難しいが、v88.5.1J のフォールバックを維持
                 self.logger.warning("[run_with_repair] Running sync repair loop (cannot enforce budget)")
-                repair_out = maybe_coro  # 同期実行
-
-            repair_status = "completed"  # タイムアウト/例外なく完了
+                repair_out = maybe_coro
+            repair_status = "completed"
 
         except asyncio.TimeoutError:
             self.logger.error(f"[run_with_repair] InteractiveRepairSession timed out after {repair_budget_sec}s.")
-            repair_status = "timeout_exceeded"  # V88.5.2: タイムアウト
-            # V88.5.2: タイムアウトした場合、失敗として healed_result を設定
+            repair_status = "timeout_exceeded"
             healed_result = DiscoveryResult(
-                ok=False,
-                site=site,
-                query=query,
+                ok=False, site=site, query=query,
                 message=f"Repair loop timed out after {repair_budget_sec}s",
                 evidence={"status": "timeout_exceeded", "initial_failure": base_result.evidence},
             )
-
         except Exception as repair_e:
-            self.logger.error(
-                f"[run_with_repair] InteractiveRepairSession failed catastrophically: {repair_e}", exc_info=True
-            )
+            self.logger.error(f"[run_with_repair] InteractiveRepairSession failed: {repair_e}", exc_info=True)
             repair_status = "catastrophic_failure"
-            # V88.5.2: 修復が例外で死んだ場合、失敗として healed_result を設定
             healed_result = DiscoveryResult(
-                ok=False,
-                site=site,
-                query=query,
+                ok=False, site=site, query=query,
                 message=f"Repair loop failed: {repair_e}",
                 evidence={"status": "catastrophic_failure", "initial_failure": base_result.evidence},
             )
 
-        # --- V88.5.2: 修復結果の厳格な評価 ---
+        return repair_out, repair_status, healed_result
+
+    def _evaluate_repair_result(
+        self,
+        *,
+        repair_out: Any,
+        repair_status: str,
+        site: str,
+        query: str,
+        site_config: dict[str, Any],
+        run_context: RunContext,
+        target_url: str,
+        base_result: DiscoveryResult,
+    ) -> DiscoveryResult:
+        """修復ループ結果を評価し、セレクタマージ + DiscoveryResult を構築。"""
         if repair_status == "completed" and repair_out:
-            # 6. 修復結果の処理
             selectors_update = repair_out.get("selectors_update")
             code_patch = repair_out.get("code_patch", "")
-
-            if selectors_update:
-                # overrides_store.update_site_selectors(...) を使ってマージ
-                try:
-                    from app.utils.overrides_store import update_site_selectors
-
-                    site_block = selectors_update.get(site.upper()) or selectors_update.get(site) or {}
-                    new_sels = site_block.get("selectors") or {}
-                    if new_sels:
-                        overrides_path = "app/config/sites/overrides.local.json"  # TODO: パスを動的にすべきかも
-                        updated, diff_txt = update_site_selectors(
-                            site=site.upper(),
-                            new_selectors=new_sels,
-                            overrides_path=overrides_path,
-                        )
-                        if updated and diff_txt:
-                            self.logger.info(f"[run_with_repair] Merged selectors_update to {overrides_path}")
-                            run_context.save_text("repair_selector_diff.patch", diff_txt)
-                        else:
-                            self.logger.info("[run_with_repair] Selectors update did not result in changes.")
-                    else:
-                        self.logger.info("[run_with_repair] Selectors update was empty.")
-                except ImportError:
-                    self.logger.error(
-                        "[run_with_repair] `app.utils.overrides_store` not found. Cannot merge selectors."
-                    )
-                except Exception as merge_e:
-                    self.logger.warning(f"[run_with_repair] could not merge selectors_update: {merge_e}")
+            self._merge_repair_selectors(selectors_update, site, run_context)
 
             if code_patch:
                 self.logger.info("[run_with_repair] Received code patch suggestion. Saving to artifacts.")
                 run_context.save_text("browser_use_agent.patch", code_patch)
 
-            # V88.5.2: 成果物（セレクタ or パッチ）があるか？
             if selectors_update or code_patch:
                 self.logger.info("[run_with_repair] Repair loop completed and produced artifacts.")
-                # 7. 成功した扱いのDiscoveryResult を組み立てる
-                healed_result = DiscoveryResult(
-                    ok=True,  # 成果物があるので成功とみなす
-                    site=site,
-                    query=query,
+                return DiscoveryResult(
+                    ok=True, site=site, query=query,
                     message="Recovered via InteractiveRepairSession",
                     evidence={
                         "final_url": repair_out.get("final_url") or (self._page.url if self._page else target_url),
-                        "selectors_update": selectors_update,
-                        "code_patch": code_patch,
+                        "selectors_update": selectors_update, "code_patch": code_patch,
                         "steps_taken": repair_out.get("steps_taken"),
-                        "repair_log": repair_out.get("log", []),
-                        "status": "recovered",
+                        "repair_log": repair_out.get("log", []), "status": "recovered",
                     },
                 )
             else:
-                # V88.5.2: ユーザー要求。修復が完了したが成果物がない場合 (max_steps 超過や stalled など)
-                self.logger.warning(
-                    "[run_with_repair] Repair loop completed but produced no artifacts (likely exhausted or stalled)."
-                )
-                status_from_repair = repair_out.get(
-                    "status", "exhausted_steps"
-                )  # 'stalled' や 'exhausted_steps' を期待
-                healed_result = DiscoveryResult(
-                    ok=False,  # 成果物がないので失敗
-                    site=site,
-                    query=query,
+                self.logger.warning("[run_with_repair] Repair completed but produced no artifacts.")
+                status_from_repair = repair_out.get("status", "exhausted_steps")
+                return DiscoveryResult(
+                    ok=False, site=site, query=query,
                     message=f"Repair loop finished without artifacts (Status: {status_from_repair})",
                     evidence={
                         "final_url": repair_out.get("final_url") or (self._page.url if self._page else target_url),
                         "steps_taken": repair_out.get("steps_taken"),
                         "repair_log": repair_out.get("log", []),
-                        "status": status_from_repair,
-                        "initial_failure": base_result.evidence,
+                        "status": status_from_repair, "initial_failure": base_result.evidence,
                     },
                 )
 
-        elif not healed_result:  # タイムアウトでも例外でもないが、repair_out が None (or status != completed)
-            self.logger.error(
-                f"[run_with_repair] Repair loop finished abnormally (Status: {repair_status}, repair_out: {repair_out})"
-            )
-            healed_result = DiscoveryResult(
-                ok=False,
-                site=site,
-                query=query,
-                message=f"Repair loop failed with unknown status: {repair_status}",
-                evidence={"status": repair_status, "initial_failure": base_result.evidence},
-            )
+        self.logger.error(
+            f"[run_with_repair] Repair loop finished abnormally (Status: {repair_status}, repair_out: {repair_out})"
+        )
+        return DiscoveryResult(
+            ok=False, site=site, query=query,
+            message=f"Repair loop failed with unknown status: {repair_status}",
+            evidence={"status": repair_status, "initial_failure": base_result.evidence},
+        )
 
-        # 8. セッションを閉じて、修復結果（成功または失敗）を返す
+    def _merge_repair_selectors(self, selectors_update: dict | None, site: str, run_context: RunContext) -> None:
+        """修復されたセレクタを overrides.local.json にマージ。"""
+        if not selectors_update:
+            return
         try:
-            await self._close_session(run_context, settings)
-        finally:
-            if hasattr(self, "run_context"):
-                del self.run_context
-
-        # V88.5.2: 修復フェーズに入った場合、必ず healed_result (修復成功/修復失敗/タイムアウト) が返る
-        return healed_result
+            from app.utils.overrides_store import update_site_selectors
+            site_block = selectors_update.get(site.upper()) or selectors_update.get(site) or {}
+            new_sels = site_block.get("selectors") or {}
+            if new_sels:
+                overrides_path = "app/config/sites/overrides.local.json"
+                updated, diff_txt = update_site_selectors(
+                    site=site.upper(), new_selectors=new_sels, overrides_path=overrides_path,
+                )
+                if updated and diff_txt:
+                    self.logger.info(f"[run_with_repair] Merged selectors_update to {overrides_path}")
+                    run_context.save_text("repair_selector_diff.patch", diff_txt)
+                else:
+                    self.logger.info("[run_with_repair] Selectors update did not result in changes.")
+            else:
+                self.logger.info("[run_with_repair] Selectors update was empty.")
+        except ImportError:
+            self.logger.error("[run_with_repair] `app.utils.overrides_store` not found. Cannot merge selectors.")
+        except Exception as merge_e:
+            self.logger.warning(f"[run_with_repair] could not merge selectors_update: {merge_e}")
 
     # --- Settings Resolution ---
     def _resolve_run_settings(self, site_config: dict[str, Any]) -> dict[str, Any]:
@@ -1691,13 +1594,6 @@ class BrowserUseAgent:
             await page.goto(url=plp, wait_until="domcontentloaded")  # V88.6.1: 修正
         except Exception as e:
             logger.debug("[recover] force PLP failed: %r", e)
-
-    # ★NEW: ガード用の簡易版（_force_plp_recover が見つからない場合の代替）
-    async def _inline_force_plp_recover(self, page, site_config: dict, target_url: str | None) -> None:
-        await self._force_plp_recover(page, site_config, target_url)
-
-    # ★ V88.6.1: (Refactor) 不要になった重複メソッドを削除
-    # def _normalize_en_int_url(self, url: str, site_config: dict) -> str: ...
 
     # --- V88.1.0: Refined Failure Handling ---
     # --- V88.4.0: Add intent context ---
