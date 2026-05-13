@@ -105,33 +105,34 @@ class TestCalcCost:
 
 
 class TestSentiment:
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
     def test_returns_neutral_when_no_nlp(self):
         ctrl = object.__new__(AILlmController)
-        assert ctrl._sentiment("I love this!") == "NEUTRAL"
+        ctrl._local_nlp = None
+        with patch.dict("sys.modules", {"transformers": None}):
+            assert ctrl._sentiment("I love this!") == "NEUTRAL"
 
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP")
-    def test_positive(self, mock_nlp):
-        mock_nlp.return_value = [{"label": "POSITIVE", "score": 0.99}]
+    def test_positive(self):
+        mock_nlp = MagicMock(return_value=[{"label": "POSITIVE", "score": 0.99}])
         ctrl = object.__new__(AILlmController)
+        ctrl._local_nlp = mock_nlp
         assert ctrl._sentiment("Great product!") == "POSITIVE"
 
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP")
-    def test_negative(self, mock_nlp):
-        mock_nlp.return_value = [{"label": "NEGATIVE", "score": 0.95}]
+    def test_negative(self):
+        mock_nlp = MagicMock(return_value=[{"label": "NEGATIVE", "score": 0.95}])
         ctrl = object.__new__(AILlmController)
+        ctrl._local_nlp = mock_nlp
         assert ctrl._sentiment("Terrible quality") == "NEGATIVE"
 
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP")
-    def test_nlp_failure_returns_neutral(self, mock_nlp):
-        mock_nlp.side_effect = RuntimeError("model load failed")
+    def test_nlp_failure_returns_neutral(self):
+        mock_nlp = MagicMock(side_effect=RuntimeError("model load failed"))
         ctrl = object.__new__(AILlmController)
+        ctrl._local_nlp = mock_nlp
         assert ctrl._sentiment("Some text") == "NEUTRAL"
 
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP")
-    def test_truncates_long_text(self, mock_nlp):
-        mock_nlp.return_value = [{"label": "POSITIVE", "score": 0.9}]
+    def test_truncates_long_text(self):
+        mock_nlp = MagicMock(return_value=[{"label": "POSITIVE", "score": 0.9}])
         ctrl = object.__new__(AILlmController)
+        ctrl._local_nlp = mock_nlp
         ctrl._sentiment("x" * 1000)
         call_arg = mock_nlp.call_args[0][0]
         assert len(call_arg) <= 512
@@ -148,12 +149,12 @@ class TestGenerateWithRetry:
         ctrl._initialized = True
         return ctrl
 
-    @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
     @patch.object(AILlmController, "_raw_call")
     def test_success_on_first_attempt(self, mock_raw):
         mock_raw.return_value = ("Hello!", {"input": 100, "output": 50})
         ctrl = self._make_ctrl()
+        ctrl._local_nlp = None
+        ctrl._local_llama = None
 
         result = ctrl._generate_with_retry("openai", "test", None, False, None)
 
@@ -161,8 +162,6 @@ class TestGenerateWithRetry:
         assert result.model_family == "openai"
         mock_raw.assert_called_once()
 
-    @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
     @patch.object(AILlmController, "_raw_call")
     @patch("app.utils.ai_llm_controller.time")
     def test_fallback_from_gemini_to_openai(self, mock_time, mock_raw):
@@ -171,6 +170,8 @@ class TestGenerateWithRetry:
             ("Fallback response", {"input": 50, "output": 30}),
         ]
         ctrl = self._make_ctrl()
+        ctrl._local_nlp = None
+        ctrl._local_llama = None
 
         result = ctrl._generate_with_retry("gemini", "test", None, False, None)
 
@@ -178,8 +179,6 @@ class TestGenerateWithRetry:
         assert result.model_family == "openai"
         assert mock_raw.call_count == 2
 
-    @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
     @patch.object(AILlmController, "_raw_call")
     @patch("app.utils.ai_llm_controller.time")
     def test_all_fail_returns_none_instead_of_raising(self, mock_time, mock_raw):
@@ -187,24 +186,24 @@ class TestGenerateWithRetry:
         attempt(3) != len(families)(4) なので raise されず None が返る"""
         mock_raw.side_effect = [RuntimeError("down")] * 10
         ctrl = self._make_ctrl()
+        ctrl._local_nlp = None
+        ctrl._local_llama = None
 
         result = ctrl._generate_with_retry("gemini", "test", None, False, None)
         assert result is None
 
-    @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
     @patch.object(AILlmController, "_stream_call")
     def test_stream_call_used_when_stream_true(self, mock_stream):
         mock_stream.return_value = ("Streamed text", {"input": 100, "output": 50})
         ctrl = self._make_ctrl()
+        ctrl._local_nlp = None
+        ctrl._local_llama = None
 
         result = ctrl._generate_with_retry("openai", "test", None, True, lambda x: None)
 
         assert result.text == "Streamed text"
         mock_stream.assert_called_once()
 
-    @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
     @patch.object(AILlmController, "_raw_call")
     @patch("app.utils.ai_llm_controller.time")
     def test_exponential_backoff(self, mock_time, mock_raw):
@@ -213,6 +212,8 @@ class TestGenerateWithRetry:
             ("ok", {"input": 10, "output": 5}),
         ]
         ctrl = self._make_ctrl()
+        ctrl._local_nlp = None
+        ctrl._local_llama = None
 
         ctrl._generate_with_retry("openai", "test", None, False, None)
 
@@ -288,11 +289,11 @@ class TestRawCall:
         assert text == "OpenAI response"
         assert usage["prompt_tokens"] == 200
 
-    @patch("app.utils.ai_llm_controller.LOCAL_LLAMA")
-    def test_local_call(self, mock_llama):
-        mock_llama.return_value = {"choices": [{"text": "Local response"}]}
+    def test_local_call(self):
+        mock_llama = MagicMock(return_value={"choices": [{"text": "Local response"}]})
 
         ctrl = self._make_ctrl()
+        ctrl._local_llama = mock_llama
         text, usage = ctrl._raw_call("local", "hello", None)
 
         assert text == "Local response"
@@ -300,7 +301,7 @@ class TestRawCall:
     def test_no_client_raises(self):
         ctrl = self._make_ctrl()
 
-        with pytest.raises(RuntimeError, match="No client configured"):
+        with pytest.raises(RuntimeError, match="client not configured"):
             ctrl._raw_call("gemini", "hello", None)
 
     def test_deepseek_empty_content_returns_empty_string(self):
@@ -461,9 +462,7 @@ class TestGenerate:
         ctrl._initialized = True
         return ctrl
 
-    @patch("app.utils.ai_llm_controller.CACHE")
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
-    @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
+    @patch("app.utils.ai_llm_controller._CACHE")
     @patch("app.utils.chat_history_saver.save_chat_history")
     def test_cache_hit_returns_cached(self, mock_save, mock_cache):
         mock_cache.get.return_value = {
@@ -474,14 +473,14 @@ class TestGenerate:
             "sentiment": "NEUTRAL",
         }
         ctrl = self._make_ctrl()
+        ctrl._local_nlp = None
+        ctrl._local_llama = None
         result = ctrl.generate("hello")
 
         assert result.text == "cached result"
         assert result.cached is True
 
-    @patch("app.utils.ai_llm_controller.CACHE")
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
-    @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
+    @patch("app.utils.ai_llm_controller._CACHE")
     @patch.object(AILlmController, "_generate_with_retry")
     @patch("app.utils.chat_history_saver.save_chat_history")
     def test_cache_miss_generates_and_saves(self, mock_save, mock_retry, mock_cache):
@@ -493,6 +492,8 @@ class TestGenerate:
             model_family="openai",
         )
         ctrl = self._make_ctrl()
+        ctrl._local_nlp = None
+        ctrl._local_llama = None
         result = ctrl.generate("hello")
 
         assert result.text == "new result"
@@ -500,15 +501,15 @@ class TestGenerate:
         mock_cache.set.assert_called_once()
         mock_save.assert_called_once()
 
-    @patch("app.utils.ai_llm_controller.CACHE")
-    @patch("app.utils.ai_llm_controller.LOCAL_NLP", None)
-    @patch("app.utils.ai_llm_controller.LOCAL_LLAMA", None)
+    @patch("app.utils.ai_llm_controller._CACHE")
     @patch.object(AILlmController, "_generate_with_retry")
     @patch("app.utils.chat_history_saver.save_chat_history")
     def test_task_type_selects_family(self, mock_save, mock_retry, mock_cache):
         mock_cache.get.return_value = None
         mock_retry.return_value = GenerateResult(text="ok", model_family="gemini")
         ctrl = self._make_ctrl()
+        ctrl._local_nlp = None
+        ctrl._local_llama = None
         ctrl.generate("analyze this", task_type="analysis")
 
         mock_retry.assert_called_once()
