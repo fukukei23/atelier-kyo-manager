@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.agents.browser.product_extractor import ProductExtractor, ProductInfo
+from app.agents.browser.product_normalizer import normalize_price_text, normalize_price_to_float
 from app.core.run_context import RunContext
 
 
@@ -199,7 +200,7 @@ class TestProductExtractorBasic:
 
         price_rules = {"strip_chars": ["¥", ",", " "], "decimal_separator": ".", "thousands_separator": ","}
 
-        normalized = extractor._normalize_price("¥15,900", price_rules)
+        normalized = normalize_price_text("¥15,900", price_rules)
         assert normalized is not None
         assert float(normalized.replace(",", "")) == 15900.0, f"Expected 15900.0, got {normalized}"
 
@@ -209,7 +210,7 @@ class TestProductExtractorBasic:
         extractor = ProductExtractor(site_config=site_config, run_context=run_context)
         price_rules = {"strip_chars": ["€", ",", " "], "decimal_separator": ".", "thousands_separator": ","}
 
-        normalized = extractor._normalize_price("€1,234.56", price_rules)
+        normalized = normalize_price_text("€1,234.56", price_rules)
         assert normalized is not None
 
 
