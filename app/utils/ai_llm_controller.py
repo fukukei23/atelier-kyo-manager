@@ -1,15 +1,4 @@
-# ==============================================================================
-# File: ai_llm_controller.py
-# Registry: C:\Users\USER\tools\atelier-kyo-manager\app\utils\ai_llm_controller.py
-# Date & Time (JST): 2025-09-16 14:00:00
-# Version: 4.1J (Standardized Model Integration)
-#
-# --- What's New (v4.1J) ---
-#  - [Refactor] Removed the local GenerateResult dataclass definition.
-#  - [Integration] Now imports the standardized `GenerateResult` from
-#    `app.models.result_models` to ensure system-wide data consistency.
-# ==============================================================================
-# -*- coding: utf-8 -*-
+"""LLM controller: unified interface for Gemini / OpenAI / DeepSeek / local models."""
 from __future__ import annotations
 
 import hashlib
@@ -21,85 +10,50 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
-# --- 共通データモデルをインポート ---
 from app.models.result_models import GenerateResult
 
-# ---------- ロガー ----------
 logger = logging.getLogger(__name__)
 
-# ---------- OpenTelemetry ----------
-from opentelemetry import trace
+# ---------- Optional imports ----------
+try:
+    from opentelemetry import trace
+    tracer = trace.get_tracer("ai_llm_controller")
+except ImportError:
+    class _NoopTracer:
+        def start_as_current_span(self, name):
+            return self
+        def __enter__(self):
+            return self
+        def __exit__(self, *a):
+            pass
+        def set_attribute(self, *a):
+            pass
+    tracer = _NoopTracer()
 
-tracer = trace.get_tracer("ai_llm_controller")
+try:
+    import diskcache
+    _CACHE_DIR = Path(__file__).resolve().parents[2] / "instance" / "llm_cache"
+    _CACHE = diskcache.Cache(_CACHE_DIR, size_limit=500_000_000)
+except Exception:
+    _CACHE = None
 
-# ---------- キャッシュ ----------
-import diskcache
-
-CACHE_DIR = Path(__file__).resolve().parents[2] / "instance" / "llm_cache"
-CACHE = diskcache.Cache(CACHE_DIR, size_limit=500_000_000)  # 500 MB
-
-# ---------- LLM ライブラリ ----------
 try:
     import google.generativeai as genai
 except ImportError:
     genai = None
+
 try:
     from openai import OpenAI
 except ImportError:
     OpenAI = None
 
-# Heavy imports — 遅延初期化（アプリ起動をブロックしない）
-LOCAL_NLP = None
-LOCAL_LLAMA = None
+# ---------- Model names ----------
+GEMINI_MODEL = "gemini-1.5-flash-latest"
+OPENAI_MODEL = "gpt-4o"
+DEEPSEEK_MODEL = "deepseek-chat"
+LOCAL_MODEL_PATH = Path(__file__).resolve().parents[2] / "models" / "llama-7b-q4_0.gguf"
 
-
-# ---------- 設定ローダ ----------
-def _load_config() -> dict[str, Any]:
-    """
-    設定を読み込む（Flask > AppConfig > Secrets > 環境変数）
-
-    注意: 機密情報は Secrets クラスから直接取得することを推奨
-    """
-    config_dict: dict[str, Any] = {}
-
-    # 1) Flaskアプリの設定（最優先）
-    try:
-        from flask import current_app
-
-        config_dict.update(dict(current_app.config))
-        return config_dict
-    except Exception:
-        pass
-
-    # 2) AppConfig（非機密設定）
-    try:
-        from app.config.config import AppConfig
-
-        for k in dir(AppConfig):
-            if not k.startswith("_") and not callable(getattr(AppConfig, k)):
-                config_dict[k] = getattr(AppConfig, k)
-    except Exception:
-        pass
-
-    # 3) Secrets（機密情報）
-    try:
-        from app.config.secrets import Secrets
-
-        for k in dir(Secrets):
-            if not k.startswith("_") and not callable(getattr(Secrets, k)):
-                val = getattr(Secrets, k)
-                if val:  # 空でない値のみ
-                    config_dict[k] = val
-    except Exception:
-        pass
-
-    # 4) 環境変数（フォールバック）
-    config_dict.update(dict(os.environ))
-
-    return config_dict
-
-
-# ---------- ポリシー ----------
+# ---------- Task routing ----------
 TASK_TO_MODEL_FAMILY: dict[str, Literal["gemini", "deepseek", "openai", "local"]] = {
     "default": "openai",
     "analysis": "gemini",
@@ -107,7 +61,6 @@ TASK_TO_MODEL_FAMILY: dict[str, Literal["gemini", "deepseek", "openai", "local"]
     "summarize": "openai",
 }
 
-# ---------- コスト計算 ----------
 MODEL_COST = {
     "gemini": {"input": 0.50 / 1_000_000, "output": 1.50 / 1_000_000},
     "openai": {"input": 5.00 / 1_000_000, "output": 15.00 / 1_000_000},
@@ -116,9 +69,37 @@ MODEL_COST = {
 }
 
 
-# ---------- 本体 ----------
+def _load_config() -> dict[str, Any]:
+    """設定を読み込む（Flask > AppConfig > Secrets > 環境変数）"""
+    config_dict: dict[str, Any] = {}
+    try:
+        from flask import current_app
+        config_dict.update(dict(current_app.config))
+        return config_dict
+    except Exception:
+        pass
+    try:
+        from app.config.config import AppConfig
+        for k in dir(AppConfig):
+            if not k.startswith("_") and not callable(getattr(AppConfig, k)):
+                config_dict[k] = getattr(AppConfig, k)
+    except Exception:
+        pass
+    try:
+        from app.config.secrets import Secrets
+        for k in dir(Secrets):
+            if not k.startswith("_") and not callable(getattr(Secrets, k)):
+                val = getattr(Secrets, k)
+                if val:
+                    config_dict[k] = val
+    except Exception:
+        pass
+    config_dict.update(dict(os.environ))
+    return config_dict
+
+
 class AILlmController:
-    _instance = None
+    _instance: AILlmController | None = None
 
     def __new__(cls):
         if cls._instance is None:
@@ -133,11 +114,17 @@ class AILlmController:
         self.gemini_model = None
         self.deepseek_client = None
         self.openai_client = None
+        self._local_nlp = None
+        self._local_llama = None
+        self._init_clients()
+        self._initialized = True
+
+    def _init_clients(self) -> None:
         if genai:
             key = self.cfg.get("GEMINI_API_KEY")
             if key:
                 genai.configure(api_key=key)
-                self.gemini_model = genai.GenerativeModel("gemini-1.5-flash-latest")
+                self.gemini_model = genai.GenerativeModel(GEMINI_MODEL)
         if OpenAI:
             d_key = self.cfg.get("DEEPSEEK_API_KEY")
             d_base = self.cfg.get("DEEPSEEK_API_BASE", "https://api.deepseek.com")
@@ -146,9 +133,9 @@ class AILlmController:
                 self.deepseek_client = OpenAI(api_key=d_key, base_url=d_base)
             if o_key:
                 self.openai_client = OpenAI(api_key=o_key)
-        self._initialized = True
 
-    # ---- 公開 generate ----
+    # ---- Public API ----
+
     def generate(
         self,
         prompt: str,
@@ -162,23 +149,29 @@ class AILlmController:
             span.set_attribute("prompt.length", len(prompt))
             family = TASK_TO_MODEL_FAMILY.get(task_type, "default")
             cache_key = self._cache_key(family, prompt, tools)
-            cached = CACHE.get(cache_key)
-            if cached:
-                logger.info("Cache hit")
-                # キャッシュから復元する際も to_dict は不要
-                return GenerateResult(**cached, cached=True)
+
+            if _CACHE:
+                cached = _CACHE.get(cache_key)
+                if cached:
+                    logger.info("Cache hit")
+                    return GenerateResult(**cached, cached=True)
 
             result = self._generate_with_retry(family, prompt, tools, stream, chunk_callback)
-            # キャッシュのTTLを30日間に延長（再起動後も保持）
-            CACHE.set(cache_key, result.to_dict(), expire=2592000)  # 30日TTL
 
-            # チャット履歴をデータベースに保存
+            if _CACHE:
+                _CACHE.set(cache_key, result.to_dict(), expire=2_592_000)
+
             from app.utils.chat_history_saver import save_chat_history
             save_chat_history(prompt, result)
 
             return result
 
-    # ---- キックロジック（リトライ＋フォールバック） ----
+    @classmethod
+    def quick(cls, prompt: str, task: str = "default") -> str:
+        return cls().generate(prompt, task_type=task).text
+
+    # ---- Retry + fallback ----
+
     def _generate_with_retry(
         self,
         family: Literal["gemini", "deepseek", "openai", "local"],
@@ -189,13 +182,8 @@ class AILlmController:
     ) -> GenerateResult:
         families = [family, "openai", "deepseek", "local"] if family != "local" else ["local"]
         for attempt, fam in enumerate(families, 1):
-            if fam == "local" and LOCAL_LLAMA is None:
-                try:
-                    from llama_cpp import Llama
-                except ImportError:
-                    continue
-                model_path = Path(__file__).resolve().parents[2] / "models" / "llama-7b-q4_0.gguf"
-                if not model_path.exists():
+            if fam == "local" and self._local_llama is None:
+                if not LOCAL_MODEL_PATH.exists():
                     continue
             try:
                 logger.info(f"Attempt {attempt} with {fam}")
@@ -210,62 +198,71 @@ class AILlmController:
                 logger.warning(f"{fam} failed: {e}")
                 if attempt == len(families):
                     raise
-                time.sleep(1.5**attempt)  # 指数バックオフ
+                time.sleep(1.5**attempt)
 
-    # ---- 生呼び出し ----
+    # ---- Provider dispatch ----
+
     def _raw_call(self, fam: str, prompt: str, tools: list[dict[str, Any]] | None) -> tuple[str, dict[str, int]]:
-        if fam == "gemini" and self.gemini_model:
-            response = self.gemini_model.generate_content(prompt)
-            usage = {"input": len(prompt) // 4, "output": len(response.text) // 4}
-            return response.text, usage
-        if fam == "deepseek" and self.deepseek_client:
-            cmpl = self.deepseek_client.chat.completions.create(
-                model="deepseek-chat", messages=[{"role": "user", "content": prompt}], tools=tools or []
-            )
-            txt = cmpl.choices[0].message.content or ""
-            usage = cmpl.usage.model_dump() if cmpl.usage else {}
-            return txt, usage
-        if fam == "openai" and self.openai_client:
-            cmpl = self.openai_client.chat.completions.create(
-                model="gpt-4o", messages=[{"role": "user", "content": prompt}], tools=tools or []
-            )
-            txt = cmpl.choices[0].message.content or ""
-            usage = cmpl.usage.model_dump() if cmpl.usage else {}
-            return txt, usage
-        if fam == "local":
-            global LOCAL_LLAMA
-            if LOCAL_LLAMA is None:
-                try:
-                    from llama_cpp import Llama
-                    model_path = Path(__file__).resolve().parents[2] / "models" / "llama-7b-q4_0.gguf"
-                    if model_path.exists():
-                        LOCAL_LLAMA = Llama(model_path=str(model_path), n_ctx=2048)
-                except Exception:
-                    pass
-            if LOCAL_LLAMA is None:
-                raise RuntimeError("Local Llama model not available")
-            out = LOCAL_LLAMA(prompt, max_tokens=512, temperature=0.3)
-            txt = out["choices"][0]["text"]
-            usage = {"input": len(prompt) // 4, "output": len(txt) // 4}
-            return txt, usage
-        raise RuntimeError(f"No client configured for {fam}")
+        handler = {
+            "gemini": self._call_gemini,
+            "deepseek": self._call_openai_compat,
+            "openai": self._call_openai_compat,
+            "local": self._call_local,
+        }.get(fam)
+        if not handler:
+            raise RuntimeError(f"No client configured for {fam}")
+        return handler(fam, prompt, tools)
 
-    # ---- ストリーミング ----
+    def _call_gemini(self, _fam: str, prompt: str, _tools: list[dict[str, Any]] | None) -> tuple[str, dict[str, int]]:
+        if not self.gemini_model:
+            raise RuntimeError("Gemini client not configured")
+        response = self.gemini_model.generate_content(prompt)
+        usage = {"input": len(prompt) // 4, "output": len(response.text) // 4}
+        return response.text, usage
+
+    def _call_openai_compat(self, fam: str, prompt: str, tools: list[dict[str, Any]] | None) -> tuple[str, dict[str, int]]:
+        client = self.deepseek_client if fam == "deepseek" else self.openai_client
+        if not client:
+            raise RuntimeError(f"{fam} client not configured")
+        model = DEEPSEEK_MODEL if fam == "deepseek" else OPENAI_MODEL
+        cmpl = client.chat.completions.create(
+            model=model, messages=[{"role": "user", "content": prompt}], tools=tools or [],
+        )
+        txt = cmpl.choices[0].message.content or ""
+        usage = cmpl.usage.model_dump() if cmpl.usage else {}
+        return txt, usage
+
+    def _call_local(self, _fam: str, prompt: str, _tools: list[dict[str, Any]] | None) -> tuple[str, dict[str, int]]:
+        if self._local_llama is None:
+            try:
+                from llama_cpp import Llama
+                if LOCAL_MODEL_PATH.exists():
+                    self._local_llama = Llama(model_path=str(LOCAL_MODEL_PATH), n_ctx=2048)
+            except Exception:
+                pass
+        if self._local_llama is None:
+            raise RuntimeError("Local Llama model not available")
+        out = self._local_llama(prompt, max_tokens=512, temperature=0.3)
+        txt = out["choices"][0]["text"]
+        return txt, {"input": len(prompt) // 4, "output": len(txt) // 4}
+
+    # ---- Streaming ----
+
     def _stream_call(self, fam: str, prompt: str, chunk_callback: Callable[[str], None]) -> tuple[str, dict[str, int]]:
-        text = ""
         if fam == "openai" and self.openai_client:
+            text = ""
             for chunk in self.openai_client.chat.completions.create(
-                model="gpt-4o", messages=[{"role": "user", "content": prompt}], stream=True
+                model=OPENAI_MODEL, messages=[{"role": "user", "content": prompt}], stream=True,
             ):
                 delta = chunk.choices[0].delta.content or ""
                 text += delta
                 if chunk_callback:
                     chunk_callback(delta)
-            usage = {"input": len(prompt) // 4, "output": len(text) // 4}
-            return text, usage
+            return text, {"input": len(prompt) // 4, "output": len(text) // 4}
         raise RuntimeError(f"Streaming is only supported for OpenAI at the moment, but got {fam}")
 
-    # ---- ユーティリティ ----
+    # ---- Utilities ----
+
     def _cache_key(self, fam: str, prompt: str, tools: list[dict[str, Any]] | None) -> str:
         content = json.dumps({"fam": fam, "prompt": prompt, "tools": tools}, sort_keys=True)
         return hashlib.sha256(content.encode()).hexdigest()
@@ -277,20 +274,14 @@ class AILlmController:
         return inp * c["input"] + out * c["output"]
 
     def _sentiment(self, text: str) -> Literal["POSITIVE", "NEGATIVE", "NEUTRAL"]:
-        global LOCAL_NLP
-        if LOCAL_NLP is None:
+        if self._local_nlp is None:
             try:
                 from transformers import pipeline
-                LOCAL_NLP = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+                self._local_nlp = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
             except Exception:
                 return "NEUTRAL"
         try:
-            label = LOCAL_NLP(text[:512])[0]["label"]
+            label = self._local_nlp(text[:512])[0]["label"]
             return "POSITIVE" if label == "POSITIVE" else "NEGATIVE"
         except Exception:
             return "NEUTRAL"
-
-    # ---- クラスメソッド：簡易呼び出し ----
-    @classmethod
-    def quick(cls, prompt: str, task: str = "default") -> str:
-        return cls().generate(prompt, task_type=task).text
