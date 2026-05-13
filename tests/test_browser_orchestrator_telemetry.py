@@ -92,8 +92,8 @@ async def test_run_plp_to_pdp_records_plp_initial_state(
 ):
     """run_plp_to_pdp が PLP 初期状態を Telemetry に記録することを確認"""
     with (
-        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
-        patch("app.agents.browser.orchestrator.NavigationDriver") as mock_nav_driver_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.TelemetryClient") as mock_telemetry_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.NavigationDriver") as mock_nav_driver_class,
     ):
         # TelemetryClient のモック
         mock_telemetry = AsyncMock()
@@ -112,7 +112,7 @@ async def test_run_plp_to_pdp_records_plp_initial_state(
         mock_nav_driver_class.return_value = mock_nav_driver
 
         # BrowserExtractionService のモック
-        with patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class:
+        with patch("app.agents.browser.orchestrator.plp_pdp_flow.BrowserExtractionService") as mock_extraction_service_class:
             mock_extraction_service = AsyncMock()
             mock_extraction_service.extract_from_pdp_list = AsyncMock(
                 return_value=DiscoveryResult(
@@ -154,9 +154,9 @@ async def test_run_plp_to_pdp_records_no_pdp_links(
 ):
     """pdp_links が 0 の場合、Telemetry に記録されることを確認"""
     with (
-        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
-        patch("app.agents.browser.orchestrator.NavigationDriver") as mock_nav_driver_class,
-        patch("app.agents.browser.orchestrator.PlpDriver") as mock_plp_driver_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.TelemetryClient") as mock_telemetry_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.NavigationDriver") as mock_nav_driver_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.PlpDriver") as mock_plp_driver_class,
     ):
         # TelemetryClient のモック
         mock_telemetry = AsyncMock()
@@ -219,8 +219,8 @@ async def test_run_pdp_records_pdp_dom(
 ):
     """run_pdp が PDP DOM を Telemetry に記録することを確認"""
     with (
-        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
-        patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.TelemetryClient") as mock_telemetry_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.BrowserExtractionService") as mock_extraction_service_class,
     ):
         # TelemetryClient のモック
         mock_telemetry = AsyncMock()
@@ -268,7 +268,7 @@ async def test_failure_context_includes_required_keys(
     settings,
 ):
     """failure_context に必要なキーが含まれていることを確認"""
-    with patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class:
+    with patch("app.agents.browser.orchestrator.plp_pdp_flow.BrowserExtractionService") as mock_extraction_service_class:
         # BrowserExtractionService が ValueError を投げるように設定
         mock_extraction_service = AsyncMock()
         mock_extraction_service.extract_single_pdp = AsyncMock(side_effect=ValueError("Price not found on PDP."))
