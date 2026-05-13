@@ -4,7 +4,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
-from typing import Any
+from typing import Any, NamedTuple
 from urllib.parse import parse_qsl, urlencode, urlparse, urlsplit, urlunparse, urlunsplit
 
 from playwright.async_api import Page
@@ -25,6 +25,8 @@ _LOCALE_COOKIES = [
     {"name": "moncler-shipping-country", "value": "GB", "domain": ".moncler.com", "path": "/"},
     {"name": "moncler-shipping-language", "value": "en", "domain": ".moncler.com", "path": "/"},
 ]
+
+_PLP_CONFIG_KEYS = ("plp_hard_nav", "seed_plp_url", "fallback_url", "home_url")
 
 
 def normalize_to_en_int_url(url: str) -> str:
@@ -60,17 +62,22 @@ async def force_en_int(page: Page) -> None:
         pass
 
 
-async def force_plp_recover(page: Page, site_config: dict[str, Any], target_url: str | None, log: Any) -> None:
-    plp = target_url or site_config.get("plp_hard_nav") or site_config.get("seed_plp_url") or site_config.get("fallback_url") or site_config.get("home_url")
+async def force_plp_recover(page: Page, site_config: dict[str, Any], target_url: str | None) -> None:
+    plp = target_url
     if not plp:
-        log.debug("[recover] no PLP candidate; skip")
+        for key in _PLP_CONFIG_KEYS:
+            plp = site_config.get(key)
+            if plp:
+                break
+    if not plp:
+        logger.debug("[recover] no PLP candidate; skip")
         return
     plp = normalize_to_en_int_url(plp)
-    log.info("[recover] Forcing PLP: %s", plp)
+    logger.info("[recover] Forcing PLP: %s", plp)
     try:
         await page.goto(url=plp, wait_until="domcontentloaded")
     except Exception as e:
-        log.debug("[recover] force PLP failed: %r", e)
+        logger.debug("[recover] force PLP failed: %r", e)
 
 
 def _normalize_locale_url(url: str) -> str:
@@ -82,23 +89,34 @@ def _normalize_locale_url(url: str) -> str:
         return url
 
 
-def _detect_trap_flags(url: str) -> dict[str, bool]:
+class TrapFlags(NamedTuple):
+    jp_locale: bool
+    corporate: bool
+    legal: bool
+    locale_gate: bool
+
+    @property
+    def detected(self) -> bool:
+        return any((self.jp_locale, self.corporate, self.legal, self.locale_gate))
+
+
+def _detect_trap_flags(url: str) -> TrapFlags:
     u = urlparse(url)
     path_lower = (u.path or "").lower()
     host = (u.netloc or "").lower()
     full_lower = url.lower()
-    return {
-        "jp_locale": "moncler.com" in full_lower and "/en-jp" in path_lower,
-        "corporate": "monclergroup.com" in host or "/brands/moncler" in path_lower,
-        "legal": any(k in path_lower for k in _LEGAL_KEYWORDS),
-        "locale_gate": "moncler.com" in host and path_lower in _LOCALE_GATE_PATHS,
-    }
+    return TrapFlags(
+        jp_locale="moncler.com" in full_lower and "/en-jp" in path_lower,
+        corporate="monclergroup.com" in host or "/brands/moncler" in path_lower,
+        legal=any(k in path_lower for k in _LEGAL_KEYWORDS),
+        locale_gate="moncler.com" in host and path_lower in _LOCALE_GATE_PATHS,
+    )
 
 
-def looks_like_trap_or_legal(url: str, log: Any) -> bool:
+def looks_like_trap_or_legal(url: str, log: logging.Logger) -> bool:
     url = _normalize_locale_url(url)
     flags = _detect_trap_flags(url)
-    for name, matched in flags.items():
+    for name, matched in flags._asdict().items():
         if matched:
             log.warning(f"[_looks_like_trap] Detected {name}: {url}")
-    return any(flags.values())
+    return flags.detected
