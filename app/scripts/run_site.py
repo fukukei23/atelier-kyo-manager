@@ -8,7 +8,9 @@ import contextlib
 import json
 import logging
 import sys
+from enum import Enum
 from pathlib import Path
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
@@ -27,7 +29,18 @@ except ImportError:
     get_site_config = None
     DefaultSiteConfigProvider = None
 
-logger = logging.getLogger(__name__)
+logger: logging.Logger = logging.getLogger(__name__)
+
+
+# ── Types ────────────────────────────────────────────────
+
+class ProxyMode(str, Enum):
+    AUTO = "auto"
+    ON = "on"
+    OFF = "off"
+
+
+# ── Constants ────────────────────────────────────────────
 
 SITE_ALIASES: dict[str, str] = {
     "moncler": "MONCLER_OFFICIAL",
@@ -87,7 +100,7 @@ Examples:
     p.add_argument("--timeout", type=int, default=60, help="Timeout seconds (default: 60)")
 
     proxy = p.add_mutually_exclusive_group()
-    proxy.add_argument("--proxy-mode", choices=["auto", "on", "off"], default="auto")
+    proxy.add_argument("--proxy-mode", choices=[m.value for m in ProxyMode], default=ProxyMode.AUTO.value)
     proxy.add_argument("--use-proxy", action="store_true", dest="proxy_mode_on",
                        help="[Deprecated] Use --proxy-mode on")
 
@@ -116,37 +129,38 @@ def _setup_instance_dirs(site_name: str) -> Path:
     return instance_dir
 
 
-def _load_site_config(site_name: str) -> tuple[Any | None, dict | None]:
+def _load_site_config(site_name: str) -> tuple[Any | None, dict[str, Any] | None]:
     """Returns (config_provider, site_config). Either may be None on failure."""
     if DefaultSiteConfigProvider is not None:
         try:
             provider = DefaultSiteConfigProvider()
             return provider, provider.get_site_config(site_name)
         except Exception as e:
-            logger.error(f"[run_site] SiteConfigProvider failed: {e}", exc_info=True)
+            logger.error("[run_site] SiteConfigProvider failed: %s", e, exc_info=True)
             return None, None
 
     if get_site_config:
         try:
             return None, get_site_config(site_name)
         except Exception as e:
-            logger.error(f"[run_site] Config loader failed: {e}", exc_info=True)
+            logger.error("[run_site] Config loader failed: %s", e, exc_info=True)
             return None, None
 
     logger.error("[run_site] No config loader available.")
     return None, None
 
 
-def _resolve_target_url(args, site_config: dict, site_name: str) -> str | None:
+def _resolve_target_url(args: argparse.Namespace, site_config: dict[str, Any], site_name: str) -> str | None:
     url = args.url or site_config.get("home_url") or site_config.get("discovery_settings", {}).get("home_url")
     if not url:
-        logger.error(f"[run_site] No target URL for '{site_name}'")
+        logger.error("[run_site] No target URL for '%s'", site_name)
     return url
 
 
-def _resolve_proxy(args) -> bool | None:
-    if args.proxy_mode != "auto":
-        return args.proxy_mode == "on"
+def _resolve_proxy(args: argparse.Namespace) -> bool | None:
+    mode = ProxyMode(args.proxy_mode)
+    if mode != ProxyMode.AUTO:
+        return mode == ProxyMode.ON
     if getattr(args, "proxy_mode_on", False):
         return True
     return None
@@ -158,14 +172,16 @@ def _check_import_available(label: str, module_path: str, attr: str, required: b
     try:
         mod = __import__(module_path, fromlist=[attr])
         getattr(mod, attr)
-        logger.info(f"[run_site]   {label}: available")
+        logger.info("[run_site]   %s: available", label)
         return True
     except (ImportError, AttributeError) as e:
-        (logger.error if required else logger.warning)(f"[run_site]   {label}: {'FAILED' if required else 'not available'} - {e}")
+        (logger.error if required else logger.warning)(
+            "[run_site]   %s: %s - %s", label, "FAILED" if required else "not available", e,
+        )
         return not required
 
 
-def _validate_dry_run(site_name: str, site_config: dict, target_url: str, args) -> bool:
+def _validate_dry_run(site_name: str, site_config: dict[str, Any], target_url: str, args: argparse.Namespace) -> bool:
     logger.info("[run_site] DRY-RUN validation...")
 
     _check_import_available("Stealth", "scraping.stealth", "apply_stealth_to_context")
@@ -177,17 +193,17 @@ def _validate_dry_run(site_name: str, site_config: dict, target_url: str, args) 
 
     missing = [k for k in ("discovery_settings", "selectors") if k not in site_config]
     if missing:
-        logger.warning(f"[run_site]   Config missing keys: {missing}")
+        logger.warning("[run_site]   Config missing keys: %s", missing)
     else:
         logger.info("[run_site]   Config structure: valid")
 
-    logger.info(f"[run_site]   DRY-RUN complete. site={site_name}, query={args.query}, url={target_url}")
+    logger.info("[run_site]   DRY-RUN complete. site=%s, query=%s, url=%s", site_name, args.query, target_url)
     return True
 
 
 # ── Result handling ────────────────────────────────────
 
-def _result_to_dict(result) -> dict:
+def _result_to_dict(result: Any) -> dict[str, Any]:
     if hasattr(result, "to_dict"):
         return result.to_dict()
     if hasattr(result, "__dict__"):
@@ -195,7 +211,7 @@ def _result_to_dict(result) -> dict:
     return {"ok": getattr(result, "ok", False), "site": getattr(result, "site", ""), "query": getattr(result, "query", "")}
 
 
-def _save_result(run_ctx: RunContext, result) -> None:
+def _save_result(run_ctx: RunContext, result: Any) -> None:
     result_dict = _result_to_dict(result)
 
     if isinstance(result_dict, dict) and "evidence" in result_dict:
@@ -210,13 +226,16 @@ def _save_result(run_ctx: RunContext, result) -> None:
 
     ok = getattr(result, "ok", False)
     log_path = run_ctx.get_path("system.log")
-    logger.info(f"[run_site] ok={ok} run_dir={run_ctx.run_path} result={result_path}")
+    logger.info("[run_site] ok=%s run_dir=%s result=%s", ok, run_ctx.run_path, result_path)
     if not ok:
-        logger.error(f"[run_site] Failed. Log: {log_path} Snapshot: {run_ctx.run_path}/failure_dom.html")
+        logger.error("[run_site] Failed. Log: %s Snapshot: %s/failure_dom.html", log_path, run_ctx.run_path)
 
 
-async def _handle_timeout(run_ctx, agent, timeout_sec: int, site_config: dict, pending) -> DiscoveryResult:
-    logger.error(f"[run_site] Timeout after {timeout_sec}s")
+async def _handle_timeout(
+    run_ctx: RunContext, agent: BrowserUseAgent, timeout_sec: int,
+    site_config: dict[str, Any], pending: set[asyncio.Task[Any]],
+) -> DiscoveryResult:
+    logger.error("[run_site] Timeout after %ds", timeout_sec)
     try:
         await write_fail_snapshot(
             run_ctx, getattr(agent, "_page", None),
@@ -224,7 +243,7 @@ async def _handle_timeout(run_ctx, agent, timeout_sec: int, site_config: dict, p
             TimeoutError(f"Timeout after {timeout_sec}s"), site_config,
         )
     except Exception as e:
-        logger.error(f"[run_site] write_fail_snapshot failed: {e}")
+        logger.error("[run_site] write_fail_snapshot failed: %s", e)
 
     for t in pending:
         t.cancel()
@@ -242,7 +261,7 @@ async def main() -> int:
                         handlers=[logging.StreamHandler()])
 
     site_name = resolve_site_name(args.site)
-    logger.info(f"[run_site] '{args.site}' -> '{site_name}'")
+    logger.info("[run_site] '%s' -> '%s'", args.site, site_name)
 
     _setup_instance_dirs(site_name)
     config_provider, site_config = _load_site_config(site_name)
@@ -252,7 +271,7 @@ async def main() -> int:
             avail = list(src.get_full_config().keys() if hasattr(src, "get_full_config") else src.keys())
         except Exception:
             avail = []
-        logger.error(f"[run_site] Config not found for '{site_name}'. Available: {avail}")
+        logger.error("[run_site] Config not found for '%s'. Available: %s", site_name, avail)
         return 1
 
     target_url = _resolve_target_url(args, site_config, site_name)
@@ -274,12 +293,12 @@ async def main() -> int:
     try:
         handler = run_ctx.setup_system_logger()
         logging.getLogger().addHandler(handler)
-        logger.info(f"[run_site] System log: {run_ctx.get_path('system.log')}")
+        logger.info("[run_site] System log: %s", run_ctx.get_path("system.log"))
     except Exception as e:
-        logger.warning(f"[run_site] System logger failed: {e}", exc_info=True)
+        logger.warning("[run_site] System logger failed: %s", e, exc_info=True)
 
     proxy = _resolve_proxy(args)
-    runtime_kwargs = {
+    runtime_kwargs: dict[str, Any] = {
         "headless": not args.headful, "timeout_sec": args.timeout,
         "enable_video": args.enable_video, "site": site_name,
         "enable_human_like": args.human_like,

@@ -3,11 +3,44 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
+from enum import Enum
 from pathlib import Path
 from typing import Any
 
-logger = logging.getLogger(__name__)
+from typing import TypedDict
 
+
+logger: logging.Logger = logging.getLogger(__name__)
+
+
+# ── Types ────────────────────────────────────────────────
+
+class RiskLevel(str, Enum):
+    HIGH = "HIGH"
+    MEDIUM = "MEDIUM"
+    LOW = "LOW"
+
+
+class RiskAssessment(TypedDict):
+    overall: str
+    notes: str
+
+
+class SelectorChange(TypedDict, total=False):
+    before: list[str]
+    after: list[str]
+
+
+class SelectorLayerChange(TypedDict, total=False):
+    pdp_link_selectors: SelectorChange
+    tile_selectors: SelectorChange
+
+
+class TrapAppend(TypedDict):
+    append: list[str]
+
+
+# ── Payload builder ──────────────────────────────────────
 
 def build_moncler_analysis_payload(
     run_id: str,
@@ -27,7 +60,7 @@ def build_moncler_analysis_payload(
     }
 
     if self_healing_result:
-        suggested_actions = []
+        suggested_actions: list[dict[str, Any]] = []
         for action in self_healing_result.get("suggested_actions", []):
             if isinstance(action, str):
                 suggested_actions.append({"id": f"action_{len(suggested_actions)}", "description": action, "risk_level": "MEDIUM"})
@@ -58,6 +91,8 @@ def build_moncler_analysis_payload(
 
     return payload
 
+
+# ── Selector / trap generators ───────────────────────────
 
 def _filter_valid_selectors(candidate_selectors: list[str]) -> list[str]:
     return [
@@ -99,7 +134,7 @@ def _generate_trap_patterns(
         return {}
 
     navigation = current_site_config.get("navigation", {}) or {}
-    current_patterns = navigation.get("trap_url_patterns", []) or []
+    current_patterns: list[str] = navigation.get("trap_url_patterns", []) or []
     new_patterns: list[str] = []
 
     if rejection_stats.get("double_locale_path", 0) > 0:
@@ -111,17 +146,21 @@ def _generate_trap_patterns(
     return {}
 
 
-_RISK_MAP = {
-    "locale redirect loop": ("HIGH", "ロケールリダイレクトループが検出されました。LocaleGuard の動作を確認してください。"),
-    "primary selector mismatch": ("MEDIUM", "セレクタの不一致が検出されました。DOM 構造の変化の可能性があります。"),
-    "trap page navigation": ("MEDIUM", "Trap ページが検出されました。trap_url_patterns の追加を検討してください。"),
+# ── Risk assessment ───────────────────────────────────────
+
+_RISK_MAP: dict[str, tuple[RiskLevel, str]] = {
+    "locale redirect loop": (RiskLevel.HIGH, "ロケールリダイレクトループが検出されました。LocaleGuard の動作を確認してください。"),
+    "primary selector mismatch": (RiskLevel.MEDIUM, "セレクタの不一致が検出されました。DOM 構造の変化の可能性があります。"),
+    "trap page navigation": (RiskLevel.MEDIUM, "Trap ページが検出されました。trap_url_patterns の追加を検討してください。"),
 }
 
 
-def _assess_risk(root_cause: str) -> dict[str, str]:
-    level, notes = _RISK_MAP.get(root_cause, ("LOW", "軽微な調整が推奨されます。"))
-    return {"overall": level, "notes": notes}
+def _assess_risk(root_cause: str) -> RiskAssessment:
+    level, notes = _RISK_MAP.get(root_cause, (RiskLevel.LOW, "軽微な調整が推奨されます。"))
+    return {"overall": level.value, "notes": notes}
 
+
+# ── Patch candidate ──────────────────────────────────────
 
 def build_moncler_patch_candidate(
     analysis_payload: dict[str, Any], current_site_config: dict[str, Any],
@@ -151,6 +190,8 @@ def build_moncler_patch_candidate(
     }
 
 
+# ── Markdown formatting ──────────────────────────────────
+
 def _format_changes_markdown(changes: dict[str, Any]) -> str:
     if not changes:
         return "変更内容はありません。\n\n"
@@ -172,7 +213,7 @@ def _format_selector_discovery(selector_discovery: dict[str, Any]) -> str:
     candidates = selector_discovery.get("candidate_selectors", [])
     if not candidates:
         return ""
-    scores = selector_discovery.get("confidence_scores", {})
+    scores: dict[str, float] = selector_discovery.get("confidence_scores", {})
     lines = [
         "### Selector Discovery 候補\n\n",
         f"**Recommended Layer:** `{selector_discovery.get('recommended_layer', 'N/A')}`\n\n",
@@ -196,6 +237,8 @@ def _format_suggested_actions(self_healing: dict[str, Any]) -> str:
             lines.append(f"{i}. {action}\n")
     return "".join(lines)
 
+
+# ── Report generation ────────────────────────────────────
 
 def generate_moncler_patch_markdown(
     run_context: Any, analysis_payload: dict[str, Any], patch_candidate: dict[str, Any],
@@ -257,10 +300,10 @@ def generate_moncler_patch_markdown(
 """
         with open(markdown_path, "w", encoding="utf-8") as f:
             f.write(content)
-        logger.info(f"[PatchBuilder][Moncler] Generated Markdown report: {markdown_path}")
+        logger.info("[PatchBuilder][Moncler] Generated Markdown report: %s", markdown_path)
         return markdown_path
-    except Exception as e:
-        logger.error(f"[PatchBuilder][Moncler] Failed to generate Markdown report: {e}", exc_info=True)
+    except OSError as e:
+        logger.error("[PatchBuilder][Moncler] Failed to generate Markdown report: %s", e, exc_info=True)
         return None
 
 
@@ -282,9 +325,9 @@ def save_moncler_patch_files(
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
             saved[suffix] = path
-            logger.info(f"[PatchBuilder][Moncler] Saved {suffix}: {path}")
-        except Exception as e:
-            logger.error(f"[PatchBuilder][Moncler] Failed to save {suffix}: {e}", exc_info=True)
+            logger.info("[PatchBuilder][Moncler] Saved %s: %s", suffix, path)
+        except OSError as e:
+            logger.error("[PatchBuilder][Moncler] Failed to save %s: %s", suffix, e, exc_info=True)
 
     if generate_markdown:
         md_path = generate_moncler_patch_markdown(run_context=run_context, analysis_payload=analysis_payload, patch_candidate=patch_candidate)
@@ -316,8 +359,8 @@ async def process_moncler_self_healing_results(
                 else:
                     logger.warning("[PatchBuilder][Moncler] overrides.local.json not found, skipping")
                     return {}
-            except Exception as e:
-                logger.warning(f"[PatchBuilder][Moncler] Failed to load overrides.local.json: {e}", exc_info=True)
+            except (OSError, json.JSONDecodeError) as e:
+                logger.warning("[PatchBuilder][Moncler] Failed to load overrides.local.json: %s", e, exc_info=True)
                 return {}
 
         analysis_payload = build_moncler_analysis_payload(
@@ -328,8 +371,11 @@ async def process_moncler_self_healing_results(
         saved_paths = save_moncler_patch_files(
             run_context=run_context, analysis_payload=analysis_payload, patch_candidate=patch_candidate, generate_markdown=generate_markdown,
         )
-        logger.info(f"[PatchBuilder][Moncler] Processed: analysis={saved_paths.get('analysis')}, patch={saved_paths.get('patch_candidate')}")
+        logger.info(
+            "[PatchBuilder][Moncler] Processed: analysis=%s patch=%s",
+            saved_paths.get("analysis"), saved_paths.get("patch_candidate"),
+        )
         return saved_paths
     except Exception as e:
-        logger.error(f"[PatchBuilder][Moncler] Failed to process self-healing results: {e}", exc_info=True)
+        logger.error("[PatchBuilder][Moncler] Failed to process self-healing results: %s", e, exc_info=True)
         return {}
