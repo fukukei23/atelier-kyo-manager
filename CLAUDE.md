@@ -112,6 +112,6 @@ RegionRecommendation, RepeatCustomer, ShipmentNotification, StockCheck
 
 ## 作業記録ルール
 
-- プロジェクト固有の変更履歴は `docs/CHANGELOG.md` に記録すること
-- リファクタリングバックログの進捗は `docs/refactoring-backlog.md` に✅完了マークを付けること
-- SSOT側（`obsidian-ssot/01_DECISIONS/atelier-kyo-manager/`）には判断理由と技術的詳細を記録し、プロジェクト側（`docs/CHANGELOG.md`）には変更概要を記録する
+- プロジェクト固有の変更履歴は `docs/変更履歴.md` に記録すること
+- リファクタリングバックログの進捗は `docs/リファクタリングバックログ.md` に✅完了マークを付けること
+- SSOT側（`obsidian-ssot/01_DECISIONS/atelier-kyo-manager/`）には判断理由と技術的詳細を記録し、プロジェクト側（`docs/変更履歴.md`）には変更概要を記録する
