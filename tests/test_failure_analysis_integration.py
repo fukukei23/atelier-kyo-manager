@@ -110,7 +110,7 @@ async def test_run_plp_to_pdp_calls_analysis_agent_on_trap_recovery_failed(
     mock_analysis_agent,
 ):
     """trap_recovery_failed の場合、FailureAnalysisAgent が呼ばれることを確認"""
-    with patch("app.agents.browser.orchestrator.NavigationDriver") as mock_nav_driver_class:
+    with patch("app.agents.browser.orchestrator.plp_pdp_flow.NavigationDriver") as mock_nav_driver_class:
         # NavigationDriver のモック（trap_detected=True, recovered=False）
         mock_nav_driver = AsyncMock()
         mock_nav_outcome = MagicMock()
@@ -123,7 +123,7 @@ async def test_run_plp_to_pdp_calls_analysis_agent_on_trap_recovery_failed(
         mock_nav_driver_class.return_value = mock_nav_driver
 
         # TelemetryClient のモック
-        with patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class:
+        with patch("app.agents.browser.orchestrator.plp_pdp_flow.TelemetryClient") as mock_telemetry_class:
             mock_telemetry = AsyncMock()
             mock_telemetry.record_plp_state = AsyncMock()
             mock_telemetry.save_json = AsyncMock()
@@ -170,9 +170,9 @@ async def test_run_plp_to_pdp_calls_analysis_agent_on_plp_driver_failed(
 ):
     """PlpDriver 失敗の場合、FailureAnalysisAgent が呼ばれることを確認"""
     with (
-        patch("app.agents.browser.orchestrator.NavigationDriver") as mock_nav_driver_class,
-        patch("app.agents.browser.orchestrator.PlpDriver") as mock_plp_driver_class,
-        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.NavigationDriver") as mock_nav_driver_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.PlpDriver") as mock_plp_driver_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.TelemetryClient") as mock_telemetry_class,
     ):
         # NavigationDriver のモック（pdp_links が空）
         mock_nav_driver = AsyncMock()
@@ -229,8 +229,8 @@ async def test_run_pdp_calls_analysis_agent_on_extraction_failed(
 ):
     """PDP 抽出失敗の場合、FailureAnalysisAgent が呼ばれることを確認"""
     with (
-        patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class,
-        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.BrowserExtractionService") as mock_extraction_service_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.TelemetryClient") as mock_telemetry_class,
     ):
         # BrowserExtractionService のモック（ValueError を投げる）
         mock_extraction_service = AsyncMock()
@@ -286,8 +286,8 @@ async def test_analysis_agent_exception_does_not_break_flow(
     orchestrator.analysis_agent = mock_analysis_agent
 
     with (
-        patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class,
-        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.BrowserExtractionService") as mock_extraction_service_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.TelemetryClient") as mock_telemetry_class,
     ):
         # BrowserExtractionService のモック（ValueError を投げる）
         mock_extraction_service = AsyncMock()
@@ -343,8 +343,8 @@ async def test_no_analysis_agent_does_not_break_flow(
     orchestrator.analysis_agent = None
 
     with (
-        patch("app.agents.browser.orchestrator.BrowserExtractionService") as mock_extraction_service_class,
-        patch("app.agents.browser.orchestrator.TelemetryClient") as mock_telemetry_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.BrowserExtractionService") as mock_extraction_service_class,
+        patch("app.agents.browser.orchestrator.plp_pdp_flow.TelemetryClient") as mock_telemetry_class,
     ):
         # BrowserExtractionService のモック（ValueError を投げる）
         mock_extraction_service = AsyncMock()
