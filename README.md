@@ -4,6 +4,27 @@ A personal resale management system for BUYMA x Buyandship. Automates product li
 
 BUYMA x Buyandshipを利用した転売管理システム（個人用）。出品パイプライン、注文ステートマシン、顧客対応AIチャットボット、LLMルーティングを統合したFlaskアプリケーション。
 
+[![Python](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
+[![Tests](https://img.shields.io/badge/tests-967%20passing-green)]()
+[![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+---
+
+## 特徴
+
+- **出品パイプライン自動化**: 画像収集 → AI背景除去 → AI説明文生成 → 出品テキスト生成を一括実行
+- **注文ステートマシン**: 自動発注の状態遷移（pending → sourcing → shipped → completed）を管理
+- **AIチャットボット**: FAQテンプレートマッチ → AI回答生成 → エスカレーション判定の3段階分類
+- **LLMルーティング**: OpenAI / Gemini / Local LLMを統一的に管理、ディスクキャッシュ付き
+- **価格スクレイピング**: Playwrightヘッドレスブラウザで仕入先価格を自動取得
+- **18日ルール管理**: 決済方法別の延長期限マッピングとBUYMA手数料計算
+
+---
+
+## なぜ作ったか
+
+BUYMAでの転売業務は、出品・価格調整・発注・顧客対応など多岐にわたる手作業が発生する。これらをFlask Webアプリ + AI/LLMで自動化し、1人でもスケール可能な物販システムを目指して開発した。
+
 ---
 
 ## アーキテクチャ
@@ -95,6 +116,29 @@ flask run              # 開発サーバー起動
 
 ---
 
+## プロジェクト状況
+
+| 指標 | 値 |
+|------|-----|
+| テスト数 | 967 テストケース（pytest） |
+| モジュール数 | routes 14 + services 8 + models 16 + utils 20+ |
+| LLMプロバイダー | OpenAI / Gemini / Local LLM |
+| データベース | SQLite + Flask-Migrate |
+
+---
+
+## テスト
+
+```bash
+# テスト実行
+make test
+
+# カバレッジ付き
+./venv/bin/python -m pytest tests/ --cov=app --cov-report=term-missing -q
+```
+
+---
+
 ## ディレクトリ構造
 
 ```
@@ -157,6 +201,16 @@ migrations/                # DBマイグレーション
 | `GEMINI_API_KEY` | Gemini APIキー |
 | `LLM_ORDER_DEFAULT` | デフォルトLLMプロバイダー |
 | `CRAWLER_HEADLESS` | ヘッドレスブラウザ設定 |
+
+---
+
+## ドキュメント
+
+| ドキュメント | 内容 |
+|---|---|
+| [開発ガイド](docs/) | 詳細ドキュメント |
+| [仕様書・設計判断](https://github.com/fukukei23/obsidian-ssot/tree/main/01_DECISIONS/atelier-kyo-manager) | 設計判断の変遷（SSOT） |
+| [リファクタリングバックログ](docs/リファクタリングバックログ.md) | 改善項目の進捗管理 |
 
 ---
 
