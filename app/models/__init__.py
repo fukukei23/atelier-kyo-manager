@@ -6,6 +6,7 @@
 # Purpose: Models package initialization - exports all models
 # ==============================================================================
 
+from .brand_price import BrandPrice
 from .customer_inquiry import CustomerInquiry
 from .faq_template import FaqTemplate
 from .listing_progress import ListingProgress
@@ -39,4 +40,5 @@ __all__ = [
     "FaqTemplate",
     "ShipmentNotification",
     "CustomerInquiry",
+    "BrandPrice",
 ]

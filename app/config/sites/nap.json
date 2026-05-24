@@ -1,0 +1,40 @@
+{
+    "name": "NET-A-PORTER",
+    "home_url": "https://www.net-a-porter.com/en-jp/",
+    "domains": ["net-a-porter.com", "www.net-a-porter.com"],
+    "search_template": "https://www.net-a-porter.com/en-jp/{gender}?q={q}",
+    "wait_until": "domcontentloaded",
+    "timeout_sec": 60,
+    "currency": "JPY",
+    "selectors": {
+        "results_item": "div.ProductList53__item, article[data-testid='productCard']",
+        "first_product_link": "a.ProductCard__link, a[href*='/product/']",
+        "pdp": {
+            "title": ["h1.ProductHeader__name", "h1[itemprop='name']"],
+            "price": ["span.ProductHeader__price span", "span[itemprop='price']"]
+        },
+        "plp_tile_container": "div.ProductList53__item, article[data-testid='productCard']",
+        "plp_tile_link": "a.ProductCard__link, a[href*='/product/']",
+        "cookie_consent": "button#onetrust-accept-btn-handler, button[aria-label='Accept All']"
+    },
+    "discovery_settings": {
+        "use_low_footprint_mode": false,
+        "use_persistent_context": true,
+        "navigation_tactics": ["direct_brand_url", "bypass_cookie_wall"],
+        "fingerprint": {
+            "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "viewport": {"width": 1440, "height": 900},
+            "locale": "ja-JP",
+            "timezone": "Asia/Tokyo"
+        },
+        "manual_captcha": false,
+        "max_attempts_per_site": 2,
+        "max_url_candidates": 5,
+        "timeout_sec": 45,
+        "locale_trap_detection": true,
+        "force_locale": "ja-JP",
+        "fallback_url": "https://www.net-a-porter.com/en-jp/women",
+        "bypass_cookie_consent": true,
+        "bypass_methods": ["click_onetrust", "scroll_and_wait"]
+    }
+}
