@@ -20,6 +20,7 @@
         </form>
 
         <form method="POST" action="{{ url_for('main.brand_prices_scrape') }}" class="mt-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="brand" value="{{ brand }}">
             <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
                 {{ brand }} の価格を取得
@@ -50,7 +51,7 @@
                     <td class="px-4 py-3 text-right {% if site_data and site == item.cheapest_site %}text-green-600 font-bold{% elif site_data %}text-gray-700 dark:text-gray-300{% else %}text-gray-300{% endif %}">
                         {% if site_data %}
                         <div>{{ site_data.price_jpy | int }}円</div>
-                        <div class="text-xs text-gray-400">{{ site_data.currency }} {{ site_data.price_original }}</div>
+                        <div class="text-xs text-gray-400">{{ site_data.currency }} {{ site_data.price_original | int }}</div>
                         {% else %}
                         -
                         {% endif %}
