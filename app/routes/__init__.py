@@ -13,6 +13,7 @@ bp = Blueprint("main", __name__)
 from . import (
     analytics,  # noqa: F401  — F09ブランド分析 + FR-018ダッシュボード
     auto_orders,  # noqa: F401  — FR-009 AI自動発注管理
+    brand_prices,  # noqa: F401  — ラグジュアリーブランド価格調査
     chatbot,  # noqa: F401  — FR-010顧客対応AI ChatBot
     faq_templates,  # noqa: F401  — FR-010基盤FAQテンプレート管理
     listing_progress,  # noqa: F401  — F07品出し進捗トラッカー

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">ブランド価格調査</h1>
+        {% if last_scraped %}
+        <span class="text-xs text-gray-400">最終取得: {{ last_scraped.strftime('%Y-%m-%d %H:%M') }}</span>
+        {% endif %}
+    </div>
+
+    <!-- ブランドフィルター + スクレイプボタン -->
+    <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-4 mb-6">
+        <form method="GET" action="{{ url_for('main.brand_prices_dashboard') }}" class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <label class="text-sm font-medium text-gray-600 dark:text-gray-300">ブランド:</label>
+            <select name="brand" onchange="this.form.submit()" class="border rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                {% for b in supported_brands %}
+                <option value="{{ b }}" {% if b == brand %}selected{% endif %}>{{ b }}</option>
+                {% endfor %}
+            </select>
+        </form>
+
+        <form method="POST" action="{{ url_for('main.brand_prices_scrape') }}" class="mt-3">
+            <input type="hidden" name="brand" value="{{ brand }}">
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                {{ brand }} の価格を取得
+            </button>
+            <span class="text-xs text-gray-400 ml-2">Farfetch / Mytheresa / NAP / 24S / LVR</span>
+        </form>
+    </div>
+
+    <!-- 価格比較テーブル -->
+    {% if comparison %}
+    <div class="bg-white dark:bg-gray-900 rounded-lg shadow overflow-x-auto">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                    <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-medium">商品名</th>
+                    {% for site in supported_sites %}
+                    <th class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-medium">{{ site.upper() }}</th>
+                    {% endfor %}
+                    <th class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-medium">最安値</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100 dark:divide-gray-700">
+                {% for item in comparison %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-800">
+                    <td class="px-4 py-3 text-gray-800 dark:text-gray-200 max-w-xs truncate">{{ item.product_name }}</td>
+                    {% for site in supported_sites %}
+                    {% set site_data = item.sites.get(site) %}
+                    <td class="px-4 py-3 text-right {% if site_data and site == item.cheapest_site %}text-green-600 font-bold{% elif site_data %}text-gray-700 dark:text-gray-300{% else %}text-gray-300{% endif %}">
+                        {% if site_data %}
+                        <div>{{ site_data.price_jpy | int }}円</div>
+                        <div class="text-xs text-gray-400">{{ site_data.currency }} {{ site_data.price_original }}</div>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    {% endfor %}
+                    <td class="px-4 py-3 text-right text-green-600 font-bold">
+                        {% if item.cheapest_jpy %}{{ item.cheapest_jpy | int }}円{% else %}-{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-8 text-center">
+        <p class="text-gray-400">{{ brand }} の価格データがありません</p>
+        <p class="text-sm text-gray-400 mt-2">「{{ brand }} の価格を取得」ボタンを押してください</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

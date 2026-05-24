@@ -1,0 +1,40 @@
+{
+    "name": "24S",
+    "home_url": "https://www.24s.com/en/",
+    "domains": ["24s.com", "www.24s.com"],
+    "search_template": "https://www.24s.com/en/{gender}?q={q}",
+    "wait_until": "domcontentloaded",
+    "timeout_sec": 60,
+    "currency": "EUR",
+    "selectors": {
+        "results_item": "div.product-card, article.product",
+        "first_product_link": "a.product-card__link, a.product__link",
+        "pdp": {
+            "title": ["h1.product__name", "h1[itemprop='name']"],
+            "price": ["span.product__price span.value", "span.price"]
+        },
+        "plp_tile_container": "div.product-card, article.product",
+        "plp_tile_link": "a.product-card__link, a.product__link",
+        "cookie_consent": "button#onetrust-accept-btn-handler, button[aria-label='Accept All']"
+    },
+    "discovery_settings": {
+        "use_low_footprint_mode": false,
+        "use_persistent_context": true,
+        "navigation_tactics": ["direct_brand_url", "bypass_cookie_wall"],
+        "fingerprint": {
+            "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "viewport": {"width": 1440, "height": 900},
+            "locale": "en-US",
+            "timezone": "Europe/Paris"
+        },
+        "manual_captcha": false,
+        "max_attempts_per_site": 2,
+        "max_url_candidates": 5,
+        "timeout_sec": 45,
+        "locale_trap_detection": true,
+        "force_locale": "en-US",
+        "fallback_url": "https://www.24s.com/en/women",
+        "bypass_cookie_consent": true,
+        "bypass_methods": ["click_onetrust", "scroll_and_wait"]
+    }
+}
