@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import re
 import time
 from datetime import datetime
 from pathlib import Path
@@ -14,13 +15,31 @@ logger = logging.getLogger(__name__)
 
 PROXY_POOL_PATH = Path(__file__).resolve().parents[1] / "config" / "proxy_pool.json"
 
-SUPPORTED_SITES = ["farfetch"]
+SUPPORTED_SITES = ["farfetch", "gucci_official", "prada_official"]
 SUPPORTED_BRANDS = ["Gucci", "Prada", "Ferragamo"]
 
 _FARFETCH_BRAND_SLUGS = {
     "Gucci": "gucci",
     "Prada": "prada",
     "Ferragamo": "salvatore-ferragamo",
+}
+
+_OFFICIAL_SITE_URLS: dict[str, dict[str, str]] = {
+    "Gucci": {
+        "gucci_official": "https://www.gucci.com/jp/ja/ca/-c-women-handbags",
+    },
+    "Prada": {
+        "prada_official": "https://www.prada.com/jp/ja/women/bags.html",
+    },
+}
+
+_CHROME_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "ja-JP,ja;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
 
@@ -30,12 +49,33 @@ def _load_proxies() -> list[dict]:
     with open(PROXY_POOL_PATH, encoding="utf-8") as f:
         pool = json.load(f)
     proxies = []
-    for entries in pool.values():
+    for key, entries in pool.items():
         if isinstance(entries, list):
             for e in entries:
                 if e.get("active", True) and e.get("server"):
                     proxies.append(e)
+        elif isinstance(entries, dict):
+            for sub_key, sub_entries in entries.items():
+                if isinstance(sub_entries, list):
+                    for e in sub_entries:
+                        if e.get("active", True) and e.get("server"):
+                            proxies.append(e)
     return proxies
+
+
+def _fetch_with_cffi(url: str, timeout: int = 25) -> str | None:
+    from curl_cffi import requests as cffi_requests
+    try:
+        resp = cffi_requests.get(
+            url, headers=_CHROME_HEADERS, impersonate="chrome124",
+            timeout=timeout, allow_redirects=True,
+        )
+        if resp.status_code == 200:
+            return resp.text
+        logger.warning(f"[cffi] {url} returned {resp.status_code}")
+    except Exception as e:
+        logger.error(f"[cffi] Request failed for {url}: {e}")
+    return None
 
 
 class BrandPriceScraper:
@@ -177,24 +217,105 @@ class BrandPriceScraper:
 
         return results
 
+    def _scrape_official_gucci(self, brand: str, item_limit: int = 10) -> list[dict]:
+        urls = _OFFICIAL_SITE_URLS.get(brand, {})
+        url = urls.get("gucci_official")
+        if not url:
+            return []
+
+        html = _fetch_with_cffi(url)
+        if not html:
+            return []
+
+        # Gucci uses: aria-label="ProductName, ￥Price"
+        products = re.findall(
+            r'aria-label="([^"]+?),\s*￥([\d,]+)"', html
+        )
+        logger.info(f"[gucci_official] Found {len(products)} products for {brand}")
+
+        results = []
+        for name, price_str in products[:item_limit]:
+            price = float(price_str.replace(",", ""))
+            results.append({
+                "brand": brand,
+                "product_name": name.strip(),
+                "source_site": "gucci_official",
+                "source_url": url,
+                "price_original": price,
+                "currency": "JPY",
+                "price_jpy": price,
+                "exchange_rate": 1.0,
+                "in_stock": True,
+                "size_available": "",
+                "scraped_at": datetime.utcnow().isoformat(),
+            })
+
+        logger.info(f"[gucci_official] Extracted {len(results)} products for {brand}")
+        return results
+
+    def _scrape_official_prada(self, brand: str, item_limit: int = 10) -> list[dict]:
+        urls = _OFFICIAL_SITE_URLS.get(brand, {})
+        url = urls.get("prada_official")
+        if not url:
+            return []
+
+        html = _fetch_with_cffi(url)
+        if not html:
+            return []
+
+        # Prada uses: aria-label=" ProductName ¥ Price ..."
+        products = re.findall(
+            r'aria-label="\s*([^"]+?)\s*¥\s*([\d,]+)', html
+        )
+        logger.info(f"[prada_official] Found {len(products)} products for {brand}")
+
+        results = []
+        for name, price_str in products[:item_limit]:
+            price = float(price_str.replace(",", ""))
+            results.append({
+                "brand": brand,
+                "product_name": name.strip(),
+                "source_site": "prada_official",
+                "source_url": url,
+                "price_original": price,
+                "currency": "JPY",
+                "price_jpy": price,
+                "exchange_rate": 1.0,
+                "in_stock": True,
+                "size_available": "",
+                "scraped_at": datetime.utcnow().isoformat(),
+            })
+
+        logger.info(f"[prada_official] Extracted {len(results)} products for {brand}")
+        return results
+
     def scrape(
         self, brand: str, sites: list[str] | None = None, item_limit: int = 10
     ) -> list[dict]:
         if sites is None:
             sites = SUPPORTED_SITES
 
-        all_results = []
-        try:
-            self._init_browser()
+        all_results: list[dict] = []
 
-            if "farfetch" in sites:
+        # Official sites use curl_cffi (no browser needed)
+        if "gucci_official" in sites:
+            results = self._scrape_official_gucci(brand, item_limit)
+            all_results.extend(results)
+
+        if "prada_official" in sites:
+            results = self._scrape_official_prada(brand, item_limit)
+            all_results.extend(results)
+
+        # Farfetch requires Playwright browser
+        if "farfetch" in sites:
+            try:
+                self._init_browser()
                 results = self._scrape_farfetch(brand, item_limit)
                 all_results.extend(results)
+            except Exception as e:
+                logger.error(f"[farfetch] Scraping error: {e}")
+            finally:
+                self._close_browser()
 
-            logger.info(f"Total scraped: {len(all_results)} products for {brand}")
-            return all_results
-        except Exception as e:
-            logger.error(f"Scraping error: {e}")
-            return all_results
-        finally:
-            self._close_browser()
+        logger.info(f"Total scraped: {len(all_results)} products for {brand}")
+        return all_results

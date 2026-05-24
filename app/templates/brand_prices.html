@@ -25,7 +25,7 @@
             <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
                 {{ brand }} の価格を取得
             </button>
-            <span class="text-xs text-gray-400 ml-2">Farfetch / Mytheresa / NAP / 24S / LVR</span>
+            <span class="text-xs text-gray-400 ml-2">公式サイト / Farfetch</span>
         </form>
     </div>
 
@@ -37,7 +37,7 @@
                 <tr>
                     <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-medium">商品名</th>
                     {% for site in supported_sites %}
-                    <th class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-medium">{{ site.upper() }}</th>
+                    <th class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-medium">{{ site.replace('_official', ' 公式').replace('_', ' ').upper() }}</th>
                     {% endfor %}
                     <th class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-medium">最安値</th>
                 </tr>
