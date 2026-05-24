@@ -211,58 +211,35 @@ class TestBrandPriceService:
 # ---------------------------------------------------------------------------
 
 class TestBrandPriceScraper:
-    def test_to_jpy_eur(self):
-        from app.services.brand_price_scraper import BrandPriceScraper
-        scraper = BrandPriceScraper()
-        scraper._fx_table = {"EUR": 160.0}
-        jpy, rate = scraper._to_jpy(1000.0, "EUR")
-        assert jpy == 160000.0
-        assert rate == 160.0
+    def test_farfetch_brand_slugs(self):
+        from app.services.brand_price_scraper import _FARFETCH_BRAND_SLUGS
+        assert _FARFETCH_BRAND_SLUGS["Gucci"] == "gucci"
+        assert _FARFETCH_BRAND_SLUGS["Prada"] == "prada"
 
-    def test_to_jpy_jpy(self):
-        from app.services.brand_price_scraper import BrandPriceScraper
-        scraper = BrandPriceScraper()
-        jpy, rate = scraper._to_jpy(50000.0, "JPY")
-        assert jpy == 50000.0
-        assert rate == 1.0
+    def test_supported_brands(self):
+        from app.services.brand_price_scraper import SUPPORTED_BRANDS
+        assert "Gucci" in SUPPORTED_BRANDS
+        assert "Prada" in SUPPORTED_BRANDS
+        assert "Ferragamo" in SUPPORTED_BRANDS
 
-    def test_to_jpy_unknown_currency(self):
-        from app.services.brand_price_scraper import BrandPriceScraper
-        scraper = BrandPriceScraper()
-        scraper._fx_table = {}
-        jpy, rate = scraper._to_jpy(100.0, "XYZ")
-        assert jpy == 0.0
-
-    @patch("app.services.brand_price_scraper._load_site_config")
     @patch("app.services.brand_price_scraper._load_proxies")
-    def test_scrape_returns_results(self, mock_proxies, mock_config):
+    def test_scrape_farfetch_returns_results(self, mock_proxies):
         from app.services.brand_price_scraper import BrandPriceScraper
         mock_proxies.return_value = []
-        mock_config.return_value = {
-            "name": "TEST",
-            "currency": "EUR",
-            "search_template": "https://example.com/search?q={q}",
-            "selectors": {
-                "results_item": "div.item",
-                "plp_tile_container": "div.item",
-                "plp_tile_link": "a",
-                "pdp": {"title": ["h1"], "price": ["span.price"]},
-            },
-        }
         scraper = BrandPriceScraper()
-        scraper._fx_table = {"EUR": 150.0}
-
-        # Mock Playwright
-        mock_page = MagicMock()
-        mock_page.evaluate.return_value = [
-            {"name": "Test Bag", "url": "https://example.com/item1", "price_original": 1000.0, "currency": "EUR", "sizes": ""},
-        ]
         scraper._init_browser = MagicMock()
-        scraper.page = mock_page
         scraper._close_browser = MagicMock()
 
-        results = scraper._scrape_site("Gucci", "farfetch", mock_config.return_value)
-        assert len(results) >= 0  # May depend on mock behavior
+        mock_page = MagicMock()
+        mock_page.evaluate.return_value = [
+            {"brand": "Gucci", "name": "GG Marmont Bag", "price": 150000, "url": "https://example.com/item1"},
+        ]
+        scraper.page = mock_page
+
+        results = scraper._scrape_farfetch("Gucci")
+        assert len(results) == 1
+        assert results[0]["product_name"] == "GG Marmont Bag"
+        assert results[0]["price_jpy"] == 150000.0
 
 
 # ---------------------------------------------------------------------------
