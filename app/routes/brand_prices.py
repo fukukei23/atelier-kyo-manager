@@ -246,6 +246,9 @@ def api_buyma_search_single():
     if not product_name or not brand:
         return jsonify({"status": "error", "message": "missing params"}), 400
 
+    if brand not in SUPPORTED_BRANDS:
+        return jsonify({"status": "error", "message": "unsupported brand"}), 400
+
     if brand in BUYMA_UNAVAILABLE_BRANDS:
         return jsonify({"status": "skipped", "reason": "unavailable_brand"})
 
@@ -277,11 +280,21 @@ def api_buyma_search_single():
         match = searcher.search_single(product_name, brand, threshold=threshold)
     except Exception as e:
         logger.error(f"BUYMA search error for {product_name}: {e}")
+        err_type = "unknown"
+        err_msg = str(e).lower()
+        if "timeout" in err_msg or "timed out" in err_msg:
+            err_type = "timeout"
+        elif "403" in err_msg or "blocked" in err_msg:
+            err_type = "blocked"
+        elif "429" in err_msg or "rate" in err_msg:
+            err_type = "rate_limited"
+        elif "navigation" in err_msg or "goto" in err_msg:
+            err_type = "navigation"
         for row in rows:
             row.buyma_status = "error"
             row.buyma_searched_at = datetime.utcnow()
         db.session.commit()
-        return jsonify({"status": "error", "message": str(e)})
+        return jsonify({"status": "error", "message": str(e), "error_type": err_type})
 
     now = datetime.utcnow()
 

@@ -596,9 +596,10 @@ class TestBuymaPriceScraper:
         result = match_product("Bonnie", "Prada", [])
         assert result is None
 
+    @patch("time.sleep")
     @patch("app.services.buyma_price_scraper.BuymaPriceSearcher.search_single")
-    def test_fetch_buyma_prices_batch(self, mock_search):
-        from app.services.buyma_price_scraper import fetch_buyma_prices
+    def test_fetch_buyma_prices_batch(self, mock_search, mock_sleep):
+        from app.services.buyma_price_scraper import BuymaPriceSearcher
         mock_search.return_value = {
             "buyma_name": "PRADA Bonnie レザー",
             "buyma_price": 398000,
@@ -607,14 +608,15 @@ class TestBuymaPriceScraper:
             "buyma_item_url": "https://www.buyma.com/item/1/",
             "match_count": 1,
             "match_score": 0.8,
+            "buyma_size": None,
             "buyma_source": "buyma_search",
         }
-        products = [
-            {"product_name": "Bonnie", "brand": "Prada"},
-        ]
-        results = fetch_buyma_prices(products, headless=True)
+        searcher = BuymaPriceSearcher()
+        products = [{"product_name": "Bonnie", "brand": "Prada"}]
+        results = searcher.search_batch(products)
         assert "Bonnie" in results
         assert results["Bonnie"]["buyma_price"] == 398000
+        searcher.close()
 
     def test_search_buyma_route_requires_login(self, client):
         resp = client.post("/brand-prices/search-buyma", follow_redirects=False)
@@ -1061,7 +1063,8 @@ class TestSearchQueryOptimization:
 
 
 class TestRetryLogic:
-    def test_search_single_retries_on_error(self):
+    @patch("time.sleep")
+    def test_search_single_retries_on_error(self, mock_sleep):
         from app.services.buyma_price_scraper import BuymaPriceSearcher
         searcher = BuymaPriceSearcher()
         searcher._ensure_browser = MagicMock()
@@ -1119,3 +1122,277 @@ class TestCLICommands:
         runner = app.test_cli_runner()
         result = runner.invoke(args=["scrape-brand-prices", "UnknownBrand"])
         assert "Unsupported" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Round 3 improvement tests (L, M, N, O, P, Q, S, T)
+# ---------------------------------------------------------------------------
+
+class TestLegacyRemoval:
+    def test_search_buyma_removed(self):
+        """L: search_buyma function should not exist."""
+        import app.services.buyma_price_scraper as mod
+        assert not hasattr(mod, "search_buyma")
+
+    def test_fetch_buyma_prices_removed(self):
+        """L: fetch_buyma_prices function should not exist."""
+        import app.services.buyma_price_scraper as mod
+        assert not hasattr(mod, "fetch_buyma_prices")
+
+    def test_buyma_price_searcher_class_exists(self):
+        """L: BuymaPriceSearcher class still available."""
+        from app.services.buyma_price_scraper import BuymaPriceSearcher
+        assert BuymaPriceSearcher is not None
+
+
+class TestInputValidation:
+    """M: API入力バリデーション."""
+
+    def test_api_rejects_unsupported_brand(self, auth_client):
+        resp = auth_client.post(
+            "/api/buyma-search",
+            data=json.dumps({"product_name": "Test", "brand": "FakeBrand"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+        data = json.loads(resp.data)
+        assert data["status"] == "error"
+        assert "unsupported" in data["message"]
+
+    def test_api_rejects_missing_params(self, auth_client):
+        resp = auth_client.post(
+            "/api/buyma-search",
+            data=json.dumps({"product_name": ""}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 400
+
+
+class TestThreadSafety:
+    """N: get_shared_searcher のスレッドセーフ性."""
+
+    def test_get_shared_searcher_has_lock(self):
+        from app.services.buyma_price_scraper import _searcher_lock
+        import threading
+        assert isinstance(_searcher_lock, type(threading.Lock()))
+
+    def test_concurrent_get_shared_searcher(self):
+        import threading
+        from app.services.buyma_price_scraper import get_shared_searcher
+        results = []
+        errors = []
+
+        def get_one():
+            try:
+                s = get_shared_searcher()
+                results.append(id(s))
+            except Exception as e:
+                errors.append(e)
+
+        threads = [threading.Thread(target=get_one) for _ in range(5)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+
+        assert len(errors) == 0
+        assert len(results) == 5
+        # 全スレッドが同じインスタンスを取得
+        assert len(set(results)) == 1
+        results.clear()
+        # cleanup
+        from app.services.buyma_price_scraper import _shared_searcher
+        if _shared_searcher:
+            _shared_searcher.close()
+
+
+class TestBuymaCacheCleanup:
+    """O: キャッシュクリーンアップ."""
+
+    def test_cleanup_resets_stale_cache(self, app):
+        from app.models.brand_price import BrandPrice
+        from app.services import brand_price_service
+        from app.extensions import db
+        from datetime import datetime, timedelta
+        with app.app_context():
+            db.session.add(BrandPrice(
+                brand="Prada", product_name="StaleCache", source_site="prada_official",
+                price_original=1000.0, currency="EUR", price_jpy=150000.0,
+                exchange_rate=150.0, buyma_status="matched",
+                buyma_searched_at=datetime.utcnow() - timedelta(days=31),
+            ))
+            db.session.add(BrandPrice(
+                brand="Prada", product_name="FreshCache", source_site="prada_official",
+                price_original=1000.0, currency="EUR", price_jpy=150000.0,
+                exchange_rate=150.0, buyma_status="matched",
+                buyma_searched_at=datetime.utcnow() - timedelta(days=5),
+            ))
+            db.session.commit()
+
+            reset = brand_price_service.cleanup_buyma_cache(max_age_days=30)
+            assert reset == 1
+
+            stale = db.session.scalar(
+                db.select(BrandPrice).filter(BrandPrice.product_name == "StaleCache")
+            )
+            assert stale.buyma_status is None
+            assert stale.buyma_searched_at is None
+
+            fresh = db.session.scalar(
+                db.select(BrandPrice).filter(BrandPrice.product_name == "FreshCache")
+            )
+            assert fresh.buyma_status == "matched"
+
+
+class TestColorNormalization:
+    """P: 色名正規化マッチング."""
+
+    def test_normalize_color_finds_black(self):
+        from app.services.buyma_price_scraper import _normalize_color
+        assert _normalize_color("Nero") == "BLACK"
+        assert _normalize_color("Black") == "BLACK"
+        assert _normalize_color("ブラック") == "BLACK"
+
+    def test_normalize_color_finds_beige(self):
+        from app.services.buyma_price_scraper import _normalize_color
+        assert _normalize_color("Beige") == "BEIGE"
+        assert _normalize_color("ベージュ") == "BEIGE"
+
+    def test_normalize_color_returns_none_for_unknown(self):
+        from app.services.buyma_price_scraper import _normalize_color
+        assert _normalize_color("Turquoise") is None
+
+    def test_match_score_boosted_by_color_match(self):
+        from app.services.buyma_price_scraper import _match_score
+        score_no_color = _match_score(
+            "Prada Bonnie Bag",
+            "PRADA トートバッグ レザー",
+            "Prada",
+        )
+        score_color = _match_score(
+            "Prada Bonnie Bag Nero",
+            "PRADA Bonnie Bag Nero レザー トート",
+            "Prada",
+        )
+        assert score_color > score_no_color
+
+    def test_match_score_color_cross_language(self):
+        from app.services.buyma_price_scraper import _match_score
+        # Same base string, but one has matching color (Black/Nero → BLACK)
+        score_matching = _match_score(
+            "Prada Bag Black Leather",
+            "PRADA Bag Nero Leather",
+            "Prada",
+        )
+        score_no_color = _match_score(
+            "Prada Bag Leather",
+            "PRADA Bag Leather",
+            "Prada",
+        )
+        # Both should be high, color matching version gets bonus
+        assert score_matching > 0.0
+        # The color bonus (0.1) should make matching > non-matching equivalent
+        score_mismatch = _match_score(
+            "Prada Bag Black Leather",
+            "PRADA Bag Blue Leather",
+            "Prada",
+        )
+        assert score_matching > score_mismatch
+
+
+class TestSizeExtraction:
+    """Q: サイズ抽出."""
+
+    def test_extract_size_freesize(self):
+        from app.services.buyma_price_scraper import _extract_size
+        assert _extract_size("PRADA トート FREE") == "FREE"
+
+    def test_extract_size_one_size(self):
+        from app.services.buyma_price_scraper import _extract_size
+        assert _extract_size("LOEWE Puzzle ONE SIZE") == "ONE SIZE"
+
+    def test_extract_size_letter(self):
+        from app.services.buyma_price_scraper import _extract_size
+        assert _extract_size("CELINE Bag M") == "M"
+
+    def test_extract_size_none(self):
+        from app.services.buyma_price_scraper import _extract_size
+        assert _extract_size("PRADA トートバッグ レザー") is None
+
+    def test_match_product_includes_size(self):
+        from app.services.buyma_price_scraper import match_product
+        buyma_results = [
+            {"name": "PRADA Bag FREE レザー", "brand": "PRADA",
+             "price_jpy": 300000, "item_id": "1", "item_url": ""},
+        ]
+        result = match_product("Prada Bag", "Prada", buyma_results)
+        assert result is not None
+        assert result["buyma_size"] == "FREE"
+
+
+class TestErrorDetails:
+    """S: エラー詳細情報."""
+
+    @patch("app.routes.brand_prices.get_shared_searcher")
+    def test_error_type_timeout(self, mock_get, app, auth_client):
+        from app.models.brand_price import BrandPrice
+        from app.extensions import db
+        with app.app_context():
+            db.session.add(BrandPrice(
+                brand="Prada", product_name="TimeoutTest", source_site="prada_official",
+                price_original=1000.0, currency="EUR", price_jpy=150000.0,
+                exchange_rate=150.0,
+            ))
+            db.session.commit()
+
+        mock_searcher = MagicMock()
+        mock_searcher.search_single.side_effect = Exception("page.goto timeout exceeded")
+        mock_get.return_value = mock_searcher
+
+        resp = auth_client.post(
+            "/api/buyma-search",
+            data=json.dumps({"product_name": "TimeoutTest", "brand": "Prada"}),
+            content_type="application/json",
+        )
+        data = json.loads(resp.data)
+        assert data["status"] == "error"
+        assert data["error_type"] == "timeout"
+
+    @patch("app.routes.brand_prices.get_shared_searcher")
+    def test_error_type_blocked(self, mock_get, app, auth_client):
+        from app.models.brand_price import BrandPrice
+        from app.extensions import db
+        with app.app_context():
+            db.session.add(BrandPrice(
+                brand="Prada", product_name="BlockedTest", source_site="prada_official",
+                price_original=1000.0, currency="EUR", price_jpy=150000.0,
+                exchange_rate=150.0,
+            ))
+            db.session.commit()
+
+        mock_searcher = MagicMock()
+        mock_searcher.search_single.side_effect = Exception("403 Forbidden blocked")
+        mock_get.return_value = mock_searcher
+
+        resp = auth_client.post(
+            "/api/buyma-search",
+            data=json.dumps({"product_name": "BlockedTest", "brand": "Prada"}),
+            content_type="application/json",
+        )
+        data = json.loads(resp.data)
+        assert data["status"] == "error"
+        assert data["error_type"] == "blocked"
+
+
+class TestTimeoutConstant:
+    """T: タイムアウト設定の統一."""
+
+    def test_default_timeout_exists(self):
+        from app.services.buyma_price_scraper import DEFAULT_TIMEOUT
+        assert DEFAULT_TIMEOUT == 60
+
+    def test_searcher_uses_default_timeout(self):
+        from app.services.buyma_price_scraper import BuymaPriceSearcher, DEFAULT_TIMEOUT
+        searcher = BuymaPriceSearcher()
+        assert searcher.timeout == DEFAULT_TIMEOUT
+        searcher.close()

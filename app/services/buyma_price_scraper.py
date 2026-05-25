@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
 import time
 import urllib.parse
 from difflib import SequenceMatcher
@@ -57,8 +58,25 @@ BRAND_THRESHOLDS: dict[str, float] = {
     "Bottega Veneta": 0.25,
 }
 DEFAULT_THRESHOLD = 0.3
+DEFAULT_TIMEOUT = 60
 
 _MODEL_NUMBER_RE = re.compile(r"\b([A-Z0-9]{5,12})\b")
+_SIZE_RE = re.compile(r"\b(FREE|ONE\s*SIZE|ONE SIZE|F|XS|S|M|L|XL|XXL|2XL|3XL|(\d{2,3})\s*cm)\b", re.IGNORECASE)
+
+_COLOR_NORMALIZE: dict[str, str] = {
+    "BLACK": "BLACK", "NERO": "BLACK", "黒": "BLACK", "ブラック": "BLACK", "NOIR": "BLACK",
+    "WHITE": "WHITE", "BIANCO": "WHITE", "白": "WHITE", "ホワイト": "WHITE",
+    "RED": "RED", "ROSSO": "RED", "赤": "RED", "レッド": "RED",
+    "BLUE": "BLUE", "BLU": "BLUE", "青": "BLUE", "ブルー": "BLUE",
+    "BEIGE": "BEIGE", "ベージュ": "BEIGE", "ECRU": "BEIGE",
+    "BROWN": "BROWN", "MARRONE": "BROWN", "茶": "BROWN", "ブラウン": "BROWN", "CARAMEL": "BROWN",
+    "GREEN": "GREEN", "VERDE": "GREEN", "緑": "GREEN", "グリーン": "GREEN",
+    "PINK": "PINK", "ROSA": "PINK", "ピンク": "PINK",
+    "GREY": "GREY", "GRAY": "GREY", "グレー": "GREY", "GRIGIO": "GREY",
+    "NAVY": "NAVY", "ネイビー": "NAVY", "MARINE": "NAVY",
+    "GOLD": "GOLD", "ゴールド": "GOLD", "ORO": "GOLD",
+    "SILVER": "SILVER", "シルバー": "SILVER", "ARGENTO": "SILVER",
+}
 
 
 def _build_search_query(product_name: str, brand: str) -> str:
@@ -104,6 +122,19 @@ def _extract_tokens(name: str) -> list[str]:
     return tokens
 
 
+def _normalize_color(name: str) -> str | None:
+    upper = name.upper()
+    for key, canonical in _COLOR_NORMALIZE.items():
+        if key in upper:
+            return canonical
+    return None
+
+
+def _extract_size(name: str) -> str | None:
+    m = _SIZE_RE.search(name)
+    return m.group(0).strip() if m else None
+
+
 def _match_score(official_name: str, buyma_name: str, brand: str) -> float:
     buyma_upper = buyma_name.upper()
     brand_upper = brand.upper()
@@ -118,11 +149,17 @@ def _match_score(official_name: str, buyma_name: str, brand: str) -> float:
         if official_models & buyma_models:
             model_bonus = 0.4
 
+    official_color = _normalize_color(official_name)
+    buyma_color = _normalize_color(buyma_name)
+    color_bonus = 0.0
+    if official_color and buyma_color and official_color == buyma_color:
+        color_bonus = 0.1
+
     official_tokens = _extract_tokens(official_name.upper())
     buyma_tokens = set(_extract_tokens(buyma_upper))
 
     if not official_tokens:
-        return min(1.0, model_bonus)
+        return min(1.0, model_bonus + color_bonus)
 
     hits = sum(1 for t in official_tokens if t in buyma_tokens or t in buyma_upper)
     token_score = hits / len(official_tokens)
@@ -131,7 +168,7 @@ def _match_score(official_name: str, buyma_name: str, brand: str) -> float:
         None, official_name.upper(), buyma_upper
     ).ratio()
 
-    return min(1.0, 0.6 * token_score + 0.4 * seq_score + model_bonus)
+    return min(1.0, 0.6 * token_score + 0.4 * seq_score + model_bonus + color_bonus)
 
 
 def _filter_outliers(prices: list[int]) -> list[int]:
@@ -206,6 +243,7 @@ def match_product(
         "buyma_item_url": best["item_url"],
         "match_count": len(same_name_items),
         "match_score": round(best_score, 3),
+        "buyma_size": _extract_size(best["name"]),
         "buyma_source": "buyma_search",
     }
 
@@ -213,7 +251,7 @@ def match_product(
 class BuymaPriceSearcher:
     """BUYMA価格検索。ブラウザセッションを使い回す。"""
 
-    def __init__(self, headless: bool = True, timeout: int = 60):
+    def __init__(self, headless: bool = True, timeout: int = DEFAULT_TIMEOUT):
         self.headless = headless
         self.timeout = timeout
         self._pw = None
@@ -327,80 +365,23 @@ class BuymaPriceSearcher:
         return results
 
 
-def search_buyma(
-    query: str,
-    brand: str | None = None,
-    headless: bool = True,
-    timeout: int = 60,
-) -> list[dict]:
-    encoded = urllib.parse.quote(query)
-    url = f"https://www.buyma.com/r/{encoded}/"
-    logger.info(f"[buyma] Searching: {url}")
-
-    results: list[dict] = []
-    try:
-        from playwright.sync_api import sync_playwright
-        from playwright_stealth import Stealth
-
-        with Stealth().use_sync(sync_playwright()) as p:
-            browser = p.chromium.launch(headless=headless)
-            ctx = browser.new_context(
-                viewport={"width": 1280, "height": 800},
-                locale="ja-JP",
-                timezone_id="Asia/Tokyo",
-                user_agent=_CHROME_HEADERS["User-Agent"],
-            )
-            page = ctx.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
-            time.sleep(3)
-
-            html = page.content()
-            raw = _parse_buyma_results(html)
-
-            if brand:
-                brand_norm = _normalize_brand(brand)
-                results = [
-                    r for r in raw
-                    if brand_norm in _normalize_brand(r["brand"])
-                ]
-            else:
-                results = raw
-
-            ctx.close()
-            browser.close()
-
-    except Exception as e:
-        logger.error(f"[buyma] Search failed: {e}")
-
-    return results
-
-
-def fetch_buyma_prices(
-    products: list[dict],
-    headless: bool = True,
-) -> dict[str, dict]:
-    searcher = BuymaPriceSearcher(headless=headless)
-    try:
-        return searcher.search_batch(products)
-    finally:
-        searcher.close()
-
-
 _shared_searcher: BuymaPriceSearcher | None = None
 _last_activity: float = 0.0
 _MAX_IDLE_SECONDS = 300.0
+_searcher_lock = threading.Lock()
 
 
 def get_shared_searcher() -> BuymaPriceSearcher:
     global _shared_searcher, _last_activity
-    now = time.time()
-    if _shared_searcher and (now - _last_activity) > _MAX_IDLE_SECONDS:
-        try:
-            _shared_searcher.close()
-        except Exception:
-            pass
-        _shared_searcher = None
-    if _shared_searcher is None:
-        _shared_searcher = BuymaPriceSearcher(headless=True)
-    _last_activity = now
-    return _shared_searcher
+    with _searcher_lock:
+        now = time.time()
+        if _shared_searcher and (now - _last_activity) > _MAX_IDLE_SECONDS:
+            try:
+                _shared_searcher.close()
+            except Exception:
+                pass
+            _shared_searcher = None
+        if _shared_searcher is None:
+            _shared_searcher = BuymaPriceSearcher(headless=True)
+        _last_activity = now
+        return _shared_searcher

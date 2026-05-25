@@ -20,6 +20,10 @@
         </div>
 
         <div class="mt-6 flex gap-3">
+            <button id="cancel-btn"
+                    class="bg-red-500 hover:bg-red-600 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                中止
+            </button>
             <a href="{{ url_for('main.brand_prices_dashboard', brand=brand, category=category) }}"
                id="back-btn"
                class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-medium px-4 py-2 rounded-lg transition hover:bg-gray-300 opacity-50 pointer-events-none">
@@ -35,10 +39,29 @@ const brand = "{{ brand }}";
 let completed = 0;
 let matched = 0;
 let cached = 0;
+let cancelled = false;
 
-function makeRow(name, rightText, bgClass) {
+const ERROR_LABELS = {
+    timeout: 'タイムアウト',
+    blocked: 'ブロック',
+    rate_limited: 'レート制限',
+    navigation: 'ページ遷移エラー',
+    unknown: 'エラー',
+};
+
+document.getElementById('cancel-btn').addEventListener('click', function() {
+    cancelled = true;
+    this.disabled = true;
+    this.classList.add('opacity-50');
+    document.getElementById('progress-text').textContent = 'キャンセルしました (' + matched + '/' + products.length + '商品マッチ)';
+    const backBtn = document.getElementById('back-btn');
+    backBtn.classList.remove('opacity-50', 'pointer-events-none');
+});
+
+function makeRow(name, rightText, bgClass, title) {
     const row = document.createElement('div');
     row.className = 'flex justify-between items-center px-3 py-2 rounded text-sm ' + bgClass;
+    if (title) row.title = title;
 
     const nameSpan = document.createElement('span');
     nameSpan.className = 'text-gray-700 dark:text-gray-300 truncate max-w-xs';
@@ -59,6 +82,8 @@ async function searchAll() {
     const textEl = document.getElementById('progress-text');
 
     for (let i = 0; i < products.length; i++) {
+        if (cancelled) break;
+
         const prod = products[i];
         textEl.textContent = '検索中... (' + (i + 1) + '/' + products.length + '): ' + prod.product_name;
 
@@ -81,25 +106,32 @@ async function searchAll() {
                 row = makeRow(prod.product_name, '¥' + data.buyma_price.toLocaleString() + ' (' + (data.match_score * 100).toFixed(0) + '%)' + countLabel, 'bg-green-50 dark:bg-green-900/20');
             } else if (data.status === 'no_match') {
                 row = makeRow(prod.product_name, 'マッチなし', 'bg-gray-50 dark:bg-gray-800');
+            } else if (data.status === 'error') {
+                var errLabel = ERROR_LABELS[data.error_type] || ERROR_LABELS.unknown;
+                row = makeRow(prod.product_name, errLabel, 'bg-red-50 dark:bg-red-900/20', data.message || '');
             } else {
                 row = makeRow(prod.product_name, data.status, 'bg-yellow-50 dark:bg-yellow-900/20');
             }
             resultsEl.appendChild(row);
         } catch (e) {
             completed++;
-            const row = makeRow(prod.product_name, 'エラー', 'bg-red-50 dark:bg-red-900/20');
+            const row = makeRow(prod.product_name, '通信エラー', 'bg-red-50 dark:bg-red-900/20');
             resultsEl.appendChild(row);
         }
 
         barEl.style.width = (completed / products.length * 100) + '%';
         resultsEl.scrollTop = resultsEl.scrollHeight;
 
-        if (i < products.length - 1) {
+        if (i < products.length - 1 && !cancelled) {
             await new Promise(r => setTimeout(r, 2500));
         }
     }
 
-    textEl.textContent = '完了: ' + matched + '/' + products.length + '商品マッチ (cache:' + cached + ')';
+    if (!cancelled) {
+        textEl.textContent = '完了: ' + matched + '/' + products.length + '商品マッチ (cache:' + cached + ')';
+    }
+    document.getElementById('cancel-btn').disabled = true;
+    document.getElementById('cancel-btn').classList.add('opacity-50');
     const backBtn = document.getElementById('back-btn');
     backBtn.classList.remove('opacity-50', 'pointer-events-none');
 }

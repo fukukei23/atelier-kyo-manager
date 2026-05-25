@@ -127,6 +127,25 @@ def get_available_brands() -> list[str]:
     return list(rows)
 
 
+def cleanup_buyma_cache(max_age_days: int = 30) -> int:
+    """BUYMA検索キャッシュが古くなったレコードのbuyma_status/buyma_searched_atをリセット。"""
+    cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+    count = 0
+    rows = db.session.execute(
+        db.select(BrandPrice).filter(
+            BrandPrice.buyma_searched_at < cutoff,
+            BrandPrice.buyma_status == "matched",
+        )
+    ).scalars().all()
+    for row in rows:
+        row.buyma_status = None
+        row.buyma_searched_at = None
+        count += 1
+    db.session.commit()
+    logger.info(f"Reset {count} stale BUYMA cache entries (older than {max_age_days} days)")
+    return count
+
+
 def get_last_scraped_at(brand: str) -> datetime | None:
     row = db.session.scalar(
         db.select(func.max(BrandPrice.scraped_at)).filter(BrandPrice.brand == brand)
