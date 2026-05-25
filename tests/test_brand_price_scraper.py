@@ -418,3 +418,97 @@ class TestBrandPriceRoutes:
         assert resp.status_code == 200
         data = json.loads(resp.data)
         assert data["brand"] == "Gucci"
+
+
+# ---------------------------------------------------------------------------
+# Profit calculation tests
+# ---------------------------------------------------------------------------
+
+class TestProfitCalculation:
+    def test_add_profit_calculation_basic(self):
+        from app.services.brand_price_service import add_profit_calculation
+        comparison = [{
+            "product_name": "GG Marmont Bag",
+            "cheapest_jpy": 100000.0,
+            "cheapest_site": "gucci_official",
+            "sites": {},
+        }]
+        result = add_profit_calculation(comparison, category="bag")
+        item = result[0]
+        assert item["profit"] is not None
+        assert item["total_cost"] > 0
+        assert item["buyma_suggested_price"] == round(100000.0 * 1.3)
+        assert item["shipping_cost"] == 3300.0
+
+    def test_add_profit_calculation_custom_markup(self):
+        from app.services.brand_price_service import add_profit_calculation
+        comparison = [{
+            "product_name": "Prada Bonnie",
+            "cheapest_jpy": 200000.0,
+            "cheapest_site": "prada_official",
+            "sites": {},
+        }]
+        result = add_profit_calculation(comparison, category="bag", markup_rate=1.5)
+        item = result[0]
+        assert item["buyma_suggested_price"] == round(200000.0 * 1.5)
+
+    def test_add_profit_calculation_manual_buyma_price(self):
+        from app.services.brand_price_service import add_profit_calculation
+        comparison = [{
+            "product_name": "Valentino Bag",
+            "cheapest_jpy": 150000.0,
+            "buyma_price": 250000.0,
+            "cheapest_site": "valentino_official",
+            "sites": {},
+        }]
+        result = add_profit_calculation(comparison, category="bag")
+        item = result[0]
+        assert item["buyma_suggested_price"] == 250000.0
+
+    def test_add_profit_calculation_no_price_skipped(self):
+        from app.services.brand_price_service import add_profit_calculation
+        comparison = [{"product_name": "Unknown", "cheapest_jpy": None, "sites": {}}]
+        result = add_profit_calculation(comparison, category="bag")
+        assert result[0]["profit"] is None
+        assert result[0]["is_profitable"] is False
+
+    def test_profitable_item_passes_threshold(self):
+        from app.services.brand_price_service import add_profit_calculation
+        # 100,000 * 1.5 = 150,000 selling price
+        # cost ~= 100,000 + 3,300 + customs(11,000) + commission(~11,550) = ~126,850
+        # profit ~= 23,150 > 10,000 → True
+        comparison = [{
+            "product_name": "Test Bag",
+            "cheapest_jpy": 100000.0,
+            "cheapest_site": "test",
+            "sites": {},
+        }]
+        result = add_profit_calculation(comparison, category="bag", markup_rate=1.5)
+        assert result[0]["is_profitable"] is True
+
+    def test_unprofitable_item_fails_threshold(self):
+        from app.services.brand_price_service import add_profit_calculation
+        # 500,000 * 1.01 = 505,000 selling → profit too small
+        comparison = [{
+            "product_name": "Expensive Bag",
+            "cheapest_jpy": 500000.0,
+            "buyma_price": 505000.0,
+            "cheapest_site": "test",
+            "sites": {},
+        }]
+        result = add_profit_calculation(comparison, category="bag")
+        assert result[0]["is_profitable"] is False
+
+
+class TestCostTable:
+    def test_get_shipping_bag(self):
+        from app.config.cost_table import get_buyandship_shipping
+        assert get_buyandship_shipping("bag") == 3300.0
+
+    def test_get_shipping_wallet(self):
+        from app.config.cost_table import get_buyandship_shipping
+        assert get_buyandship_shipping("wallet") == 3300.0
+
+    def test_get_shipping_default(self):
+        from app.config.cost_table import get_buyandship_shipping
+        assert get_buyandship_shipping(None) == 3300.0

@@ -5,6 +5,9 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import func
 
+from app.config.cost_table import DEFAULT_MARKUP_RATE, get_buyandship_shipping
+from app.core.pricing.calculator import calculate_pricing
+from app.core.pricing.schemas import PricingInput
 from app.extensions import db
 from app.models.brand_price import BrandPrice
 
@@ -64,7 +67,7 @@ def get_price_comparison(brand: str) -> list[dict]:
 
     result = []
     for name, prices in grouped.items():
-        entry = {"product_name": name, "sites": {}, "cheapest_site": None, "cheapest_jpy": None}
+        entry = {"product_name": name, "sites": {}, "cheapest_site": None, "cheapest_jpy": None, "cheapest_price_id": None}
         for p in prices:
             entry["sites"][p.source_site] = {
                 "price_jpy": p.price_jpy,
@@ -76,6 +79,7 @@ def get_price_comparison(brand: str) -> list[dict]:
             if entry["cheapest_jpy"] is None or p.price_jpy < entry["cheapest_jpy"]:
                 entry["cheapest_jpy"] = p.price_jpy
                 entry["cheapest_site"] = p.source_site
+                entry["cheapest_price_id"] = p.id
         result.append(entry)
 
     return result
@@ -118,3 +122,51 @@ def get_last_scraped_at(brand: str) -> datetime | None:
         db.select(func.max(BrandPrice.scraped_at)).filter(BrandPrice.brand == brand)
     )
     return row
+
+
+def add_profit_calculation(
+    comparison: list[dict],
+    category: str | None = None,
+    markup_rate: float = DEFAULT_MARKUP_RATE,
+) -> list[dict]:
+    """価格比較データに利益計算結果を付与する。
+
+    各商品の cheapest_jpy を仕入れ原価とし、BUYMA販売価格（buyma_price または
+    マークアップ価格）から利益・利益率・安全判定を計算する。
+
+    経営者判断に基づく計算式:
+      仕入れ原価 = EU価格(JPY) + Buyandship送料 + 関税
+      利益 = BUYMA販売価格 - 総コスト（既存 calculator.py 使用）
+      安全判定 = 利益 > max(10,000, 原価 × 5%)
+    """
+    for item in comparison:
+        cheapest = item.get("cheapest_jpy")
+        if cheapest is None or cheapest <= 0:
+            item["profit"] = None
+            item["profit_rate"] = None
+            item["is_profitable"] = False
+            item["buyma_suggested_price"] = None
+            continue
+
+        shipping = get_buyandship_shipping(category)
+        buyma_price = item.get("buyma_price") or round(cheapest * markup_rate)
+
+        inp = PricingInput(
+            purchase_price=cheapest,
+            selling_price=buyma_price,
+            shipping_cost=shipping,
+            original_currency="JPY",
+            item_category=category or "",
+        )
+        result = calculate_pricing(inp)
+
+        item["buyma_suggested_price"] = buyma_price
+        item["shipping_cost"] = shipping
+        item["total_cost"] = round(result.total_cost, 2)
+        item["customs_duty"] = round(result.auto_customs_duty, 2)
+        item["customs_rate"] = round(result.customs_rate_used, 4),
+        item["profit"] = round(result.profit, 2)
+        item["profit_rate"] = round(result.profit_rate, 4)
+        item["is_profitable"] = result.profit > max(10_000, result.total_cost * 0.05)
+
+    return comparison
