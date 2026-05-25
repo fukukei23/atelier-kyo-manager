@@ -220,13 +220,15 @@ class TestBrandPriceScraper:
 
     def test_supported_brands(self):
         from app.services.brand_price_scraper import SUPPORTED_BRANDS
-        for b in ["Gucci", "Prada", "Ferragamo", "Loewe", "Balenciaga", "Bottega Veneta"]:
+        for b in ["Gucci", "Prada", "Ferragamo", "Loewe", "Balenciaga", "Bottega Veneta",
+                   "Versace", "Marni", "Chloe"]:
             assert b in SUPPORTED_BRANDS
 
     def test_supported_sites(self):
         from app.services.brand_price_scraper import SUPPORTED_SITES
         for s in ["farfetch", "gucci_official", "prada_official", "ferragamo_official",
-                   "loewe_official", "balenciaga_official", "bottegaveneta_official"]:
+                   "loewe_official", "balenciaga_official", "bottegaveneta_official",
+                   "versace_official", "marni_official", "chloe_official"]:
             assert s in SUPPORTED_SITES
 
     @patch("app.services.brand_price_scraper._load_proxies")
@@ -327,6 +329,40 @@ class TestBrandPriceScraper:
         results = scraper.scrape("Ferragamo", sites=["ferragamo_official"])
         assert len(results) == 1
         assert results[0]["source_site"] == "ferragamo_official"
+
+    def test_scrape_versace_uses_stealth(self):
+        from app.services.brand_price_scraper import BrandPriceScraper
+        scraper = BrandPriceScraper()
+        scraper._scrape_stealth_official = MagicMock(return_value=[
+            {"product_name": "Medusa Big Bag", "source_site": "versace_official",
+             "currency": "EUR", "price_jpy": 400000.0},
+        ])
+        results = scraper.scrape("Versace", sites=["versace_official"])
+        assert len(results) == 1
+        assert results[0]["source_site"] == "versace_official"
+        scraper._scrape_stealth_official.assert_called_once()
+
+    def test_scrape_marni_uses_stealth(self):
+        from app.services.brand_price_scraper import BrandPriceScraper
+        scraper = BrandPriceScraper()
+        scraper._scrape_stealth_official = MagicMock(return_value=[
+            {"product_name": "Market Tote", "source_site": "marni_official",
+             "currency": "EUR", "price_jpy": 350000.0},
+        ])
+        results = scraper.scrape("Marni", sites=["marni_official"])
+        assert len(results) == 1
+        assert results[0]["source_site"] == "marni_official"
+
+    def test_scrape_chloe_uses_stealth(self):
+        from app.services.brand_price_scraper import BrandPriceScraper
+        scraper = BrandPriceScraper()
+        scraper._scrape_stealth_official = MagicMock(return_value=[
+            {"product_name": "Marcie Bag", "source_site": "chloe_official",
+             "currency": "EUR", "price_jpy": 380000.0},
+        ])
+        results = scraper.scrape("Chloe", sites=["chloe_official"])
+        assert len(results) == 1
+        assert results[0]["source_site"] == "chloe_official"
 
 
 # ---------------------------------------------------------------------------
