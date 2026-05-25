@@ -37,11 +37,11 @@ _FARFETCH_BRAND_SLUGS: dict[str, str] = {
 
 # ---------------------------------------------------------------------------
 # Brand official site configs
-# key = brand, value = {site_key: url}
+# EU sites preferred for BUYMA resale margin
 # ---------------------------------------------------------------------------
 _OFFICIAL_CFFI: dict[str, dict[str, str]] = {
-    "Gucci": {"gucci_official": "https://www.gucci.com/jp/ja/ca/-c-women-handbags"},
-    "Prada": {"prada_official": "https://www.prada.com/jp/ja/women/bags.html"},
+    "Gucci": {"gucci_official": "https://www.gucci.com/it/en/ca/-c-women-handbags"},
+    "Prada": {"prada_official": "https://www.prada.com/it/en/women/bags.html"},
     "Loewe": {"loewe_official": "https://www.loewe.com/usa/en/women/bags"},
     "Balenciaga": {"balenciaga_official": "https://www.balenciaga.com/jp/ja/women/handbags"},
 }
@@ -55,10 +55,20 @@ _OFFICIAL_STEALTH: dict[str, dict[str, str]] = {
     },
 }
 
+# Currency per brand (EU sites use EUR)
+_CURRENCY_MAP: dict[str, str] = {
+    "Gucci": "EUR",
+    "Prada": "EUR",
+    "Loewe": "JPY",
+    "Balenciaga": "JPY",
+    "Ferragamo": "JPY",
+    "Bottega Veneta": "JPY",
+}
+
 # Extraction patterns per brand (curl_cffi)
 _CFFI_PATTERNS: dict[str, str] = {
-    "Gucci": r'aria-label="([^"]+?),\s*￥([\d,]+)"',
-    "Prada": r'aria-label="\s*([^"]+?)\s*¥\s*([\d,]+)',
+    "Gucci": r'aria-label="([^"]+?),\s*€\s*([\d.]+)"',
+    "Prada": r'aria-label="\s*([^"]+?)\s*€\s*([\d.]+)',
     "Loewe": r'>([^<]{5,60}?)<.*?¥([\d,]+)',
     "Balenciaga": r'itemprop="price"\s+content="(\d+)"',
 }
@@ -154,16 +164,29 @@ def _fetch_with_cffi(url: str, timeout: int = 25) -> str | None:
     return None
 
 
-def _make_item(brand: str, product_name: str, price: float, source_site: str, source_url: str) -> dict:
+def _make_item(brand: str, product_name: str, price: float, source_site: str, source_url: str, currency: str = "JPY") -> dict:
+    price_jpy = price
+    exchange_rate = 1.0
+
+    if currency != "JPY":
+        from app.utils.fx_utils import get_fx_table_jpy
+        fx_table, _ = get_fx_table_jpy()
+        rate = fx_table.get(currency)
+        if rate:
+            exchange_rate = rate
+            price_jpy = price * rate
+        else:
+            logger.warning(f"No FX rate for {currency}, using raw price as JPY")
+
     return {
         "brand": brand,
         "product_name": product_name.strip(),
         "source_site": source_site,
         "source_url": source_url,
         "price_original": price,
-        "currency": "JPY",
-        "price_jpy": price,
-        "exchange_rate": 1.0,
+        "currency": currency,
+        "price_jpy": round(price_jpy),
+        "exchange_rate": exchange_rate,
         "in_stock": True,
         "size_available": "",
         "scraped_at": datetime.utcnow().isoformat(),
@@ -285,7 +308,7 @@ class BrandPriceScraper:
             for card in cards[:item_limit]:
                 results.append(_make_item(
                     brand, card["name"], float(card["price"]),
-                    "farfetch", card["url"],
+                    "farfetch", card["url"], currency="JPY",
                 ))
 
             logger.info(f"[farfetch] Extracted {len(results)} products for {brand}")
@@ -319,25 +342,24 @@ class BrandPriceScraper:
             for match in matches[:item_limit]:
                 if brand == "Balenciaga":
                     price = float(match)
-                    # Find name near price in HTML
                     price_pos = html.find(f'content="{match}"')
                     if price_pos == -1:
                         continue
                     ctx = html[max(0, price_pos - 800):price_pos]
                     name_match = re.findall(r'<h\d[^>]*>\s*([^<]+?)\s*</h\d>', ctx)
                     name = name_match[-1].strip() if name_match else f"Balenciaga Item {match}"
-                    results.append(_make_item(brand, name, price, site_key, url))
+                    results.append(_make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY")))
                 elif brand == "Loewe":
                     name, price_str = match
                     price = float(price_str.replace(",", ""))
-                    # Skip CSS class names or too-short names
                     if len(name) > 60 or "css-" in name or "{" in name:
                         continue
-                    results.append(_make_item(brand, name, price, site_key, url))
+                    results.append(_make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY")))
                 else:
                     name, price_str = match
-                    price = float(price_str.replace(",", ""))
-                    results.append(_make_item(brand, name, price, site_key, url))
+                    # EUR uses dot as thousands separator (€ 2.450 = 2450)
+                    price = float(price_str.replace(".", "").replace(",", ""))
+                    results.append(_make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY")))
 
         except Exception as e:
             logger.error(f"[{site_key}] Extraction failed: {e}")
@@ -386,7 +408,7 @@ class BrandPriceScraper:
                 for product in products[:item_limit]:
                     results.append(_make_item(
                         brand, product["name"], float(product["price"]),
-                        site_key, url,
+                        site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"),
                     ))
 
                 ctx.close()

@@ -251,20 +251,23 @@ class TestBrandPriceScraper:
     @patch("app.services.brand_price_scraper._fetch_with_cffi")
     def test_scrape_cffi_gucci(self, mock_fetch):
         from app.services.brand_price_scraper import BrandPriceScraper
-        mock_fetch.return_value = '<div aria-label="Gucci NY Large Tote, ￥440,000"></div>'
+        mock_fetch.return_value = '<div aria-label="Gucci NY Large Tote, € 2.450"></div>'
         scraper = BrandPriceScraper()
         results = scraper._scrape_cffi_official("Gucci")
         assert len(results) == 1
         assert results[0]["source_site"] == "gucci_official"
+        assert results[0]["currency"] == "EUR"
+        assert results[0]["price_original"] == 2450.0
 
     @patch("app.services.brand_price_scraper._fetch_with_cffi")
     def test_scrape_cffi_prada(self, mock_fetch):
         from app.services.brand_price_scraper import BrandPriceScraper
-        mock_fetch.return_value = '<a aria-label=" Prada Bonnie bag ¥ 407,000 x"></a>'
+        mock_fetch.return_value = '<a aria-label=" Prada Bonnie bag € 1.950 x"></a>'
         scraper = BrandPriceScraper()
         results = scraper._scrape_cffi_official("Prada")
         assert len(results) == 1
-        assert results[0]["price_jpy"] == 407000.0
+        assert results[0]["currency"] == "EUR"
+        assert results[0]["price_original"] == 1950.0
 
     @patch("app.services.brand_price_scraper._fetch_with_cffi")
     def test_scrape_cffi_loewe(self, mock_fetch):
