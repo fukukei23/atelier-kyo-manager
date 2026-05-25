@@ -512,3 +512,111 @@ class TestCostTable:
     def test_get_shipping_default(self):
         from app.config.cost_table import get_buyandship_shipping
         assert get_buyandship_shipping(None) == 3300.0
+
+
+# ---------------------------------------------------------------------------
+# BUYMA price scraper tests
+# ---------------------------------------------------------------------------
+
+class TestBuymaPriceScraper:
+    def test_parse_buyma_results_extracts_products(self):
+        from app.services.buyma_price_scraper import _parse_buyma_results
+        html = (
+            '<div class="product_img" '
+            'syo_id="12345" syo_name="PRADA Bonnie バッグ レザー" '
+            'brand_name="PRADA" category="レディース/バッグ" price="398000">'
+            '</div>'
+            '<div class="product_img" '
+            'syo_id="67890" syo_name="PRADA Re-Nylon トート" '
+            'brand_name="PRADA" category="レディース/バッグ" price="250000">'
+            '</div>'
+        )
+        results = _parse_buyma_results(html)
+        assert len(results) == 2
+        assert results[0]["name"] == "PRADA Bonnie バッグ レザー"
+        assert results[0]["brand"] == "PRADA"
+        assert results[0]["price_jpy"] == 398000
+        assert results[0]["item_id"] == "12345"
+        assert results[1]["price_jpy"] == 250000
+
+    def test_parse_buyma_results_deduplicates(self):
+        from app.services.buyma_price_scraper import _parse_buyma_results
+        html = (
+            '<div syo_id="111" syo_name="Item A" brand_name="PRADA" price="100">'
+            '</div>'
+            '<div syo_id="111" syo_name="Item A" brand_name="PRADA" price="100">'
+            '</div>'
+        )
+        results = _parse_buyma_results(html)
+        assert len(results) == 1
+
+    def test_normalize_brand(self):
+        from app.services.buyma_price_scraper import _normalize_brand
+        assert _normalize_brand("PRADA") == "PRADA"
+        assert _normalize_brand("prada") == "PRADA"
+        assert _normalize_brand("LOEWE") == "LOEWE"
+
+    def test_match_score_brand_mismatch_returns_zero(self):
+        from app.services.buyma_price_scraper import _match_score
+        score = _match_score("Bonnie Bag", "LOEWE Puzzle Bag", "Prada")
+        assert score == 0.0
+
+    def test_match_score_high_for_matching_product(self):
+        from app.services.buyma_price_scraper import _match_score
+        score = _match_score(
+            "Bonnie",
+            "PRADA【入手困難】Bonnie★レザー★ミディアム トート",
+            "Prada",
+        )
+        assert score > 0.3
+
+    def test_match_product_returns_cheapest_price(self):
+        from app.services.buyma_price_scraper import match_product
+        buyma_results = [
+            {"name": "PRADA Bonnie レザー トート", "brand": "PRADA", "price_jpy": 400000, "item_id": "1", "item_url": ""},
+            {"name": "PRADA Bonnie ミニ ショルダー", "brand": "PRADA", "price_jpy": 330000, "item_id": "2", "item_url": ""},
+            {"name": "LOEWE Puzzle Bag", "brand": "LOEWE", "price_jpy": 200000, "item_id": "3", "item_url": ""},
+        ]
+        result = match_product("Bonnie", "Prada", buyma_results)
+        assert result is not None
+        assert result["buyma_price"] == 330000
+        assert result["buyma_source"] == "buyma_search"
+        assert result["match_score"] > 0.3
+
+    def test_match_product_no_match_returns_none(self):
+        from app.services.buyma_price_scraper import match_product
+        buyma_results = [
+            {"name": "LOEWE Puzzle Bag", "brand": "LOEWE", "price_jpy": 200000, "item_id": "1", "item_url": ""},
+        ]
+        result = match_product("Bonnie", "Prada", buyma_results)
+        assert result is None
+
+    def test_match_product_empty_results_returns_none(self):
+        from app.services.buyma_price_scraper import match_product
+        result = match_product("Bonnie", "Prada", [])
+        assert result is None
+
+    @patch("app.services.buyma_price_scraper.search_buyma")
+    def test_fetch_buyma_prices_batch(self, mock_search):
+        from app.services.buyma_price_scraper import fetch_buyma_prices
+        mock_search.return_value = [
+            {"name": "PRADA Bonnie レザー", "brand": "PRADA", "price_jpy": 398000, "item_id": "1", "item_url": ""},
+        ]
+        products = [
+            {"product_name": "Bonnie", "brand": "Prada"},
+        ]
+        results = fetch_buyma_prices(products, headless=True)
+        assert "Bonnie" in results
+        assert results["Bonnie"]["buyma_price"] == 398000
+
+    def test_search_buyma_route_requires_login(self, client):
+        resp = client.post("/brand-prices/search-buyma", follow_redirects=False)
+        assert resp.status_code == 302
+
+    def test_search_buyma_route_rejects_unsupported_brand(self, auth_client):
+        resp = auth_client.post(
+            "/brand-prices/search-buyma",
+            data={"brand": "UnknownBrand", "category": "bag"},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
