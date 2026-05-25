@@ -15,25 +15,95 @@ logger = logging.getLogger(__name__)
 
 PROXY_POOL_PATH = Path(__file__).resolve().parents[1] / "config" / "proxy_pool.json"
 
-SUPPORTED_SITES = ["farfetch", "gucci_official", "prada_official", "ferragamo_official"]
-SUPPORTED_BRANDS = ["Gucci", "Prada", "Ferragamo"]
+SUPPORTED_SITES = [
+    "farfetch",
+    "gucci_official", "prada_official", "ferragamo_official",
+    "loewe_official", "balenciaga_official", "bottegaveneta_official",
+]
 
-_FARFETCH_BRAND_SLUGS = {
+SUPPORTED_BRANDS = [
+    "Gucci", "Prada", "Ferragamo",
+    "Loewe", "Balenciaga", "Bottega Veneta",
+]
+
+_FARFETCH_BRAND_SLUGS: dict[str, str] = {
     "Gucci": "gucci",
     "Prada": "prada",
     "Ferragamo": "salvatore-ferragamo",
+    "Loewe": "loewe",
+    "Balenciaga": "balenciaga",
+    "Bottega Veneta": "bottega-veneta",
 }
 
-_OFFICIAL_SITE_URLS: dict[str, dict[str, str]] = {
-    "Gucci": {
-        "gucci_official": "https://www.gucci.com/jp/ja/ca/-c-women-handbags",
-    },
-    "Prada": {
-        "prada_official": "https://www.prada.com/jp/ja/women/bags.html",
-    },
+# ---------------------------------------------------------------------------
+# Brand official site configs
+# key = brand, value = {site_key: url}
+# ---------------------------------------------------------------------------
+_OFFICIAL_CFFI: dict[str, dict[str, str]] = {
+    "Gucci": {"gucci_official": "https://www.gucci.com/jp/ja/ca/-c-women-handbags"},
+    "Prada": {"prada_official": "https://www.prada.com/jp/ja/women/bags.html"},
+    "Loewe": {"loewe_official": "https://www.loewe.com/usa/en/women/bags"},
+    "Balenciaga": {"balenciaga_official": "https://www.balenciaga.com/jp/ja/women/handbags"},
+}
+
+_OFFICIAL_STEALTH: dict[str, dict[str, str]] = {
     "Ferragamo": {
         "ferragamo_official": "https://www.ferragamo.com/shop/jpn/ja/sf/hug-bag-category",
     },
+    "Bottega Veneta": {
+        "bottegaveneta_official": "https://www.bottegaveneta.com/jp/ja/handbags",
+    },
+}
+
+# Extraction patterns per brand (curl_cffi)
+_CFFI_PATTERNS: dict[str, str] = {
+    "Gucci": r'aria-label="([^"]+?),\s*￥([\d,]+)"',
+    "Prada": r'aria-label="\s*([^"]+?)\s*¥\s*([\d,]+)',
+    "Loewe": r'>([^<]{5,60}?)<.*?¥([\d,]+)',
+    "Balenciaga": r'itemprop="price"\s+content="(\d+)"',
+}
+
+# Extraction JS per brand (playwright-stealth)
+_STEALTH_JS: dict[str, str] = {
+    "Ferragamo": """
+    (() => {
+        const items = document.querySelectorAll('.product-list-r23__description');
+        const results = [];
+        items.forEach(item => {
+            const nameEl = item.querySelector('.product-list-r23__name');
+            const priceEl = item.querySelector('.product-list-r23__price');
+            if (nameEl && priceEl) {
+                const name = nameEl.innerText.trim();
+                const m = priceEl.innerText.match(/[¥￥]\\s*([\\d,]+)/);
+                if (m) results.push({name, price: parseInt(m[1].replace(/,/g, ''))});
+            }
+        });
+        return results;
+    })()
+    """,
+    "Bottega Veneta": """
+    (() => {
+        const results = [];
+        const priceEls = document.querySelectorAll('[itemprop="price"]');
+        priceEls.forEach(priceEl => {
+            const price = priceEl.getAttribute('content');
+            if (!price) return;
+            let el = priceEl;
+            for (let i = 0; i < 15; i++) {
+                el = el.previousElementSibling || el.parentElement;
+                if (!el) break;
+                const h = el.querySelector('h2, h3, h4') || el;
+                const text = h.innerText.trim();
+                if (text && text.length > 3 && text.length < 80 && !text.match(/^[¥￥\\d]/)) {
+                    results.push({name: text.split('\\n')[0], price: parseInt(price)});
+                    break;
+                }
+            }
+        });
+        const seen = new Set();
+        return results.filter(r => { if (seen.has(r.name)) return false; seen.add(r.name); return true; });
+    })()
+    """,
 }
 
 _CHROME_HEADERS = {
@@ -51,7 +121,7 @@ def _load_proxies() -> list[dict]:
         return []
     with open(PROXY_POOL_PATH, encoding="utf-8") as f:
         pool = json.load(f)
-    proxies = []
+    proxies: list[dict] = []
     for key, entries in pool.items():
         if isinstance(entries, list):
             for e in entries:
@@ -73,12 +143,31 @@ def _fetch_with_cffi(url: str, timeout: int = 25) -> str | None:
             url, headers=_CHROME_HEADERS, impersonate="chrome124",
             timeout=timeout, allow_redirects=True,
         )
-        if resp.status_code == 200:
+        if resp.status_code < 400 and len(resp.text) > 1000:
+            return resp.text
+        # Some sites return 404 but still include product data
+        if resp.status_code == 404 and len(resp.text) > 10000:
             return resp.text
         logger.warning(f"[cffi] {url} returned {resp.status_code}")
     except Exception as e:
         logger.error(f"[cffi] Request failed for {url}: {e}")
     return None
+
+
+def _make_item(brand: str, product_name: str, price: float, source_site: str, source_url: str) -> dict:
+    return {
+        "brand": brand,
+        "product_name": product_name.strip(),
+        "source_site": source_site,
+        "source_url": source_url,
+        "price_original": price,
+        "currency": "JPY",
+        "price_jpy": price,
+        "exchange_rate": 1.0,
+        "in_stock": True,
+        "size_available": "",
+        "scraped_at": datetime.utcnow().isoformat(),
+    }
 
 
 class BrandPriceScraper:
@@ -99,10 +188,7 @@ class BrandPriceScraper:
             "viewport": {"width": 1280, "height": 800},
             "locale": "ja-JP",
             "timezone_id": "Asia/Tokyo",
-            "user_agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-            ),
+            "user_agent": _CHROME_HEADERS["User-Agent"],
         }
 
         proxies = _load_proxies()
@@ -140,6 +226,9 @@ class BrandPriceScraper:
         self.browser = None
         self.pw = None
 
+    # ------------------------------------------------------------------
+    # Farfetch (Playwright + proxy)
+    # ------------------------------------------------------------------
     def _scrape_farfetch(self, brand: str, item_limit: int = 10) -> list[dict]:
         slug = _FARFETCH_BRAND_SLUGS.get(brand)
         if not slug:
@@ -153,7 +242,6 @@ class BrandPriceScraper:
             self.page.goto(url, wait_until="domcontentloaded", timeout=60000)
             time.sleep(5)
 
-            # Scroll to load lazy-rendered product cards
             for _ in range(15):
                 self.page.evaluate("window.scrollBy(0, 600)")
                 time.sleep(0.5)
@@ -183,12 +271,7 @@ class BrandPriceScraper:
                         const priceMatch = text.match(/￥\\s*([\\d,]+)/);
                         const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, "")) : null;
                         if (price) {
-                            results.push({
-                                brand: brandName,
-                                name: productDesc || brandName,
-                                price: price,
-                                url: href
-                            });
+                            results.push({brand: brandName, name: productDesc || brandName, price, url: href});
                         }
                     } catch(e) {}
                 }
@@ -200,19 +283,10 @@ class BrandPriceScraper:
             logger.info(f"[farfetch] Found {len(cards)} products for {brand}")
 
             for card in cards[:item_limit]:
-                results.append({
-                    "brand": brand,
-                    "product_name": card["name"],
-                    "source_site": "farfetch",
-                    "source_url": card["url"],
-                    "price_original": float(card["price"]),
-                    "currency": "JPY",
-                    "price_jpy": float(card["price"]),
-                    "exchange_rate": 1.0,
-                    "in_stock": True,
-                    "size_available": "",
-                    "scraped_at": datetime.utcnow().isoformat(),
-                })
+                results.append(_make_item(
+                    brand, card["name"], float(card["price"]),
+                    "farfetch", card["url"],
+                ))
 
             logger.info(f"[farfetch] Extracted {len(results)} products for {brand}")
         except Exception as e:
@@ -220,9 +294,12 @@ class BrandPriceScraper:
 
         return results
 
-    def _scrape_official_gucci(self, brand: str, item_limit: int = 10) -> list[dict]:
-        urls = _OFFICIAL_SITE_URLS.get(brand, {})
-        url = urls.get("gucci_official")
+    # ------------------------------------------------------------------
+    # curl_cffi official sites (Gucci, Prada, Loewe, Balenciaga)
+    # ------------------------------------------------------------------
+    def _scrape_cffi_official(self, brand: str, item_limit: int = 10) -> list[dict]:
+        site_map = _OFFICIAL_CFFI.get(brand, {})
+        site_key, url = next(iter(site_map.items()), (None, None))
         if not url:
             return []
 
@@ -230,72 +307,55 @@ class BrandPriceScraper:
         if not html:
             return []
 
-        # Gucci uses: aria-label="ProductName, ￥Price"
-        products = re.findall(
-            r'aria-label="([^"]+?),\s*￥([\d,]+)"', html
-        )
-        logger.info(f"[gucci_official] Found {len(products)} products for {brand}")
+        pattern = _CFFI_PATTERNS.get(brand)
+        if not pattern:
+            return []
 
         results = []
-        for name, price_str in products[:item_limit]:
-            price = float(price_str.replace(",", ""))
-            results.append({
-                "brand": brand,
-                "product_name": name.strip(),
-                "source_site": "gucci_official",
-                "source_url": url,
-                "price_original": price,
-                "currency": "JPY",
-                "price_jpy": price,
-                "exchange_rate": 1.0,
-                "in_stock": True,
-                "size_available": "",
-                "scraped_at": datetime.utcnow().isoformat(),
-            })
+        try:
+            matches = re.findall(pattern, html)
+            logger.info(f"[{site_key}] Found {len(matches)} matches for {brand}")
 
-        logger.info(f"[gucci_official] Extracted {len(results)} products for {brand}")
+            for match in matches[:item_limit]:
+                if brand == "Balenciaga":
+                    price = float(match)
+                    # Find name near price in HTML
+                    price_pos = html.find(f'content="{match}"')
+                    if price_pos == -1:
+                        continue
+                    ctx = html[max(0, price_pos - 800):price_pos]
+                    name_match = re.findall(r'<h\d[^>]*>\s*([^<]+?)\s*</h\d>', ctx)
+                    name = name_match[-1].strip() if name_match else f"Balenciaga Item {match}"
+                    results.append(_make_item(brand, name, price, site_key, url))
+                elif brand == "Loewe":
+                    name, price_str = match
+                    price = float(price_str.replace(",", ""))
+                    # Skip CSS class names or too-short names
+                    if len(name) > 60 or "css-" in name or "{" in name:
+                        continue
+                    results.append(_make_item(brand, name, price, site_key, url))
+                else:
+                    name, price_str = match
+                    price = float(price_str.replace(",", ""))
+                    results.append(_make_item(brand, name, price, site_key, url))
+
+        except Exception as e:
+            logger.error(f"[{site_key}] Extraction failed: {e}")
+
+        logger.info(f"[{site_key}] Extracted {len(results)} products for {brand}")
         return results
 
-    def _scrape_official_prada(self, brand: str, item_limit: int = 10) -> list[dict]:
-        urls = _OFFICIAL_SITE_URLS.get(brand, {})
-        url = urls.get("prada_official")
+    # ------------------------------------------------------------------
+    # playwright-stealth official sites (Ferragamo, Bottega Veneta)
+    # ------------------------------------------------------------------
+    def _scrape_stealth_official(self, brand: str, item_limit: int = 10) -> list[dict]:
+        site_map = _OFFICIAL_STEALTH.get(brand, {})
+        site_key, url = next(iter(site_map.items()), (None, None))
         if not url:
             return []
 
-        html = _fetch_with_cffi(url)
-        if not html:
-            return []
-
-        # Prada uses: aria-label=" ProductName ¥ Price ..."
-        products = re.findall(
-            r'aria-label="\s*([^"]+?)\s*¥\s*([\d,]+)', html
-        )
-        logger.info(f"[prada_official] Found {len(products)} products for {brand}")
-
-        results = []
-        for name, price_str in products[:item_limit]:
-            price = float(price_str.replace(",", ""))
-            results.append({
-                "brand": brand,
-                "product_name": name.strip(),
-                "source_site": "prada_official",
-                "source_url": url,
-                "price_original": price,
-                "currency": "JPY",
-                "price_jpy": price,
-                "exchange_rate": 1.0,
-                "in_stock": True,
-                "size_available": "",
-                "scraped_at": datetime.utcnow().isoformat(),
-            })
-
-        logger.info(f"[prada_official] Extracted {len(results)} products for {brand}")
-        return results
-
-    def _scrape_official_ferragamo(self, brand: str, item_limit: int = 10) -> list[dict]:
-        urls = _OFFICIAL_SITE_URLS.get(brand, {})
-        url = urls.get("ferragamo_official")
-        if not url:
+        extract_js = _STEALTH_JS.get(brand)
+        if not extract_js:
             return []
 
         from playwright_stealth import Stealth
@@ -312,59 +372,35 @@ class BrandPriceScraper:
                 )
                 page = ctx.new_page()
 
-                logger.info(f"[ferragamo_official] Navigating to {url}")
+                logger.info(f"[{site_key}] Navigating to {url}")
                 page.goto(url, wait_until="domcontentloaded", timeout=60000)
                 time.sleep(8)
 
                 for _ in range(10):
                     page.evaluate("window.scrollBy(0, 500)")
-                    time.sleep(0.5)
+                    time.sleep(0.3)
 
-                FERRAGAMO_EXTRACT_JS = """
-                (() => {
-                    const items = document.querySelectorAll('.product-list-r23__description');
-                    const results = [];
-                    items.forEach(item => {
-                        const nameEl = item.querySelector('.product-list-r23__name');
-                        const priceEl = item.querySelector('.product-list-r23__price');
-                        if (nameEl && priceEl) {
-                            const name = nameEl.innerText.trim();
-                            const priceMatch = priceEl.innerText.match(/[¥￥]\\s*([\\d,]+)/);
-                            const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, '')) : null;
-                            if (price) results.push({name, price});
-                        }
-                    });
-                    return results;
-                })()
-                """
-
-                products = page.evaluate(FERRAGAMO_EXTRACT_JS) or []
-                logger.info(f"[ferragamo_official] Found {len(products)} products for {brand}")
+                products = page.evaluate(extract_js) or []
+                logger.info(f"[{site_key}] Found {len(products)} products for {brand}")
 
                 for product in products[:item_limit]:
-                    results.append({
-                        "brand": brand,
-                        "product_name": product["name"],
-                        "source_site": "ferragamo_official",
-                        "source_url": url,
-                        "price_original": float(product["price"]),
-                        "currency": "JPY",
-                        "price_jpy": float(product["price"]),
-                        "exchange_rate": 1.0,
-                        "in_stock": True,
-                        "size_available": "",
-                        "scraped_at": datetime.utcnow().isoformat(),
-                    })
+                    results.append(_make_item(
+                        brand, product["name"], float(product["price"]),
+                        site_key, url,
+                    ))
 
                 ctx.close()
                 browser.close()
 
         except Exception as e:
-            logger.error(f"[ferragamo_official] Scraping failed: {e}")
+            logger.error(f"[{site_key}] Scraping failed: {e}")
 
-        logger.info(f"[ferragamo_official] Extracted {len(results)} products for {brand}")
+        logger.info(f"[{site_key}] Extracted {len(results)} products for {brand}")
         return results
 
+    # ------------------------------------------------------------------
+    # Main entry point
+    # ------------------------------------------------------------------
     def scrape(
         self, brand: str, sites: list[str] | None = None, item_limit: int = 10
     ) -> list[dict]:
@@ -373,22 +409,22 @@ class BrandPriceScraper:
 
         all_results: list[dict] = []
 
-        # Official sites use curl_cffi (no browser needed)
-        if "gucci_official" in sites:
-            results = self._scrape_official_gucci(brand, item_limit)
-            all_results.extend(results)
+        # curl_cffi sites (fast, no browser)
+        if brand in _OFFICIAL_CFFI:
+            site_key = next(iter(_OFFICIAL_CFFI[brand]))
+            if site_key in sites:
+                results = self._scrape_cffi_official(brand, item_limit)
+                all_results.extend(results)
 
-        if "prada_official" in sites:
-            results = self._scrape_official_prada(brand, item_limit)
-            all_results.extend(results)
+        # playwright-stealth sites (JS rendering)
+        if brand in _OFFICIAL_STEALTH:
+            site_key = next(iter(_OFFICIAL_STEALTH[brand]))
+            if site_key in sites:
+                results = self._scrape_stealth_official(brand, item_limit)
+                all_results.extend(results)
 
-        # Ferragamo needs playwright-stealth for JS rendering
-        if "ferragamo_official" in sites:
-            results = self._scrape_official_ferragamo(brand, item_limit)
-            all_results.extend(results)
-
-        # Farfetch requires Playwright browser
-        if "farfetch" in sites:
+        # Farfetch (Playwright + proxy)
+        if "farfetch" in sites and brand in _FARFETCH_BRAND_SLUGS:
             try:
                 self._init_browser()
                 results = self._scrape_farfetch(brand, item_limit)
