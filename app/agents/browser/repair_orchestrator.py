@@ -19,15 +19,21 @@ logger = logging.getLogger(__name__)
 
 try:
     from app.agents.interactive_repair_session import InteractiveRepairSession
-except Exception:
+except Exception as _e:
+    logger.warning("InteractiveRepairSession not available: %s", _e)
     InteractiveRepairSession = None
 
 try:
     from app.agents.browser_use_moncler_patch import moncler_plp_recovery
-except Exception:
+except Exception as _e:
+    logger.warning("moncler_plp_recovery not available: %s", _e)
     moncler_plp_recovery = None
 
 OVERALL_PLP_BUDGET_MS_DEFAULT = 120000
+
+_SITE_RECOVERY_PATCHES: dict[str, Any] = {}
+if moncler_plp_recovery is not None:
+    _SITE_RECOVERY_PATCHES["MONCLER_OFFICIAL"] = moncler_plp_recovery
 
 
 def _merge_learned_selectors(site: str, site_config: dict[str, Any], run_context: RunContext) -> None:
@@ -56,6 +62,10 @@ class RepairOrchestratorMixin:
     logger: logging.Logger
     run_context: RunContext | None
     extraction_service: BrowserExtractionService
+
+    # DI: 外部からfactoryを注入可能（テスト用）。None時は遅延importで生成。
+    _interactive_repair_session_factory: Any | None = None
+    _llm_controller_factory: Any | None = None
 
     async def run_with_repair(
         self,
@@ -121,11 +131,12 @@ class RepairOrchestratorMixin:
             if settings.get("enable_visual_regression_check") and "plp" in (settings.get("vrt_scope") or ""):
                 await self._perform_vrt(page, "plp", settings)
 
-            if site.upper() == "MONCLER_OFFICIAL" and moncler_plp_recovery and not likely_plp:
+            site_patch = _SITE_RECOVERY_PATCHES.get(site.upper())
+            if site_patch is not None and not likely_plp:
                 try:
-                    await moncler_plp_recovery(page, site_config, {"query": query, "shipTo": "GB"})
+                    await site_patch(page, site_config, {"query": query, "shipTo": "GB"})
                 except Exception as _e:
-                    self.logger.warning(f"[MonclerPatch] skipped: {_e}")
+                    self.logger.warning(f"[SitePatch] {site} recovery skipped: {_e}")
 
             context = self._context
             if context is None:
@@ -173,8 +184,11 @@ class RepairOrchestratorMixin:
             return base_result
 
         try:
-            from app.utils.ai_llm_controller import AiLlmController
-            llm_ctrl = AiLlmController(mode="Chat/Default")
+            if self._llm_controller_factory is not None:
+                llm_ctrl = self._llm_controller_factory()
+            else:
+                from app.utils.ai_llm_controller import AiLlmController
+                llm_ctrl = AiLlmController(mode="Chat/Default")
         except Exception as e:
             self.logger.error(f"[run_with_repair] Failed to instantiate AiLlmController: {e}. Aborting repair.")
             await self._close_session_safely(run_context, settings)
@@ -240,7 +254,10 @@ class RepairOrchestratorMixin:
         healed_result: DiscoveryResult | None = None
 
         try:
-            repair_session = InteractiveRepairSession(
+            session_cls = self._interactive_repair_session_factory or InteractiveRepairSession
+            if session_cls is None:
+                raise RuntimeError("InteractiveRepairSession not available")
+            repair_session = session_cls(
                 ai_controller=llm_ctrl, run_context=run_context, max_steps=max_steps,
             )
             maybe_coro = repair_session.run_repair_loop(

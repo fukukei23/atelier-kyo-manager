@@ -181,7 +181,7 @@ class SelfHealingPatchApplier:
         self,
         overrides: dict[str, Any],
         target_site: str,
-        diff_ops: List[dict[str, Any]],
+        diff_ops: list[dict[str, Any]],
     ) -> None:
         """
         diff 操作を overrides の target_site ブロックに適用する
