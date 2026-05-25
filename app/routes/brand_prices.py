@@ -7,6 +7,7 @@ from flask_login import login_required
 
 from app.services import brand_price_service
 from app.services.brand_price_scraper import SUPPORTED_BRANDS, SUPPORTED_SITES, BrandPriceScraper
+from app.services.buyma_price_scraper import fetch_buyma_prices
 
 from . import bp
 
@@ -143,3 +144,60 @@ def api_brand_prices_comparison():
     brand = request.args.get("brand", "Gucci")
     comparison = brand_price_service.get_price_comparison(brand)
     return jsonify({"brand": brand, "comparison": comparison})
+
+
+@bp.post("/brand-prices/search-buyma")
+@login_required
+def brand_prices_search_buyma():
+    """BUYMA販売価格を自動検索してDBに反映。"""
+    from app.extensions import db
+    from app.models.brand_price import BrandPrice
+
+    brand = request.form.get("brand", "Gucci")
+    category = request.form.get("category", "bag")
+    if brand not in SUPPORTED_BRANDS:
+        flash("対応していないブランドです", "error")
+        return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+    comparison = brand_price_service.get_price_comparison(brand)
+    products = [
+        {"product_name": item["product_name"], "brand": brand}
+        for item in comparison
+        if item.get("cheapest_jpy")
+    ]
+
+    if not products:
+        flash(f"{brand} の商品データがありません。先に価格を取得してください。", "warning")
+        return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+    flash(f"BUYMA価格検索中... ({len(products)}商品)", "info")
+
+    try:
+        buyma_results = fetch_buyma_prices(products[:20], headless=True)
+    except Exception as e:
+        logger.error(f"BUYMA search error: {e}")
+        flash(f"BUYMA検索エラー: {e}", "error")
+        return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+    updated = 0
+    for name, match in buyma_results.items():
+        rows = db.session.execute(
+            db.select(BrandPrice).filter(
+                BrandPrice.brand == brand,
+                BrandPrice.product_name == name,
+            )
+        ).scalars().all()
+
+        for row in rows:
+            row.buyma_price = match["buyma_price"]
+            row.buyma_price_source = f"buyma_search({match['match_score']:.2f})"
+        updated += 1
+
+    db.session.commit()
+
+    flash(
+        f"BUYMA価格: {updated}/{len(products)}商品マッチ "
+        f"(最低価格を自動反映)",
+        "success",
+    )
+    return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
