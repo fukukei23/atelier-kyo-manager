@@ -61,6 +61,20 @@ DEFAULT_THRESHOLD = 0.3
 _MODEL_NUMBER_RE = re.compile(r"\b([A-Z0-9]{5,12})\b")
 
 
+def _build_search_query(product_name: str, brand: str) -> str:
+    tokens = _extract_tokens(product_name)
+    # 重要度順に最大5トークン + ブランド名
+    scored = []
+    for t in tokens:
+        s = len(t)
+        if any(c.isdigit() for c in t) and any(c.isalpha() for c in t):
+            s += 10
+        scored.append((s, t))
+    scored.sort(reverse=True)
+    top = [t for _, t in scored[:5]]
+    return " ".join([brand] + top)
+
+
 def _normalize_brand(name: str) -> str:
     upper = name.upper().replace("&AMP;", "&")
     for brand in _BRAND_NORMALIZE:
@@ -120,6 +134,18 @@ def _match_score(official_name: str, buyma_name: str, brand: str) -> float:
     return min(1.0, 0.6 * token_score + 0.4 * seq_score + model_bonus)
 
 
+def _filter_outliers(prices: list[int]) -> list[int]:
+    if len(prices) < 4:
+        return prices
+    sorted_p = sorted(prices)
+    q1 = sorted_p[len(sorted_p) // 4]
+    q3 = sorted_p[3 * len(sorted_p) // 4]
+    iqr = q3 - q1
+    lower = q1 - 1.5 * iqr
+    upper = q3 + 1.5 * iqr
+    return [p for p in prices if lower <= p <= upper]
+
+
 def _parse_buyma_results(html: str) -> list[dict]:
     results: list[dict] = []
     seen_ids: set[str] = set()
@@ -170,7 +196,7 @@ def match_product(
         s[1] for s in scored
         if s[0] >= best_score * 0.9
     ]
-    prices = [r["price_jpy"] for r in same_name_items]
+    prices = _filter_outliers([r["price_jpy"] for r in same_name_items])
 
     return {
         "buyma_name": best["name"],
@@ -236,25 +262,39 @@ class BuymaPriceSearcher:
         )
         page = ctx.new_page()
 
+        last_error = None
         try:
-            query = urllib.parse.quote(f"{brand} {product_name}")
-            url = f"https://www.buyma.com/r/{query}/"
-            page.goto(url, wait_until="domcontentloaded", timeout=self.timeout * 1000)
-            time.sleep(3)
+            for attempt in range(3):
+                try:
+                    query = urllib.parse.quote(_build_search_query(product_name, brand))
+                    all_filtered = []
+                    for pg in range(1, 3):
+                        url = f"https://www.buyma.com/r/{query}/"
+                        if pg > 1:
+                            url = f"https://www.buyma.com/r/{query}/?page={pg}"
+                        page.goto(url, wait_until="domcontentloaded", timeout=self.timeout * 1000)
+                        time.sleep(2)
 
-            html = page.content()
-            raw = _parse_buyma_results(html)
+                        html = page.content()
+                        raw = _parse_buyma_results(html)
+                        if not raw:
+                            break
 
-            brand_norm = _normalize_brand(brand)
-            filtered = [
-                r for r in raw
-                if brand_norm in _normalize_brand(r["brand"])
-            ]
+                        brand_norm = _normalize_brand(brand)
+                        all_filtered.extend(
+                            r for r in raw
+                            if brand_norm in _normalize_brand(r["brand"])
+                        )
 
-            return match_product(product_name, brand, filtered, threshold=threshold)
-        except Exception as e:
-            logger.error(f"[buyma] Search failed for {product_name}: {e}")
-            return None
+                    return match_product(product_name, brand, all_filtered, threshold=threshold)
+                except Exception as e:
+                    last_error = e
+                    logger.warning(f"[buyma] Attempt {attempt + 1}/3 failed for {product_name}: {e}")
+                    if attempt < 2:
+                        time.sleep(2 * (attempt + 1))
+
+            logger.error(f"[buyma] All 3 attempts failed for {product_name}: {last_error}")
+            raise last_error
         finally:
             ctx.close()
 
@@ -344,3 +384,23 @@ def fetch_buyma_prices(
         return searcher.search_batch(products)
     finally:
         searcher.close()
+
+
+_shared_searcher: BuymaPriceSearcher | None = None
+_last_activity: float = 0.0
+_MAX_IDLE_SECONDS = 300.0
+
+
+def get_shared_searcher() -> BuymaPriceSearcher:
+    global _shared_searcher, _last_activity
+    now = time.time()
+    if _shared_searcher and (now - _last_activity) > _MAX_IDLE_SECONDS:
+        try:
+            _shared_searcher.close()
+        except Exception:
+            pass
+        _shared_searcher = None
+    if _shared_searcher is None:
+        _shared_searcher = BuymaPriceSearcher(headless=True)
+    _last_activity = now
+    return _shared_searcher

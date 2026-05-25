@@ -7,6 +7,7 @@
 # ==============================================================================
 
 from .brand_price import BrandPrice
+from .buyma_price_history import BuymaPriceHistory
 from .customer_inquiry import CustomerInquiry
 from .faq_template import FaqTemplate
 from .listing_progress import ListingProgress
@@ -41,4 +42,5 @@ __all__ = [
     "ShipmentNotification",
     "CustomerInquiry",
     "BrandPrice",
+    "BuymaPriceHistory",
 ]

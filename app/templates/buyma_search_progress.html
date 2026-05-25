@@ -77,7 +77,8 @@ async function searchAll() {
                 row = makeRow(prod.product_name, 'cache ¥' + data.buyma_price.toLocaleString() + ' (' + (data.match_score * 100).toFixed(0) + '%)', 'bg-blue-50 dark:bg-blue-900/20');
             } else if (data.status === 'matched') {
                 matched++;
-                row = makeRow(prod.product_name, '¥' + data.buyma_price.toLocaleString() + ' (' + (data.match_score * 100).toFixed(0) + '%)', 'bg-green-50 dark:bg-green-900/20');
+                var countLabel = data.match_count ? ' (' + data.match_count + '出品)' : '';
+                row = makeRow(prod.product_name, '¥' + data.buyma_price.toLocaleString() + ' (' + (data.match_score * 100).toFixed(0) + '%)' + countLabel, 'bg-green-50 dark:bg-green-900/20');
             } else if (data.status === 'no_match') {
                 row = makeRow(prod.product_name, 'マッチなし', 'bg-gray-50 dark:bg-gray-800');
             } else {
@@ -92,6 +93,10 @@ async function searchAll() {
 
         barEl.style.width = (completed / products.length * 100) + '%';
         resultsEl.scrollTop = resultsEl.scrollHeight;
+
+        if (i < products.length - 1) {
+            await new Promise(r => setTimeout(r, 2500));
+        }
     }
 
     textEl.textContent = '完了: ' + matched + '/' + products.length + '商品マッチ (cache:' + cached + ')';

@@ -51,6 +51,10 @@ def create_app(config_name: str | None = None) -> Flask:
 
         db.create_all()
 
+    # --- CLI コマンド登録 ---
+    from .commands import register_commands
+    register_commands(app)
+
     return app
 
 

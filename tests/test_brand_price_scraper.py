@@ -957,3 +957,165 @@ class TestModelNumberMatching:
         result = match_product("Prada Bonnie 1BA836", "Prada", buyma_results)
         assert result is not None
         assert result["buyma_price"] == 398000
+
+
+# ---------------------------------------------------------------------------
+# Round 2 improvement tests (A, C, D, E, F, G)
+# ---------------------------------------------------------------------------
+
+class TestPriceHistory:
+    def test_price_history_model_created(self, app):
+        from app.models.brand_price import BrandPrice
+        from app.models.buyma_price_history import BuymaPriceHistory
+        from app.extensions import db
+        with app.app_context():
+            bp = BrandPrice(
+                brand="Prada", product_name="HistTest", source_site="prada_official",
+                price_original=1000.0, currency="EUR", price_jpy=150000.0,
+                exchange_rate=150.0,
+            )
+            db.session.add(bp)
+            db.session.commit()
+
+            hist = BuymaPriceHistory(
+                brand_price_id=bp.id,
+                buyma_price=300000.0,
+                buyma_matched_name="Old Match",
+                match_score=0.7,
+            )
+            db.session.add(hist)
+            db.session.commit()
+
+            assert hist.id is not None
+            assert hist.buyma_price == 300000.0
+
+    @patch("app.routes.brand_prices.get_shared_searcher")
+    def test_api_saves_history_on_price_change(self, mock_get, app, auth_client):
+        from app.models.brand_price import BrandPrice
+        from app.models.buyma_price_history import BuymaPriceHistory
+        from app.extensions import db
+        from datetime import datetime, timedelta
+        with app.app_context():
+            db.session.add(BrandPrice(
+                brand="Prada", product_name="HistApiTest", source_site="prada_official",
+                price_original=1000.0, currency="EUR", price_jpy=150000.0,
+                exchange_rate=150.0, buyma_price=300000.0,
+                buyma_matched_name="Old", buyma_match_score=0.7,
+                buyma_status="matched",
+                buyma_searched_at=datetime.utcnow() - timedelta(days=10),
+            ))
+            db.session.commit()
+
+        mock_searcher = MagicMock()
+        mock_searcher.search_single.return_value = {
+            "buyma_name": "PRADA New", "buyma_price": 350000,
+            "buyma_price_max": 350000, "buyma_price_avg": 350000,
+            "buyma_item_url": "https://www.buyma.com/item/99/",
+            "match_count": 1, "match_score": 0.85, "buyma_source": "buyma_search",
+        }
+        mock_get.return_value = mock_searcher
+
+        resp = auth_client.post(
+            "/api/buyma-search",
+            data=json.dumps({"product_name": "HistApiTest", "brand": "Prada"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["status"] == "matched"
+
+        with app.app_context():
+            count = db.session.scalar(
+                db.select(db.func.count()).select_from(BuymaPriceHistory)
+            )
+            assert count == 1
+
+
+class TestOutlierFilter:
+    def test_filter_outliers_removes_extreme_low(self):
+        from app.services.buyma_price_scraper import _filter_outliers
+        prices = [98000, 100000, 105000, 102000, 99000, 5000]
+        filtered = _filter_outliers(prices)
+        assert 5000 not in filtered
+        assert len(filtered) == 5
+
+    def test_filter_outliers_keeps_normal_prices(self):
+        from app.services.buyma_price_scraper import _filter_outliers
+        prices = [98000, 100000, 105000, 102000]
+        filtered = _filter_outliers(prices)
+        assert len(filtered) == 4
+
+
+class TestSearchQueryOptimization:
+    def test_build_search_query_includes_brand(self):
+        from app.services.buyma_price_scraper import _build_search_query
+        query = _build_search_query("Prada Bonnie Medium Leather Tote Bag 1BA836", "Prada")
+        assert "Prada" in query
+        assert "1BA836" in query
+
+    def test_build_search_query_limits_tokens(self):
+        from app.services.buyma_price_scraper import _build_search_query
+        query = _build_search_query("A B C D E F G H", "Prada")
+        parts = query.split()
+        assert len(parts) <= 6
+
+
+class TestRetryLogic:
+    def test_search_single_retries_on_error(self):
+        from app.services.buyma_price_scraper import BuymaPriceSearcher
+        searcher = BuymaPriceSearcher()
+        searcher._ensure_browser = MagicMock()
+        mock_ctx = MagicMock()
+        mock_page = MagicMock()
+        mock_ctx.new_page.return_value = mock_page
+        searcher._browser = MagicMock()
+        searcher._browser.new_context.return_value = mock_ctx
+        mock_page.goto.side_effect = Exception("timeout")
+
+        with pytest.raises(Exception, match="timeout"):
+            searcher.search_single("Test Bag", "Prada")
+        assert mock_page.goto.call_count == 3
+        searcher.close()
+
+
+class TestSharedSearcher:
+    def test_get_shared_searcher_returns_same_instance(self):
+        from app.services.buyma_price_scraper import get_shared_searcher
+        s1 = get_shared_searcher()
+        s2 = get_shared_searcher()
+        assert s1 is s2
+        s1.close()
+
+
+class TestCSVExport:
+    def test_export_requires_login(self, client):
+        resp = client.get("/brand-prices/export?brand=Prada", follow_redirects=False)
+        assert resp.status_code == 302
+
+    def test_export_returns_csv(self, app, auth_client):
+        from app.models.brand_price import BrandPrice
+        from app.extensions import db
+        from datetime import datetime
+        with app.app_context():
+            bp = BrandPrice(
+                brand="Prada", product_name="ExportTest", source_site="prada_official",
+                price_original=1000.0, currency="EUR", price_jpy=150000.0,
+                exchange_rate=150.0, scraped_at=datetime.utcnow(),
+                buyma_price=250000.0, buyma_status="matched",
+            )
+            db.session.add(bp)
+            db.session.commit()
+
+        resp = auth_client.get("/brand-prices/export?brand=Prada&category=bag")
+        assert resp.status_code == 200
+        assert "text/csv" in resp.content_type
+        assert "ExportTest" in resp.data.decode()
+
+
+class TestCLICommands:
+    def test_scrape_command_exists(self):
+        from app import create_app
+        app = create_app()
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=["scrape-brand-prices", "UnknownBrand"])
+        assert "Unsupported" in result.output

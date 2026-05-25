@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import flash, jsonify, make_response, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from app.services import brand_price_service
@@ -12,7 +12,7 @@ from app.services.buyma_price_scraper import (
     BRAND_THRESHOLDS,
     BUYMA_UNAVAILABLE_BRANDS,
     DEFAULT_THRESHOLD,
-    BuymaPriceSearcher,
+    get_shared_searcher,
 )
 
 from . import bp
@@ -152,6 +152,48 @@ def api_brand_prices_comparison():
     return jsonify({"brand": brand, "comparison": comparison})
 
 
+@bp.get("/brand-prices/export")
+@login_required
+def brand_prices_export():
+    import csv
+    import io
+
+    brand = request.args.get("brand", "Gucci")
+    category = request.args.get("category", "bag")
+    comparison = brand_price_service.get_price_comparison(brand)
+    comparison = brand_price_service.add_profit_calculation(comparison, category=category)
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "商品名", "仕入れ原価(JPY)", "送料", "関税", "総コスト",
+        "販売価格", "利益額", "利益率", "判定",
+        "BUYMA商品名", "マッチスコア", "状態",
+    ])
+    for item in comparison:
+        if item.get("profit") is None:
+            continue
+        writer.writerow([
+            item["product_name"],
+            int(item.get("cheapest_jpy", 0)),
+            int(item.get("shipping_cost", 0)),
+            int(item.get("customs_duty", 0)),
+            int(item.get("total_cost", 0)),
+            int(item.get("buyma_suggested_price", 0)),
+            int(item.get("profit", 0)),
+            f"{item.get('profit_rate', 0) * 100:.1f}%",
+            "OK" if item.get("is_profitable") else "NG",
+            item.get("buyma_matched_name", ""),
+            f"{item.get('buyma_match_score', 0) * 100:.0f}%" if item.get("buyma_match_score") else "",
+            item.get("buyma_status", ""),
+        ])
+
+    output = make_response(buf.getvalue())
+    output.headers["Content-Type"] = "text/csv; charset=utf-8-sig"
+    output.headers["Content-Disposition"] = f"attachment; filename=brand_prices_{brand}_{category}.csv"
+    return output
+
+
 @bp.post("/brand-prices/search-buyma")
 @login_required
 def brand_prices_search_buyma():
@@ -230,19 +272,16 @@ def api_buyma_search_single():
     # #9 ブランド別閾値
     threshold = BRAND_THRESHOLDS.get(brand, DEFAULT_THRESHOLD)
 
-    searcher = BuymaPriceSearcher(headless=True)
+    searcher = get_shared_searcher()
     try:
         match = searcher.search_single(product_name, brand, threshold=threshold)
     except Exception as e:
         logger.error(f"BUYMA search error for {product_name}: {e}")
-        # #8 エラー状態を保存
         for row in rows:
             row.buyma_status = "error"
             row.buyma_searched_at = datetime.utcnow()
         db.session.commit()
         return jsonify({"status": "error", "message": str(e)})
-    finally:
-        searcher.close()
 
     now = datetime.utcnow()
 
@@ -253,8 +292,18 @@ def api_buyma_search_single():
         db.session.commit()
         return jsonify({"status": "no_match"})
 
-    # マッチ結果を全カラムに保存（#5 + #8）
+    # マッチ結果を全カラムに保存（#5 + #8）+ 履歴保存（#A）
+    from app.models.buyma_price_history import BuymaPriceHistory
+
     for row in rows:
+        if row.buyma_price and row.buyma_price != match["buyma_price"]:
+            db.session.add(BuymaPriceHistory(
+                brand_price_id=row.id,
+                buyma_price=row.buyma_price,
+                buyma_matched_name=row.buyma_matched_name,
+                match_score=row.buyma_match_score,
+                source=row.buyma_price_source or "previous",
+            ))
         row.buyma_price = match["buyma_price"]
         row.buyma_price_source = f"buyma_search({match['match_score']:.2f})"
         row.buyma_matched_name = match["buyma_name"]
@@ -268,4 +317,5 @@ def api_buyma_search_single():
         "buyma_price": match["buyma_price"],
         "buyma_name": match["buyma_name"],
         "match_score": match["match_score"],
+        "match_count": match["match_count"],
     })

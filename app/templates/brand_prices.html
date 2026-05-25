@@ -59,7 +59,11 @@
     <!-- 価格比較 + 利益計算テーブル -->
     {% if comparison %}
     <div class="bg-white dark:bg-gray-900 rounded-lg shadow overflow-x-auto">
-        <table class="w-full text-sm">
+        <div class="flex justify-end px-4 py-2">
+            <a href="{{ url_for('main.brand_prices_export', brand=brand, category=category) }}"
+               class="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400">CSV出力</a>
+        </div>
+        <table class="w-full text-sm min-w-[900px]">
             <thead class="bg-gray-50 dark:bg-gray-800">
                 <tr>
                     <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-medium">商品名</th>
