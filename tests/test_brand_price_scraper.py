@@ -227,6 +227,7 @@ class TestBrandPriceScraper:
         assert "farfetch" in SUPPORTED_SITES
         assert "gucci_official" in SUPPORTED_SITES
         assert "prada_official" in SUPPORTED_SITES
+        assert "ferragamo_official" in SUPPORTED_SITES
 
     @patch("app.services.brand_price_scraper._load_proxies")
     def test_scrape_farfetch_returns_results(self, mock_proxies):
@@ -296,6 +297,7 @@ class TestBrandPriceScraper:
         scraper = BrandPriceScraper()
         scraper._scrape_official_gucci = MagicMock(return_value=[{"product_name": "Gucci Bag", "source_site": "gucci_official"}])
         scraper._scrape_official_prada = MagicMock(return_value=[])
+        scraper._scrape_official_ferragamo = MagicMock(return_value=[])
         scraper._scrape_farfetch = MagicMock(return_value=[{"product_name": "FF Bag", "source_site": "farfetch"}])
         scraper._init_browser = MagicMock()
         scraper._close_browser = MagicMock()
@@ -304,6 +306,16 @@ class TestBrandPriceScraper:
         assert len(results) == 2
         scraper._scrape_official_gucci.assert_called_once()
         scraper._scrape_farfetch.assert_called_once()
+
+    def test_scrape_ferragamo_official_mock(self):
+        from app.services.brand_price_scraper import BrandPriceScraper
+        scraper = BrandPriceScraper()
+        scraper._scrape_official_ferragamo = MagicMock(return_value=[
+            {"product_name": "Hug Bucket Bag", "price_jpy": 330000.0, "source_site": "ferragamo_official"},
+        ])
+        results = scraper.scrape("Ferragamo", sites=["ferragamo_official"])
+        assert len(results) == 1
+        assert results[0]["source_site"] == "ferragamo_official"
 
 
 # ---------------------------------------------------------------------------
