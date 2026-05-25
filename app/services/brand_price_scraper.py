@@ -19,11 +19,13 @@ SUPPORTED_SITES = [
     "farfetch",
     "gucci_official", "prada_official", "ferragamo_official",
     "loewe_official", "balenciaga_official", "bottegaveneta_official",
+    "versace_official", "marni_official", "chloe_official",
 ]
 
 SUPPORTED_BRANDS = [
     "Gucci", "Prada", "Ferragamo",
     "Loewe", "Balenciaga", "Bottega Veneta",
+    "Versace", "Marni", "Chloe",
 ]
 
 _FARFETCH_BRAND_SLUGS: dict[str, str] = {
@@ -53,6 +55,15 @@ _OFFICIAL_STEALTH: dict[str, dict[str, str]] = {
     "Bottega Veneta": {
         "bottegaveneta_official": "https://www.bottegaveneta.com/jp/ja/handbags",
     },
+    "Versace": {
+        "versace_official": "https://www.versace.com/it/en/women/bags/",
+    },
+    "Marni": {
+        "marni_official": "https://www.marni.com/it/en/women/bags/",
+    },
+    "Chloe": {
+        "chloe_official": "https://www.chloe.com/it/en/women/bags/",
+    },
 }
 
 # Currency per brand (EU sites use EUR)
@@ -63,6 +74,9 @@ _CURRENCY_MAP: dict[str, str] = {
     "Balenciaga": "JPY",
     "Ferragamo": "JPY",
     "Bottega Veneta": "JPY",
+    "Versace": "EUR",
+    "Marni": "EUR",
+    "Chloe": "EUR",
 }
 
 # Extraction patterns per brand (curl_cffi)
@@ -107,6 +121,78 @@ _STEALTH_JS: dict[str, str] = {
                 if (text && text.length > 3 && text.length < 80 && !text.match(/^[¥￥\\d]/)) {
                     results.push({name: text.split('\\n')[0], price: parseInt(price)});
                     break;
+                }
+            }
+        });
+        const seen = new Set();
+        return results.filter(r => { if (seen.has(r.name)) return false; seen.add(r.name); return true; });
+    })()
+    """,
+    "Versace": """
+    (() => {
+        const results = [];
+        document.querySelectorAll('[itemprop="price"]').forEach(el => {
+            const content = el.getAttribute('content');
+            if (!content || isNaN(parseInt(content))) return;
+            let cur = el;
+            for (let i = 0; i < 20; i++) {
+                cur = cur.parentElement;
+                if (!cur) break;
+                const link = cur.querySelector('a[href*="/women/"], a[href*="/bags"]');
+                if (link) {
+                    const name = (link.innerText || link.textContent || '').trim().split('\\n')[0];
+                    if (name.length > 3 && name.length < 120) {
+                        results.push({name, price: parseFloat(content)});
+                        return;
+                    }
+                }
+            }
+        });
+        const seen = new Set();
+        return results.filter(r => { if (seen.has(r.name)) return false; seen.add(r.name); return true; });
+    })()
+    """,
+    "Marni": """
+    (() => {
+        const results = [];
+        document.querySelectorAll('[itemprop="price"]').forEach(el => {
+            const content = el.getAttribute('content');
+            if (!content || isNaN(parseFloat(content))) return;
+            let cur = el;
+            for (let i = 0; i < 20; i++) {
+                cur = cur.parentElement;
+                if (!cur) break;
+                const nameEl = cur.querySelector('.product-item-name, .product-name, h2, h3');
+                if (nameEl) {
+                    const name = nameEl.innerText.trim().split('\\n')[0];
+                    if (name.length > 3 && name.length < 120) {
+                        results.push({name, price: parseFloat(content)});
+                        return;
+                    }
+                }
+            }
+        });
+        const seen = new Set();
+        return results.filter(r => { if (seen.has(r.name)) return false; seen.add(r.name); return true; });
+    })()
+    """,
+    "Chloe": """
+    (() => {
+        const results = [];
+        document.querySelectorAll('[itemprop="price"]').forEach(el => {
+            const content = el.getAttribute('content');
+            if (!content || isNaN(parseFloat(content))) return;
+            let cur = el;
+            for (let i = 0; i < 20; i++) {
+                cur = cur.parentElement;
+                if (!cur) break;
+                const nameEl = cur.querySelector('.product-item-name, .product-name, h2, h3, h4');
+                if (nameEl) {
+                    const name = nameEl.innerText.trim().split('\\n')[0];
+                    if (name.length > 3 && name.length < 120) {
+                        results.push({name, price: parseFloat(content)});
+                        return;
+                    }
                 }
             }
         });
