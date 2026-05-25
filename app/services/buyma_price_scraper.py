@@ -47,6 +47,19 @@ _BRAND_NORMALIZE = {
 
 BUYMA_UNAVAILABLE_BRANDS = {"Gucci", "Ferragamo", "Valentino", "Chloe"}
 
+BRAND_THRESHOLDS: dict[str, float] = {
+    "Prada": 0.30,
+    "Loewe": 0.30,
+    "Celine": 0.25,
+    "Versace": 0.30,
+    "Balenciaga": 0.25,
+    "Marni": 0.25,
+    "Bottega Veneta": 0.25,
+}
+DEFAULT_THRESHOLD = 0.3
+
+_MODEL_NUMBER_RE = re.compile(r"\b([A-Z0-9]{5,12})\b")
+
 
 def _normalize_brand(name: str) -> str:
     upper = name.upper().replace("&AMP;", "&")
@@ -54,6 +67,18 @@ def _normalize_brand(name: str) -> str:
         if brand in upper:
             return brand
     return upper
+
+
+def _extract_model_numbers(name: str) -> set[str]:
+    upper = name.upper()
+    numbers: set[str] = set()
+    for m in _MODEL_NUMBER_RE.finditer(upper):
+        token = m.group(1)
+        has_alpha = any(c.isalpha() for c in token)
+        has_digit = any(c.isdigit() for c in token)
+        if has_alpha and has_digit:
+            numbers.add(token)
+    return numbers
 
 
 def _extract_tokens(name: str) -> list[str]:
@@ -72,11 +97,18 @@ def _match_score(official_name: str, buyma_name: str, brand: str) -> float:
     if brand_upper not in buyma_upper:
         return 0.0
 
+    official_models = _extract_model_numbers(official_name)
+    buyma_models = _extract_model_numbers(buyma_name)
+    model_bonus = 0.0
+    if official_models and buyma_models:
+        if official_models & buyma_models:
+            model_bonus = 0.4
+
     official_tokens = _extract_tokens(official_name.upper())
     buyma_tokens = set(_extract_tokens(buyma_upper))
 
     if not official_tokens:
-        return 0.0
+        return min(1.0, model_bonus)
 
     hits = sum(1 for t in official_tokens if t in buyma_tokens or t in buyma_upper)
     token_score = hits / len(official_tokens)
@@ -85,7 +117,7 @@ def _match_score(official_name: str, buyma_name: str, brand: str) -> float:
         None, official_name.upper(), buyma_upper
     ).ratio()
 
-    return 0.6 * token_score + 0.4 * seq_score
+    return min(1.0, 0.6 * token_score + 0.4 * seq_score + model_bonus)
 
 
 def _parse_buyma_results(html: str) -> list[dict]:
@@ -187,9 +219,13 @@ class BuymaPriceSearcher:
         self,
         product_name: str,
         brand: str,
+        threshold: float | None = None,
     ) -> dict | None:
         if brand in BUYMA_UNAVAILABLE_BRANDS:
             return None
+
+        if threshold is None:
+            threshold = BRAND_THRESHOLDS.get(brand, DEFAULT_THRESHOLD)
 
         self._ensure_browser()
         ctx = self._browser.new_context(
@@ -215,7 +251,7 @@ class BuymaPriceSearcher:
                 if brand_norm in _normalize_brand(r["brand"])
             ]
 
-            return match_product(product_name, brand, filtered)
+            return match_product(product_name, brand, filtered, threshold=threshold)
         except Exception as e:
             logger.error(f"[buyma] Search failed for {product_name}: {e}")
             return None

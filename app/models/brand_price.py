@@ -24,6 +24,10 @@ class BrandPrice(db.Model):
     size_available = db.Column(String(255), nullable=True)
     buyma_price = db.Column(Float, nullable=True)
     buyma_price_source = db.Column(String(32), nullable=True, default="auto_calculated")
+    buyma_matched_name = db.Column(String(255), nullable=True)
+    buyma_match_score = db.Column(Float, nullable=True)
+    buyma_searched_at = db.Column(DateTime, nullable=True)
+    buyma_status = db.Column(String(16), nullable=True)
     scraped_at = db.Column(DateTime, default=datetime.utcnow)
     created_at = db.Column(DateTime, default=datetime.utcnow)
     updated_at = db.Column(

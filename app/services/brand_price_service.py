@@ -80,6 +80,16 @@ def get_price_comparison(brand: str) -> list[dict]:
                 entry["cheapest_jpy"] = p.price_jpy
                 entry["cheapest_site"] = p.source_site
                 entry["cheapest_price_id"] = p.id
+            if p.buyma_price and not entry.get("buyma_price"):
+                entry["buyma_price"] = p.buyma_price
+            if p.buyma_matched_name and not entry.get("buyma_matched_name"):
+                entry["buyma_matched_name"] = p.buyma_matched_name
+            if p.buyma_match_score is not None and "buyma_match_score" not in entry:
+                entry["buyma_match_score"] = p.buyma_match_score
+            if p.buyma_status and not entry.get("buyma_status"):
+                entry["buyma_status"] = p.buyma_status
+            if p.buyma_searched_at and not entry.get("buyma_searched_at"):
+                entry["buyma_searched_at"] = p.buyma_searched_at.isoformat()
         result.append(entry)
 
     return result

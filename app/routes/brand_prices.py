@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timedelta
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 
 from app.services import brand_price_service
 from app.services.brand_price_scraper import SUPPORTED_BRANDS, SUPPORTED_SITES, BrandPriceScraper
-from app.services.buyma_price_scraper import BUYMA_UNAVAILABLE_BRANDS, BuymaPriceSearcher
+from app.services.buyma_price_scraper import (
+    BRAND_THRESHOLDS,
+    BUYMA_UNAVAILABLE_BRANDS,
+    DEFAULT_THRESHOLD,
+    BuymaPriceSearcher,
+)
 
 from . import bp
 
@@ -185,9 +191,11 @@ def brand_prices_search_buyma():
 @bp.post("/api/buyma-search")
 @login_required
 def api_buyma_search_single():
-    """1商品ずつBUYMA検索。JSから呼ばれるAPI。"""
+    """1商品ずつBUYMA検索。JSから呼ばれるAPI。キャッシュ・部分保存対応。"""
     from app.extensions import db
     from app.models.brand_price import BrandPrice
+
+    CACHE_DAYS = 7
 
     data = request.get_json(force=True)
     product_name = data.get("product_name", "")
@@ -199,18 +207,6 @@ def api_buyma_search_single():
     if brand in BUYMA_UNAVAILABLE_BRANDS:
         return jsonify({"status": "skipped", "reason": "unavailable_brand"})
 
-    searcher = BuymaPriceSearcher(headless=True)
-    try:
-        match = searcher.search_single(product_name, brand)
-    except Exception as e:
-        logger.error(f"BUYMA search error for {product_name}: {e}")
-        return jsonify({"status": "error", "message": str(e)})
-    finally:
-        searcher.close()
-
-    if not match:
-        return jsonify({"status": "no_match"})
-
     rows = db.session.execute(
         db.select(BrandPrice).filter(
             BrandPrice.brand == brand,
@@ -218,9 +214,53 @@ def api_buyma_search_single():
         )
     ).scalars().all()
 
+    # #4 キャッシュ判定
+    if rows:
+        newest = max(rows, key=lambda r: r.buyma_searched_at or datetime.min)
+        if newest.buyma_searched_at and newest.buyma_status == "matched":
+            age = datetime.utcnow() - newest.buyma_searched_at
+            if age.days < CACHE_DAYS:
+                return jsonify({
+                    "status": "cached",
+                    "buyma_price": newest.buyma_price,
+                    "buyma_name": newest.buyma_matched_name,
+                    "match_score": newest.buyma_match_score,
+                })
+
+    # #9 ブランド別閾値
+    threshold = BRAND_THRESHOLDS.get(brand, DEFAULT_THRESHOLD)
+
+    searcher = BuymaPriceSearcher(headless=True)
+    try:
+        match = searcher.search_single(product_name, brand, threshold=threshold)
+    except Exception as e:
+        logger.error(f"BUYMA search error for {product_name}: {e}")
+        # #8 エラー状態を保存
+        for row in rows:
+            row.buyma_status = "error"
+            row.buyma_searched_at = datetime.utcnow()
+        db.session.commit()
+        return jsonify({"status": "error", "message": str(e)})
+    finally:
+        searcher.close()
+
+    now = datetime.utcnow()
+
+    if not match:
+        for row in rows:
+            row.buyma_status = "no_match"
+            row.buyma_searched_at = now
+        db.session.commit()
+        return jsonify({"status": "no_match"})
+
+    # マッチ結果を全カラムに保存（#5 + #8）
     for row in rows:
         row.buyma_price = match["buyma_price"]
         row.buyma_price_source = f"buyma_search({match['match_score']:.2f})"
+        row.buyma_matched_name = match["buyma_name"]
+        row.buyma_match_score = match["match_score"]
+        row.buyma_searched_at = now
+        row.buyma_status = "matched"
     db.session.commit()
 
     return jsonify({

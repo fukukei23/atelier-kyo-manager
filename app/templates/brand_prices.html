@@ -63,6 +63,7 @@
             <thead class="bg-gray-50 dark:bg-gray-800">
                 <tr>
                     <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-medium">商品名</th>
+                    <th class="px-4 py-3 text-left text-gray-600 dark:text-gray-300 font-medium">BUYMAマッチ</th>
                     <th class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-medium">仕入れ原価</th>
                     <th class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-medium">送料</th>
                     <th class="px-4 py-3 text-right text-gray-600 dark:text-gray-300 font-medium">関税</th>
@@ -84,6 +85,20 @@
                 {% for item in ns.items | sort(attribute='profit', reverse=true) %}
                 <tr class="hover:bg-gray-50 dark:hover:bg-gray-800 {% if not item.is_profitable %}opacity-50{% endif %}">
                     <td class="px-4 py-3 text-gray-800 dark:text-gray-200 max-w-xs truncate" title="{{ item.product_name }}">{{ item.product_name }}</td>
+                    <td class="px-4 py-3 text-xs">
+                        {% if item.buyma_status == 'matched' %}
+                            <span class="text-green-600 dark:text-green-400" title="{{ item.buyma_matched_name }}">{{ (item.buyma_match_score * 100) | round(0) | int }}%</span>
+                            <span class="text-gray-400 block max-w-[120px] truncate" title="{{ item.buyma_matched_name }}">{{ item.buyma_matched_name }}</span>
+                        {% elif item.buyma_status == 'cached' %}
+                            <span class="text-blue-500" title="{{ item.buyma_matched_name }}">cache {{ (item.buyma_match_score * 100) | round(0) | int }}%</span>
+                        {% elif item.buyma_status == 'no_match' %}
+                            <span class="text-gray-400">-</span>
+                        {% elif item.buyma_status == 'error' %}
+                            <span class="text-red-400">err</span>
+                        {% else %}
+                            <span class="text-gray-300">未</span>
+                        {% endif %}
+                    </td>
                     <td class="px-4 py-3 text-right text-gray-700 dark:text-gray-300">{{ item.cheapest_jpy | int }}円</td>
                     <td class="px-4 py-3 text-right text-gray-500">{{ item.shipping_cost | int }}円</td>
                     <td class="px-4 py-3 text-right text-gray-500">{{ item.customs_duty | int }}円</td>
