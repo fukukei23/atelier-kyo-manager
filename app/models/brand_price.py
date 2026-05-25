@@ -22,6 +22,8 @@ class BrandPrice(db.Model):
     exchange_rate = db.Column(Float, nullable=False)
     in_stock = db.Column(Boolean, default=True)
     size_available = db.Column(String(255), nullable=True)
+    buyma_price = db.Column(Float, nullable=True)
+    buyma_price_source = db.Column(String(32), nullable=True, default="auto_calculated")
     scraped_at = db.Column(DateTime, default=datetime.utcnow)
     created_at = db.Column(DateTime, default=datetime.utcnow)
     updated_at = db.Column(
