@@ -40,7 +40,7 @@
 
 | ブランド | 試行URL | 手法 | 結果 | 原因 |
 |---|---|---|---|---|
-| **Saint Laurent** | `ysl.com/en-en/` | stealth | 価格遅延読み込み | JS価格API別途呼び出し |
+| **Saint Laurent** | `ysl.com/en-en/` | cffi+stealth | 価格null（425商品あり） | EU IP必要（サーバー側IP判定） |
 | **Fendi** | `fendi.com/it/` | stealth | HTTP/2エラー | 強固なアンチボット |
 | **Dolce & Gabbana** | `dolcegabbana.com/it-it/` | curl_cffi | 404→JP強制リダイレクト | IPベース地域制限 |
 | **Givenchy** | `givenchy.com/it-it/` | stealth | Access Denied | アンチボット |
@@ -84,6 +84,5 @@ playwright-stealth → やや遅い（20秒）・ブラウザ起動・ボット�
 
 ## 今後の改善案
 
-1. **YSL価格遅延読み込み**: 418商品要素あり、価格は別APIから遅延読み込み。ネットワークインターセプトで価格APIを傍受できれば対応可能
-2. **IPリダイレクト対策**: Dolce & Gabbana / The Row / Burberry はEU版URLが存在するが、IPベースでJPに強制リダイレクト。レジデンシャルプロキシ（月$10〜）でEU IPからアクセスすれば取得可能
+1. **EU IP必要グループ**: YSL / D&G / The Row / Burberry / Loro Piana は商品データは取得できるが、価格がEU IPからでないとnull/リダイレクト。レジデンシャルプロキシ（月$10〜）で一括対応可能（5ブランド同時）
 3. **セレクトショップ**: Mytheresa / NAP / 24S / LVR もレジデンシャルプロキシが必要
