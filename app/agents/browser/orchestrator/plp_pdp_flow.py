@@ -46,6 +46,8 @@ class PlpPdpFlowMixin:
         trap_checker: Callable[[str], bool] | None = None,
         telemetry: Any | None = None,
         plugin: Any | None = None,
+        navigation_driver: NavigationDriver | None = None,
+        extraction_service: BrowserExtractionService | None = None,
     ) -> PlpNavigationResult | DiscoveryResult:
         self.log.info(f"[Debug][Telemetry] telemetry value={telemetry}, type={type(telemetry)}")
 
@@ -58,9 +60,10 @@ class PlpPdpFlowMixin:
         if telemetry is None:
             telemetry = TelemetryClient(run_context=run_context)
 
-        navigation_driver = NavigationDriver(
-            page=page, trap_checker=trap_checker, telemetry=telemetry, strategy=plugin,
-        )
+        if navigation_driver is None:
+            navigation_driver = NavigationDriver(
+                page=page, trap_checker=trap_checker, telemetry=telemetry, strategy=plugin,
+            )
 
         try:
             nav_outcome = await self._run_navigation_phase(
@@ -94,12 +97,14 @@ class PlpPdpFlowMixin:
             return await self._handle_no_pdp_links(
                 page, context, site, query, site_config, settings,
                 run_context, target_url, start_t, budget_ms, telemetry,
+                plp_driver=None,
             )
 
         if pdp_links:
             result = await self._extract_from_pdp_links(
                 page, context, site, query, site_config, settings,
                 run_context, target_url, start_t, budget_ms, pdp_links, telemetry,
+                extraction_service=extraction_service,
             )
             if result is not None:
                 return result
@@ -121,15 +126,19 @@ class PlpPdpFlowMixin:
         settings: dict[str, Any],
         run_context: RunContext,
         target_url: str | None = None,
+        extraction_service: BrowserExtractionService | None = None,
+        telemetry: Any | None = None,
     ) -> DiscoveryResult:
-        extraction_service = BrowserExtractionService(self.log, self.runtime_kwargs)
+        if extraction_service is None:
+            extraction_service = BrowserExtractionService(self.log, self.runtime_kwargs)
 
-        telemetry_client = None
-        try:
-            if TelemetryClient:
-                telemetry_client = TelemetryClient(run_context=run_context)
-        except Exception as te:
-            self.log.warning(f"[Orchestrator] Failed to create TelemetryClient: {te}", exc_info=True)
+        telemetry_client = telemetry
+        if telemetry_client is None:
+            try:
+                if TelemetryClient:
+                    telemetry_client = TelemetryClient(run_context=run_context)
+            except Exception as te:
+                self.log.warning(f"[Orchestrator] Failed to create TelemetryClient: {te}", exc_info=True)
 
         prepare_hook = self._build_prepare_hook(
             page, site, query, site_config, settings, run_context, telemetry_client,
@@ -306,6 +315,7 @@ class PlpPdpFlowMixin:
         site: str, query: str, site_config: dict, settings: dict,
         run_context: RunContext, target_url: str,
         start_t: float, budget_ms: int, telemetry: Any,
+        plp_driver: PlpDriver | None = None,
     ) -> PlpNavigationResult | DiscoveryResult:
         self.log.warning("[Orchestrator] No PDP links found. Clicking first card using PlpDriver...")
         if telemetry and hasattr(telemetry, "save_json"):
@@ -323,10 +333,11 @@ class PlpPdpFlowMixin:
             if telemetry is None:
                 telemetry = TelemetryClient(run_context=run_context)
 
-            plp_driver = PlpDriver(
-                page=page, context=context, site_config=site_config,
-                run_context=run_context, logger=self.log, telemetry=telemetry,
-            )
+            if plp_driver is None:
+                plp_driver = PlpDriver(
+                    page=page, context=context, site_config=site_config,
+                    run_context=run_context, logger=self.log, telemetry=telemetry,
+                )
             default_timeout_ms = int(settings.get("timeout_sec", 60)) * 1000
             timeout_ms = min(budget_ms, default_timeout_ms) if budget_ms is not None else default_timeout_ms
 
@@ -360,6 +371,7 @@ class PlpPdpFlowMixin:
         site: str, query: str, site_config: dict, settings: dict,
         run_context: RunContext, target_url: str,
         start_t: float, budget_ms: int, pdp_links: list[str], telemetry: Any,
+        extraction_service: BrowserExtractionService | None = None,
     ) -> DiscoveryResult | None:
         self.log.debug(f"[Orchestrator] Found {len(pdp_links)} PDP links, extracting from PDP list...")
         if telemetry and hasattr(telemetry, "save_json"):
@@ -375,7 +387,8 @@ class PlpPdpFlowMixin:
                 self.log.warning(f"[Orchestrator] Failed to record PDP links: {te}", exc_info=True)
 
         try:
-            extraction_service = BrowserExtractionService(self.log, self.runtime_kwargs)
+            if extraction_service is None:
+                extraction_service = BrowserExtractionService(self.log, self.runtime_kwargs)
             prepare_hook = self._build_prepare_hook(
                 page, site, query, site_config, settings, run_context, None,
             )

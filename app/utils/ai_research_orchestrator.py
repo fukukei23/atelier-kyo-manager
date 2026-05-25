@@ -61,8 +61,10 @@ class AiResearchOrchestrator:
         return results
 
     def _log_final_results(self, results: list):
-        # ... (最終報告ロジックは変更なし)
-        pass
+        total = len(results)
+        ok = sum(1 for r in results if getattr(r, "ok", False))
+        ng = total - ok
+        logging.info(f"=== Final Results: {total} total, {ok} ok, {ng} failed ===")
 
 
 def main():
