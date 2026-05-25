@@ -596,12 +596,19 @@ class TestBuymaPriceScraper:
         result = match_product("Bonnie", "Prada", [])
         assert result is None
 
-    @patch("app.services.buyma_price_scraper.search_buyma")
+    @patch("app.services.buyma_price_scraper.BuymaPriceSearcher.search_single")
     def test_fetch_buyma_prices_batch(self, mock_search):
         from app.services.buyma_price_scraper import fetch_buyma_prices
-        mock_search.return_value = [
-            {"name": "PRADA Bonnie レザー", "brand": "PRADA", "price_jpy": 398000, "item_id": "1", "item_url": ""},
-        ]
+        mock_search.return_value = {
+            "buyma_name": "PRADA Bonnie レザー",
+            "buyma_price": 398000,
+            "buyma_price_max": 398000,
+            "buyma_price_avg": 398000,
+            "buyma_item_url": "https://www.buyma.com/item/1/",
+            "match_count": 1,
+            "match_score": 0.8,
+            "buyma_source": "buyma_search",
+        }
         products = [
             {"product_name": "Bonnie", "brand": "Prada"},
         ]
@@ -620,3 +627,70 @@ class TestBuymaPriceScraper:
             follow_redirects=True,
         )
         assert resp.status_code == 200
+
+    def test_unavailable_brands_skipped(self):
+        from app.services.buyma_price_scraper import BUYMA_UNAVAILABLE_BRANDS
+        assert "Gucci" in BUYMA_UNAVAILABLE_BRANDS
+        assert "Ferragamo" in BUYMA_UNAVAILABLE_BRANDS
+        assert "Valentino" in BUYMA_UNAVAILABLE_BRANDS
+        assert "Chloe" in BUYMA_UNAVAILABLE_BRANDS
+        assert "Prada" not in BUYMA_UNAVAILABLE_BRANDS
+
+    def test_searcher_skips_unavailable_brand(self):
+        from app.services.buyma_price_scraper import BuymaPriceSearcher
+        searcher = BuymaPriceSearcher()
+        result = searcher.search_single("GG Marmont", "Gucci")
+        assert result is None
+        searcher.close()
+
+    @patch("app.services.buyma_price_scraper.BuymaPriceSearcher.search_single")
+    def test_api_buyma_search_returns_matched(self, mock_search, app, auth_client):
+        mock_search.return_value = {
+            "buyma_name": "PRADA Bonnie",
+            "buyma_price": 398000,
+            "buyma_price_max": 398000,
+            "buyma_price_avg": 398000,
+            "buyma_item_url": "https://www.buyma.com/item/1/",
+            "match_count": 1,
+            "match_score": 0.8,
+            "buyma_source": "buyma_search",
+        }
+        resp = auth_client.post(
+            "/api/buyma-search",
+            data=json.dumps({"product_name": "Bonnie", "brand": "Prada"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["status"] == "matched"
+        assert data["buyma_price"] == 398000
+
+    @patch("app.services.buyma_price_scraper.BuymaPriceSearcher.search_single")
+    def test_api_buyma_search_returns_no_match(self, mock_search, auth_client):
+        mock_search.return_value = None
+        resp = auth_client.post(
+            "/api/buyma-search",
+            data=json.dumps({"product_name": "Unknown", "brand": "Prada"}),
+            content_type="application/json",
+        )
+        assert resp.status_code == 200
+        data = json.loads(resp.data)
+        assert data["status"] == "no_match"
+
+    def test_api_buyma_search_requires_login(self, client):
+        resp = client.post(
+            "/api/buyma-search",
+            data=json.dumps({"product_name": "Bonnie", "brand": "Prada"}),
+            content_type="application/json",
+            follow_redirects=False,
+        )
+        assert resp.status_code == 302
+
+    def test_search_buyma_route_rejects_unavailable_brand(self, auth_client):
+        resp = auth_client.post(
+            "/brand-prices/search-buyma",
+            data={"brand": "Gucci", "category": "bag"},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+        assert "出品がない" in resp.data.decode()

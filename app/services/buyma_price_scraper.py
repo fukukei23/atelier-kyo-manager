@@ -15,12 +15,13 @@ _CHROME_HEADERS = {
     ),
 }
 
-_BUYMA_PRODUCT_RE = re.compile(
-    r'syo_name="([^"]+?)"\s+brand_name="([^"]+?)"'
-    r'[^>]*?price="(\d+)"',
+_BLOCK_RE = re.compile(
+    r'syo_id="(\d+)"[^>]*?'
+    r'syo_name="([^"]+?)"[^>]*?'
+    r'brand_name="([^"]+?)"[^>]*?'
+    r'price="(\d+)"',
 )
 
-# Noise words to strip from product names before matching
 _NOISE_WORDS = {
     "中古", "USED", "used", "新品", "未使用", "即発", "国内発送",
     "送料込", "関税込", "送料・関税込", "送料・関税込み",
@@ -30,7 +31,6 @@ _NOISE_WORDS = {
     "全色", "全カラー", "カラバリあり",
 }
 
-# BUYMA brand name → normalized lookup
 _BRAND_NORMALIZE = {
     "PRADA": "PRADA",
     "LOEWE": "LOEWE",
@@ -44,6 +44,8 @@ _BRAND_NORMALIZE = {
     "VALENTINO": "VALENTINO",
     "GUCCI": "GUCCI",
 }
+
+BUYMA_UNAVAILABLE_BRANDS = {"Gucci", "Ferragamo", "Valentino", "Chloe"}
 
 
 def _normalize_brand(name: str) -> str:
@@ -90,14 +92,7 @@ def _parse_buyma_results(html: str) -> list[dict]:
     results: list[dict] = []
     seen_ids: set[str] = set()
 
-    block_re = re.compile(
-        r'syo_id="(\d+)"[^>]*?'
-        r'syo_name="([^"]+?)"[^>]*?'
-        r'brand_name="([^"]+?)"[^>]*?'
-        r'price="(\d+)"',
-    )
-
-    for m in block_re.finditer(html):
+    for m in _BLOCK_RE.finditer(html):
         item_id = m.group(1)
         name = m.group(2)
         brand = m.group(3)
@@ -114,60 +109,6 @@ def _parse_buyma_results(html: str) -> list[dict]:
             "item_id": item_id,
             "item_url": f"https://www.buyma.com/item/{item_id}/",
         })
-
-    return results
-
-
-def search_buyma(
-    query: str,
-    brand: str | None = None,
-    headless: bool = True,
-    timeout: int = 60,
-) -> list[dict]:
-    from playwright.sync_api import sync_playwright
-    from playwright_stealth import Stealth
-
-    encoded = urllib.parse.quote(query)
-    url = f"https://www.buyma.com/r/{encoded}/"
-    logger.info(f"[buyma] Searching: {url}")
-
-    results: list[dict] = []
-    try:
-        with Stealth().use_sync(sync_playwright()) as p:
-            browser = p.chromium.launch(headless=headless)
-            ctx = browser.new_context(
-                viewport={"width": 1280, "height": 800},
-                locale="ja-JP",
-                timezone_id="Asia/Tokyo",
-                user_agent=_CHROME_HEADERS["User-Agent"],
-            )
-            page = ctx.new_page()
-            page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
-            time.sleep(4)
-
-            for _ in range(8):
-                page.evaluate("window.scrollBy(0, 500)")
-                time.sleep(0.3)
-
-            html = page.content()
-            raw = _parse_buyma_results(html)
-            logger.info(f"[buyma] Raw results: {len(raw)}")
-
-            if brand:
-                brand_norm = _normalize_brand(brand)
-                results = [
-                    r for r in raw
-                    if brand_norm in _normalize_brand(r["brand"])
-                ]
-            else:
-                results = raw
-
-            logger.info(f"[buyma] Filtered ({brand or 'all'}): {len(results)}")
-            ctx.close()
-            browser.close()
-
-    except Exception as e:
-        logger.error(f"[buyma] Search failed: {e}")
 
     return results
 
@@ -211,31 +152,159 @@ def match_product(
     }
 
 
+class BuymaPriceSearcher:
+    """BUYMA価格検索。ブラウザセッションを使い回す。"""
+
+    def __init__(self, headless: bool = True, timeout: int = 60):
+        self.headless = headless
+        self.timeout = timeout
+        self._pw = None
+        self._browser = None
+
+    def _ensure_browser(self):
+        if self._browser:
+            return
+        from playwright.sync_api import sync_playwright
+
+        self._pw = sync_playwright().start()
+        self._browser = self._pw.chromium.launch(headless=self.headless)
+
+    def close(self):
+        if self._browser:
+            try:
+                self._browser.close()
+            except Exception:
+                pass
+        if self._pw:
+            try:
+                self._pw.stop()
+            except Exception:
+                pass
+        self._browser = None
+        self._pw = None
+
+    def search_single(
+        self,
+        product_name: str,
+        brand: str,
+    ) -> dict | None:
+        if brand in BUYMA_UNAVAILABLE_BRANDS:
+            return None
+
+        self._ensure_browser()
+        ctx = self._browser.new_context(
+            viewport={"width": 1280, "height": 800},
+            locale="ja-JP",
+            timezone_id="Asia/Tokyo",
+            user_agent=_CHROME_HEADERS["User-Agent"],
+        )
+        page = ctx.new_page()
+
+        try:
+            query = urllib.parse.quote(f"{brand} {product_name}")
+            url = f"https://www.buyma.com/r/{query}/"
+            page.goto(url, wait_until="domcontentloaded", timeout=self.timeout * 1000)
+            time.sleep(3)
+
+            html = page.content()
+            raw = _parse_buyma_results(html)
+
+            brand_norm = _normalize_brand(brand)
+            filtered = [
+                r for r in raw
+                if brand_norm in _normalize_brand(r["brand"])
+            ]
+
+            return match_product(product_name, brand, filtered)
+        except Exception as e:
+            logger.error(f"[buyma] Search failed for {product_name}: {e}")
+            return None
+        finally:
+            ctx.close()
+
+    def search_batch(
+        self,
+        products: list[dict],
+    ) -> dict[str, dict]:
+        results: dict[str, dict] = {}
+        for prod in products:
+            name = prod.get("product_name", "")
+            brand = prod.get("brand", "")
+            if not name or not brand:
+                continue
+            if brand in BUYMA_UNAVAILABLE_BRANDS:
+                logger.info(f"[buyma] Skip unavailable brand: {brand} {name[:30]}")
+                continue
+
+            match = self.search_single(name, brand)
+            if match:
+                results[name] = match
+                logger.info(
+                    f"[buyma] Match: {name[:40]} -> Y{match['buyma_price']:,} "
+                    f"(score={match['match_score']}, {match['match_count']} items)"
+                )
+            else:
+                logger.info(f"[buyma] No match: {name[:40]}")
+
+            time.sleep(2)
+
+        return results
+
+
+def search_buyma(
+    query: str,
+    brand: str | None = None,
+    headless: bool = True,
+    timeout: int = 60,
+) -> list[dict]:
+    encoded = urllib.parse.quote(query)
+    url = f"https://www.buyma.com/r/{encoded}/"
+    logger.info(f"[buyma] Searching: {url}")
+
+    results: list[dict] = []
+    try:
+        from playwright.sync_api import sync_playwright
+        from playwright_stealth import Stealth
+
+        with Stealth().use_sync(sync_playwright()) as p:
+            browser = p.chromium.launch(headless=headless)
+            ctx = browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                locale="ja-JP",
+                timezone_id="Asia/Tokyo",
+                user_agent=_CHROME_HEADERS["User-Agent"],
+            )
+            page = ctx.new_page()
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+            time.sleep(3)
+
+            html = page.content()
+            raw = _parse_buyma_results(html)
+
+            if brand:
+                brand_norm = _normalize_brand(brand)
+                results = [
+                    r for r in raw
+                    if brand_norm in _normalize_brand(r["brand"])
+                ]
+            else:
+                results = raw
+
+            ctx.close()
+            browser.close()
+
+    except Exception as e:
+        logger.error(f"[buyma] Search failed: {e}")
+
+    return results
+
+
 def fetch_buyma_prices(
     products: list[dict],
     headless: bool = True,
 ) -> dict[str, dict]:
-    results: dict[str, dict] = {}
-
-    for prod in products:
-        name = prod.get("product_name", "")
-        brand = prod.get("brand", "")
-        if not name or not brand:
-            continue
-
-        query = f"{brand} {name}"
-        buyma_items = search_buyma(query, brand=brand, headless=headless)
-        match = match_product(name, brand, buyma_items)
-
-        if match:
-            results[name] = match
-            logger.info(
-                f"[buyma] Match: {name[:40]} → ¥{match['buyma_price']:,} "
-                f"(score={match['match_score']}, {match['match_count']} items)"
-            )
-        else:
-            logger.info(f"[buyma] No match: {name[:40]}")
-
-        time.sleep(2)
-
-    return results
+    searcher = BuymaPriceSearcher(headless=headless)
+    try:
+        return searcher.search_batch(products)
+    finally:
+        searcher.close()

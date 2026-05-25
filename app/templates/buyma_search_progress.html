@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-3xl mx-auto">
+    <h1 class="text-2xl font-bold text-gray-800 dark:text-white mb-6">BUYMA価格検索中</h1>
+
+    <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-6">
+        <div class="mb-4">
+            <span class="text-sm text-gray-500">ブランド:</span>
+            <span class="font-medium">{{ brand }}</span>
+            <span class="text-sm text-gray-500 ml-4">対象:</span>
+            <span class="font-medium">{{ products | length }}商品</span>
+        </div>
+
+        <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 mb-4">
+            <div id="progress-bar" class="bg-green-600 h-4 rounded-full transition-all duration-300" style="width: 0%"></div>
+        </div>
+        <p id="progress-text" class="text-sm text-gray-500 mb-4">準備中...</p>
+
+        <div id="results" class="space-y-2 max-h-96 overflow-y-auto">
+        </div>
+
+        <div class="mt-6 flex gap-3">
+            <a href="{{ url_for('main.brand_prices_dashboard', brand=brand, category=category) }}"
+               id="back-btn"
+               class="bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm font-medium px-4 py-2 rounded-lg transition hover:bg-gray-300 opacity-50 pointer-events-none">
+                ダッシュボードに戻る
+            </a>
+        </div>
+    </div>
+</div>
+
+<script>
+const products = {{ products | tojson }};
+const brand = "{{ brand }}";
+let completed = 0;
+let matched = 0;
+
+function makeRow(name, rightText, bgClass) {
+    const row = document.createElement('div');
+    row.className = 'flex justify-between items-center px-3 py-2 rounded text-sm ' + bgClass;
+
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'text-gray-700 dark:text-gray-300 truncate max-w-xs';
+    nameSpan.textContent = name;
+
+    const priceSpan = document.createElement('span');
+    priceSpan.className = 'font-medium';
+    priceSpan.textContent = rightText;
+
+    row.appendChild(nameSpan);
+    row.appendChild(priceSpan);
+    return row;
+}
+
+async function searchAll() {
+    const resultsEl = document.getElementById('results');
+    const barEl = document.getElementById('progress-bar');
+    const textEl = document.getElementById('progress-text');
+
+    for (let i = 0; i < products.length; i++) {
+        const prod = products[i];
+        textEl.textContent = '検索中... (' + (i + 1) + '/' + products.length + '): ' + prod.product_name;
+
+        try {
+            const resp = await fetch('/api/buyma-search', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({product_name: prod.product_name, brand: brand})
+            });
+            const data = await resp.json();
+            completed++;
+
+            let row;
+            if (data.status === 'matched') {
+                matched++;
+                row = makeRow(prod.product_name, '¥' + data.buyma_price.toLocaleString() + ' (score:' + data.match_score + ')', 'bg-green-50 dark:bg-green-900/20');
+            } else if (data.status === 'no_match') {
+                row = makeRow(prod.product_name, 'マッチなし', 'bg-gray-50 dark:bg-gray-800');
+            } else {
+                row = makeRow(prod.product_name, data.status, 'bg-yellow-50 dark:bg-yellow-900/20');
+            }
+            resultsEl.appendChild(row);
+        } catch (e) {
+            completed++;
+            const row = makeRow(prod.product_name, 'エラー', 'bg-red-50 dark:bg-red-900/20');
+            resultsEl.appendChild(row);
+        }
+
+        barEl.style.width = (completed / products.length * 100) + '%';
+        resultsEl.scrollTop = resultsEl.scrollHeight;
+    }
+
+    textEl.textContent = '完了: ' + matched + '/' + products.length + '商品マッチ';
+    const backBtn = document.getElementById('back-btn');
+    backBtn.classList.remove('opacity-50', 'pointer-events-none');
+}
+
+searchAll();
+</script>
+{% endblock %}

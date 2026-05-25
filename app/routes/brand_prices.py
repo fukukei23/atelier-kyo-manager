@@ -7,7 +7,7 @@ from flask_login import login_required
 
 from app.services import brand_price_service
 from app.services.brand_price_scraper import SUPPORTED_BRANDS, SUPPORTED_SITES, BrandPriceScraper
-from app.services.buyma_price_scraper import fetch_buyma_prices
+from app.services.buyma_price_scraper import BUYMA_UNAVAILABLE_BRANDS, BuymaPriceSearcher
 
 from . import bp
 
@@ -154,9 +154,13 @@ def brand_prices_search_buyma():
     from app.models.brand_price import BrandPrice
 
     brand = request.form.get("brand", "Gucci")
-    category = request.form.get("category", "bag")
+    category = request.args.get("category", request.form.get("category", "bag"))
     if brand not in SUPPORTED_BRANDS:
         flash("対応していないブランドです", "error")
+        return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+    if brand in BUYMA_UNAVAILABLE_BRANDS:
+        flash(f"{brand} はBUYMAに出品がないため、販売価格の自動取得はできません", "warning")
         return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
 
     comparison = brand_price_service.get_price_comparison(brand)
@@ -170,34 +174,58 @@ def brand_prices_search_buyma():
         flash(f"{brand} の商品データがありません。先に価格を取得してください。", "warning")
         return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
 
-    flash(f"BUYMA価格検索中... ({len(products)}商品)", "info")
+    return render_template(
+        "buyma_search_progress.html",
+        brand=brand,
+        category=category,
+        products=products[:20],
+    )
 
+
+@bp.post("/api/buyma-search")
+@login_required
+def api_buyma_search_single():
+    """1商品ずつBUYMA検索。JSから呼ばれるAPI。"""
+    from app.extensions import db
+    from app.models.brand_price import BrandPrice
+
+    data = request.get_json(force=True)
+    product_name = data.get("product_name", "")
+    brand = data.get("brand", "")
+
+    if not product_name or not brand:
+        return jsonify({"status": "error", "message": "missing params"}), 400
+
+    if brand in BUYMA_UNAVAILABLE_BRANDS:
+        return jsonify({"status": "skipped", "reason": "unavailable_brand"})
+
+    searcher = BuymaPriceSearcher(headless=True)
     try:
-        buyma_results = fetch_buyma_prices(products[:20], headless=True)
+        match = searcher.search_single(product_name, brand)
     except Exception as e:
-        logger.error(f"BUYMA search error: {e}")
-        flash(f"BUYMA検索エラー: {e}", "error")
-        return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+        logger.error(f"BUYMA search error for {product_name}: {e}")
+        return jsonify({"status": "error", "message": str(e)})
+    finally:
+        searcher.close()
 
-    updated = 0
-    for name, match in buyma_results.items():
-        rows = db.session.execute(
-            db.select(BrandPrice).filter(
-                BrandPrice.brand == brand,
-                BrandPrice.product_name == name,
-            )
-        ).scalars().all()
+    if not match:
+        return jsonify({"status": "no_match"})
 
-        for row in rows:
-            row.buyma_price = match["buyma_price"]
-            row.buyma_price_source = f"buyma_search({match['match_score']:.2f})"
-        updated += 1
+    rows = db.session.execute(
+        db.select(BrandPrice).filter(
+            BrandPrice.brand == brand,
+            BrandPrice.product_name == product_name,
+        )
+    ).scalars().all()
 
+    for row in rows:
+        row.buyma_price = match["buyma_price"]
+        row.buyma_price_source = f"buyma_search({match['match_score']:.2f})"
     db.session.commit()
 
-    flash(
-        f"BUYMA価格: {updated}/{len(products)}商品マッチ "
-        f"(最低価格を自動反映)",
-        "success",
-    )
-    return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+    return jsonify({
+        "status": "matched",
+        "buyma_price": match["buyma_price"],
+        "buyma_name": match["buyma_name"],
+        "match_score": match["match_score"],
+    })
