@@ -17,15 +17,16 @@ PROXY_POOL_PATH = Path(__file__).resolve().parents[1] / "config" / "proxy_pool.j
 
 SUPPORTED_SITES = [
     "farfetch",
-    "gucci_official", "prada_official", "ferragamo_official",
+    "gucci_official", "prada_official", "valentino_official",
+    "ferragamo_official",
     "loewe_official", "balenciaga_official", "bottegaveneta_official",
-    "versace_official", "marni_official", "chloe_official",
+    "versace_official", "marni_official", "chloe_official", "celine_official",
 ]
 
 SUPPORTED_BRANDS = [
-    "Gucci", "Prada", "Ferragamo",
+    "Gucci", "Prada", "Valentino", "Ferragamo",
     "Loewe", "Balenciaga", "Bottega Veneta",
-    "Versace", "Marni", "Chloe",
+    "Versace", "Marni", "Chloe", "Celine",
 ]
 
 _FARFETCH_BRAND_SLUGS: dict[str, str] = {
@@ -44,6 +45,7 @@ _FARFETCH_BRAND_SLUGS: dict[str, str] = {
 _OFFICIAL_CFFI: dict[str, dict[str, str]] = {
     "Gucci": {"gucci_official": "https://www.gucci.com/it/en/ca/-c-women-handbags"},
     "Prada": {"prada_official": "https://www.prada.com/it/en/women/bags.html"},
+    "Valentino": {"valentino_official": "https://www.valentino.com/it-it/women/bags"},
     "Loewe": {"loewe_official": "https://www.loewe.com/usa/en/women/bags"},
     "Balenciaga": {"balenciaga_official": "https://www.balenciaga.com/jp/ja/women/handbags"},
 }
@@ -64,12 +66,16 @@ _OFFICIAL_STEALTH: dict[str, dict[str, str]] = {
     "Chloe": {
         "chloe_official": "https://www.chloe.com/it/en/women/bags/",
     },
+    "Celine": {
+        "celine_official": "https://www.celine.com/it-it/donna/borse/",
+    },
 }
 
 # Currency per brand (EU sites use EUR)
 _CURRENCY_MAP: dict[str, str] = {
     "Gucci": "EUR",
     "Prada": "EUR",
+    "Valentino": "EUR",
     "Loewe": "JPY",
     "Balenciaga": "JPY",
     "Ferragamo": "JPY",
@@ -77,12 +83,14 @@ _CURRENCY_MAP: dict[str, str] = {
     "Versace": "EUR",
     "Marni": "EUR",
     "Chloe": "EUR",
+    "Celine": "EUR",
 }
 
 # Extraction patterns per brand (curl_cffi)
 _CFFI_PATTERNS: dict[str, str] = {
     "Gucci": r'aria-label="([^"]+?),\s*€\s*([\d.]+)"',
     "Prada": r'aria-label="\s*([^"]+?)\s*€\s*([\d.]+)',
+    "Valentino": r'data-canonical-url="([^"]+)"[^>]*?data-price="([\d.]+)"',
     "Loewe": r'>([^<]{5,60}?)<.*?¥([\d,]+)',
     "Balenciaga": r'itemprop="price"\s+content="(\d+)"',
 }
@@ -191,6 +199,34 @@ _STEALTH_JS: dict[str, str] = {
                     const name = nameEl.innerText.trim().split('\\n')[0];
                     if (name.length > 3 && name.length < 120) {
                         results.push({name, price: parseFloat(content)});
+                        return;
+                    }
+                }
+            }
+        });
+        const seen = new Set();
+        return results.filter(r => { if (seen.has(r.name)) return false; seen.add(r.name); return true; });
+    })()
+    """,
+    "Celine": """
+    (() => {
+        const results = [];
+        const allEls = document.querySelectorAll('[class*="price"], [class*="Price"]');
+        allEls.forEach(el => {
+            const text = el.innerText.trim();
+            if (!text || text.length > 50) return;
+            const m = text.match(/(\\d[\\d,.]*)\\s*EUR/);
+            if (!m) return;
+            const price = parseFloat(m[1].replace(/,/g, ''));
+            let cur = el;
+            for (let i = 0; i < 10; i++) {
+                cur = cur.parentElement;
+                if (!cur) break;
+                const links = cur.querySelectorAll('a');
+                for (const link of links) {
+                    const name = link.innerText.trim().split('\\n')[0];
+                    if (name && name.length > 5 && name.length < 80 && !name.match(/^\\d/)) {
+                        results.push({name, price});
                         return;
                     }
                 }
@@ -440,6 +476,10 @@ class BrandPriceScraper:
                     price = float(price_str.replace(",", ""))
                     if len(name) > 60 or "css-" in name or "{" in name:
                         continue
+                    results.append(_make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY")))
+                elif brand == "Valentino":
+                    name, price_str = match
+                    price = float(price_str)
                     results.append(_make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY")))
                 else:
                     name, price_str = match
