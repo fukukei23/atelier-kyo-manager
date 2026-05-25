@@ -220,15 +220,16 @@ class TestBrandPriceScraper:
 
     def test_supported_brands(self):
         from app.services.brand_price_scraper import SUPPORTED_BRANDS
-        for b in ["Gucci", "Prada", "Ferragamo", "Loewe", "Balenciaga", "Bottega Veneta",
-                   "Versace", "Marni", "Chloe"]:
+        for b in ["Gucci", "Prada", "Valentino", "Ferragamo", "Loewe", "Balenciaga",
+                   "Bottega Veneta", "Versace", "Marni", "Chloe", "Celine"]:
             assert b in SUPPORTED_BRANDS
 
     def test_supported_sites(self):
         from app.services.brand_price_scraper import SUPPORTED_SITES
-        for s in ["farfetch", "gucci_official", "prada_official", "ferragamo_official",
-                   "loewe_official", "balenciaga_official", "bottegaveneta_official",
-                   "versace_official", "marni_official", "chloe_official"]:
+        for s in ["farfetch", "gucci_official", "prada_official", "valentino_official",
+                   "ferragamo_official", "loewe_official", "balenciaga_official",
+                   "bottegaveneta_official", "versace_official", "marni_official",
+                   "chloe_official", "celine_official"]:
             assert s in SUPPORTED_SITES
 
     @patch("app.services.brand_price_scraper._load_proxies")
@@ -270,6 +271,20 @@ class TestBrandPriceScraper:
         assert len(results) == 1
         assert results[0]["currency"] == "EUR"
         assert results[0]["price_original"] == 1950.0
+
+    @patch("app.services.brand_price_scraper._fetch_with_cffi")
+    def test_scrape_cffi_valentino(self, mock_fetch):
+        from app.services.brand_price_scraper import BrandPriceScraper
+        mock_fetch.return_value = (
+            '<div data-canonical-url="Valentino Garavani Panthea Bag" '
+            'data-price="2950.0"></div>'
+        )
+        scraper = BrandPriceScraper()
+        results = scraper._scrape_cffi_official("Valentino")
+        assert len(results) == 1
+        assert results[0]["source_site"] == "valentino_official"
+        assert results[0]["currency"] == "EUR"
+        assert results[0]["price_original"] == 2950.0
 
     @patch("app.services.brand_price_scraper._fetch_with_cffi")
     def test_scrape_cffi_loewe(self, mock_fetch):
@@ -363,6 +378,17 @@ class TestBrandPriceScraper:
         results = scraper.scrape("Chloe", sites=["chloe_official"])
         assert len(results) == 1
         assert results[0]["source_site"] == "chloe_official"
+
+    def test_scrape_celine_uses_stealth(self):
+        from app.services.brand_price_scraper import BrandPriceScraper
+        scraper = BrandPriceScraper()
+        scraper._scrape_stealth_official = MagicMock(return_value=[
+            {"product_name": "Triomphe Bag", "source_site": "celine_official",
+             "currency": "EUR", "price_jpy": 530000.0},
+        ])
+        results = scraper.scrape("Celine", sites=["celine_official"])
+        assert len(results) == 1
+        assert results[0]["source_site"] == "celine_official"
 
 
 # ---------------------------------------------------------------------------

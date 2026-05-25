@@ -20,9 +20,11 @@
 |---|---|---|---|---|---|---|
 | **Gucci** | IT | `gucci.com/it/en/` | curl_cffi | EUR | 36 | aria-label正規表現 |
 | **Prada** | IT | `prada.com/it/en/` | curl_cffi | EUR | 38 | aria-label正規表現 |
+| **Valentino** | IT | `valentino.com/it-it/` | curl_cffi | EUR | 102 | data-canonical-url + data-price |
 | **Versace** | IT | `versace.com/it/en/` | playwright-stealth | EUR | 46 | itemprop="price" |
 | **Marni** | IT | `marni.com/it/en/` | playwright-stealth | EUR | 60 | itemprop="price" |
 | **Chloe** | IT | `chloe.com/it/en/` | playwright-stealth | EUR | 10 | itemprop="price" |
+| **Celine** | IT | `celine.com/it-it/` | playwright-stealth | EUR | 14 | class*="price" + EUR
 
 ### ⚠️ JP価格のみ
 
@@ -38,20 +40,18 @@
 
 | ブランド | 試行URL | 手法 | 結果 | 原因 |
 |---|---|---|---|---|
-| **Saint Laurent** | `ysl.com/it-it/` | stealth | Page Not Found | EU版URL不明 |
-| **Celine** | `celine.com/it-it/` | stealth | 価格0 | JSレンダリング不足 or 別URL |
-| **Fendi** | `fendi.com/it/` | curl_cffi | 403 | 強固なアンチボット |
-| **Valentino** | `valentino.com/it-it/` | stealth | 404 | EU版URL不明 |
-| **Dolce & Gabbana** | `dolcegabbana.com/it/` | stealth | 404 | URLリダイレクト→JP版 |
+| **Saint Laurent** | `ysl.com/en-en/` | stealth | 価格遅延読み込み | JS価格API別途呼び出し |
+| **Fendi** | `fendi.com/it/` | stealth | HTTP/2エラー | 強固なアンチボット |
+| **Dolce & Gabbana** | `dolcegabbana.com/it-it/` | curl_cffi | 404→JP強制リダイレクト | IPベース地域制限 |
 | **Givenchy** | `givenchy.com/it-it/` | stealth | Access Denied | アンチボット |
-| **Burberry** | `uk.burberry.com/` | stealth | Page Not Found | EU版URL不明 |
-| **Tom Ford** | `tomford.com/it/` | curl_cffi | 404 | URL不明 |
+| **Burberry** | `burberry.com/` | stealth | ホームページにリダイレクト | IPベース地域制限 |
+| **Tom Ford** | `tomford.com/` | curl_cffi | 404 | バッグページURL不明 |
 | **Goyard** | `goyard.com/it/` | stealth | 404 | オンライン販売なしの可能性 |
-| **Miu Miu** | `miumiu.com/it/` | stealth | HTTP/2エラー | 接続拒否 |
-| **Jacquemus** | `jacquemus.com/it/` | stealth | 価格0 | JSレンダリング不足 |
-| **Brunello Cucinelli** | `brunellocucinelli.com/it/` | stealth | 価格0 | JSレンダリング不足 |
-| **Jil Sander** | `jilsander.com/it/` | curl_cffi | 410 Gone | URL不明 |
-| **The Row** | `therow.com/` | stealth | JPにリダイレクト | EU版URL不明 |
+| **Miu Miu** | `miumiu.com/` | stealth | 404/接続エラー | URL構造不明 |
+| **Jacquemus** | `jacquemus.com/` | curl_cffi | 404 | URL構造不明 |
+| **Brunello Cucinelli** | `brunellocucinelli.com/` | curl_cffi | 404 | URL構造不明 |
+| **Jil Sander** | `jilsander.com/` | curl_cffi | 410 Gone | URL不明 |
+| **The Row** | `therow.com/` | stealth | JPにリダイレクト | IPベース地域制限 |
 
 ### 🔒 オンライン販売なし（確認要）
 
@@ -67,10 +67,10 @@
 
 ```
 curl_cffi → 高速（数秒）・ブラウザ不要・TLS指紋偽装
-  適用: Gucci, Prada, Balenciaga(JP), Loewe(JP)
+  適用: Gucci(EUR), Prada(EUR), Valentino(EUR), Balenciaga(JP), Loewe(JP)
 
 playwright-stealth → やや遅い（20秒）・ブラウザ起動・ボット回避
-  適用: Ferragamo(JP), Bottega Veneta(JP), Versace(EU), Marni(EU), Chloe(EU)
+  適用: Ferragamo(JP), Bottega Veneta(JP), Versace(EUR), Marni(EUR), Chloe(EUR), Celine(EUR)
 ```
 
 ### EUR→JPY換算
@@ -84,6 +84,6 @@ playwright-stealth → やや遅い（20秒）・ブラウザ起動・ボット�
 
 ## 今後の改善案
 
-1. **URL探索**: 404ブランドの正しいEU版URLを手動で特定（ブラウザでアクセスして確認）
-2. **セレクトショップ**: Mytheresa / NAP / 24S / LVR はレジデンシャルプロキシ（月$10〜）が必要
-3. **LVMH系共通基盤**: Louis Vuitton / Celine / Fendi / Loewe は同じEC基盤のため、1つ突破できれば他も対応可能
+1. **YSL価格遅延読み込み**: 418商品要素あり、価格は別APIから遅延読み込み。ネットワークインターセプトで価格APIを傍受できれば対応可能
+2. **IPリダイレクト対策**: Dolce & Gabbana / The Row / Burberry はEU版URLが存在するが、IPベースでJPに強制リダイレクト。レジデンシャルプロキシ（月$10〜）でEU IPからアクセスすれば取得可能
+3. **セレクトショップ**: Mytheresa / NAP / 24S / LVR もレジデンシャルプロキシが必要
