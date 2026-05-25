@@ -17,6 +17,23 @@ logger = logging.getLogger(__name__)
 def save_scraped_prices(items: list[dict]) -> int:
     saved = 0
     for item in items:
+        existing = db.session.scalar(
+            db.select(BrandPrice).filter(
+                BrandPrice.brand == item["brand"],
+                BrandPrice.product_name == item.get("product_name", ""),
+                BrandPrice.source_site == item["source_site"],
+            ).limit(1)
+        )
+        if existing:
+            existing.price_original = item["price_original"]
+            existing.currency = item["currency"]
+            existing.price_jpy = item["price_jpy"]
+            existing.exchange_rate = item["exchange_rate"]
+            existing.in_stock = item.get("in_stock", True)
+            existing.size_available = item.get("size_available", "")
+            existing.scraped_at = datetime.fromisoformat(item["scraped_at"]) if isinstance(item.get("scraped_at"), str) else item.get("scraped_at", datetime.utcnow())
+            saved += 1
+            continue
         bp = BrandPrice(
             brand=item["brand"],
             product_name=item.get("product_name", ""),
@@ -130,17 +147,14 @@ def get_available_brands() -> list[str]:
 def cleanup_buyma_cache(max_age_days: int = 30) -> int:
     """BUYMA検索キャッシュが古くなったレコードのbuyma_status/buyma_searched_atをリセット。"""
     cutoff = datetime.utcnow() - timedelta(days=max_age_days)
-    count = 0
-    rows = db.session.execute(
-        db.select(BrandPrice).filter(
+    count = db.session.execute(
+        db.update(BrandPrice)
+        .where(
             BrandPrice.buyma_searched_at < cutoff,
             BrandPrice.buyma_status == "matched",
         )
-    ).scalars().all()
-    for row in rows:
-        row.buyma_status = None
-        row.buyma_searched_at = None
-        count += 1
+        .values(buyma_status=None, buyma_searched_at=None)
+    ).rowcount
     db.session.commit()
     logger.info(f"Reset {count} stale BUYMA cache entries (older than {max_age_days} days)")
     return count
@@ -193,7 +207,7 @@ def add_profit_calculation(
         item["shipping_cost"] = shipping
         item["total_cost"] = round(result.total_cost, 2)
         item["customs_duty"] = round(result.auto_customs_duty, 2)
-        item["customs_rate"] = round(result.customs_rate_used, 4),
+        item["customs_rate"] = round(result.customs_rate_used, 4)
         item["profit"] = round(result.profit, 2)
         item["profit_rate"] = round(result.profit_rate, 4)
         item["is_profitable"] = result.profit > max(10_000, result.total_cost * 0.05)

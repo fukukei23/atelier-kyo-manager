@@ -31,13 +31,14 @@
         </form>
 
         <div class="flex flex-col sm:flex-row gap-3 mt-3">
-            <form method="POST" action="{{ url_for('main.brand_prices_scrape') }}">
+            <form method="POST" action="{{ url_for('main.brand_prices_scrape') }}" id="scrape-form">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <input type="hidden" name="brand" value="{{ brand }}">
-                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                <button type="submit" id="scrape-btn" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
                     {{ brand }} の価格を取得
                 </button>
-                <span class="text-xs text-gray-400 ml-2">公式サイト / Farfetch</span>
+                <span id="scrape-loading" class="text-xs text-gray-400 ml-2 hidden">取得中...</span>
+                <span id="scrape-hint" class="text-xs text-gray-400 ml-2">公式サイト / Farfetch</span>
             </form>
 
             <form method="POST" action="{{ url_for('main.brand_prices_search_buyma') }}">
@@ -157,4 +158,12 @@
     </div>
     {% endif %}
 </div>
+<script>
+document.getElementById('scrape-form')?.addEventListener('submit', function() {
+    document.getElementById('scrape-btn').disabled = true;
+    document.getElementById('scrape-btn').classList.add('opacity-50');
+    document.getElementById('scrape-loading').classList.remove('hidden');
+    document.getElementById('scrape-hint').classList.add('hidden');
+});
+</script>
 {% endblock %}

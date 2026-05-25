@@ -9,6 +9,7 @@
             <span class="font-medium">{{ brand }}</span>
             <span class="text-sm text-gray-500 ml-4">対象:</span>
             <span class="font-medium">{{ products | length }}商品</span>
+            <span id="eta" class="text-sm text-gray-400 ml-4"></span>
         </div>
 
         <div class="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-4 mb-4">
@@ -40,6 +41,20 @@ let completed = 0;
 let matched = 0;
 let cached = 0;
 let cancelled = false;
+const startTime = Date.now();
+
+function updateEta() {
+    if (completed === 0) return;
+    const elapsed = (Date.now() - startTime) / 1000;
+    const perItem = elapsed / completed;
+    const remaining = Math.round(perItem * (products.length - completed));
+    const etaEl = document.getElementById('eta');
+    if (remaining > 60) {
+        etaEl.textContent = '残り約' + Math.ceil(remaining / 60) + '分';
+    } else {
+        etaEl.textContent = '残り約' + remaining + '秒';
+    }
+}
 
 const ERROR_LABELS = {
     timeout: 'タイムアウト',
@@ -120,6 +135,7 @@ async function searchAll() {
         }
 
         barEl.style.width = (completed / products.length * 100) + '%';
+        updateEta();
         resultsEl.scrollTop = resultsEl.scrollHeight;
 
         if (i < products.length - 1 && !cancelled) {

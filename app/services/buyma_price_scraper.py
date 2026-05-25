@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 _CHROME_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
     ),
 }
 
@@ -30,20 +30,18 @@ _NOISE_WORDS = {
     "レディース", "メンズ", "Unisex", "100%",
     "☆", "★", "♪", "【", "】", "！", "！",
     "全色", "全カラー", "カラバリあり",
+    "再入荷", "完売", "残りわずか", "在庫あり", "残少",
+    "あすつく", "翌日配送", "正規品", "本物保証",
 }
 
-_BRAND_NORMALIZE = {
-    "PRADA": "PRADA",
-    "LOEWE": "LOEWE",
-    "CELINE": "CELINE",
-    "VERSACE": "VERSACE",
-    "BALENCIAGA": "BALENCIAGA",
-    "MARNI": "MARNI",
-    "CHLOE": "CHLOE",
+_BRAND_ALIASES: dict[str, str] = {
     "BOTTEGA VENETA": "BOTTEGA VENETA",
+    "SALVATORE FERRAGAMO": "FERRAGAMO",
     "FERRAGAMO": "FERRAGAMO",
+    "VALENTINO GARAVANI": "VALENTINO",
     "VALENTINO": "VALENTINO",
-    "GUCCI": "GUCCI",
+    "CHLOÉ": "CHLOE",
+    "CHLOE": "CHLOE",
 }
 
 BUYMA_UNAVAILABLE_BRANDS = {"Gucci", "Ferragamo", "Valentino", "Chloe"}
@@ -59,6 +57,9 @@ BRAND_THRESHOLDS: dict[str, float] = {
 }
 DEFAULT_THRESHOLD = 0.3
 DEFAULT_TIMEOUT = 60
+CACHE_DAYS = 7
+SEARCH_THROTTLE = 2.0
+PAGE_LOAD_WAIT = 2.0
 
 _MODEL_NUMBER_RE = re.compile(r"\b([A-Z0-9]{5,12})\b")
 _SIZE_RE = re.compile(r"\b(FREE|ONE\s*SIZE|ONE SIZE|F|XS|S|M|L|XL|XXL|2XL|3XL|(\d{2,3})\s*cm)\b", re.IGNORECASE)
@@ -95,9 +96,9 @@ def _build_search_query(product_name: str, brand: str) -> str:
 
 def _normalize_brand(name: str) -> str:
     upper = name.upper().replace("&AMP;", "&")
-    for brand in _BRAND_NORMALIZE:
-        if brand in upper:
-            return brand
+    for alias, canonical in _BRAND_ALIASES.items():
+        if alias in upper:
+            return canonical
     return upper
 
 
@@ -256,16 +257,23 @@ class BuymaPriceSearcher:
         self.timeout = timeout
         self._pw = None
         self._browser = None
+        self._ctx = None
 
     def _ensure_browser(self):
         if self._browser:
             return
         from playwright.sync_api import sync_playwright
+        from playwright_stealth import Stealth
 
         self._pw = sync_playwright().start()
-        self._browser = self._pw.chromium.launch(headless=self.headless)
+        self._browser = Stealth().use_sync(self._pw).chromium.launch(headless=self.headless)
 
     def close(self):
+        if self._ctx:
+            try:
+                self._ctx.close()
+            except Exception:
+                pass
         if self._browser:
             try:
                 self._browser.close()
@@ -276,6 +284,7 @@ class BuymaPriceSearcher:
                 self._pw.stop()
             except Exception:
                 pass
+        self._ctx = None
         self._browser = None
         self._pw = None
 
@@ -292,13 +301,14 @@ class BuymaPriceSearcher:
             threshold = BRAND_THRESHOLDS.get(brand, DEFAULT_THRESHOLD)
 
         self._ensure_browser()
-        ctx = self._browser.new_context(
-            viewport={"width": 1280, "height": 800},
-            locale="ja-JP",
-            timezone_id="Asia/Tokyo",
-            user_agent=_CHROME_HEADERS["User-Agent"],
-        )
-        page = ctx.new_page()
+        if not self._ctx:
+            self._ctx = self._browser.new_context(
+                viewport={"width": 1280, "height": 800},
+                locale="ja-JP",
+                timezone_id="Asia/Tokyo",
+                user_agent=_CHROME_HEADERS["User-Agent"],
+            )
+        page = self._ctx.new_page()
 
         last_error = None
         try:
@@ -311,7 +321,7 @@ class BuymaPriceSearcher:
                         if pg > 1:
                             url = f"https://www.buyma.com/r/{query}/?page={pg}"
                         page.goto(url, wait_until="domcontentloaded", timeout=self.timeout * 1000)
-                        time.sleep(2)
+                        time.sleep(PAGE_LOAD_WAIT)
 
                         html = page.content()
                         raw = _parse_buyma_results(html)
@@ -329,12 +339,12 @@ class BuymaPriceSearcher:
                     last_error = e
                     logger.warning(f"[buyma] Attempt {attempt + 1}/3 failed for {product_name}: {e}")
                     if attempt < 2:
-                        time.sleep(2 * (attempt + 1))
+                        time.sleep(SEARCH_THROTTLE * (attempt + 1))
 
             logger.error(f"[buyma] All 3 attempts failed for {product_name}: {last_error}")
             raise last_error
         finally:
-            ctx.close()
+            page.close()
 
     def search_batch(
         self,
@@ -360,7 +370,7 @@ class BuymaPriceSearcher:
             else:
                 logger.info(f"[buyma] No match: {name[:40]}")
 
-            time.sleep(2)
+            time.sleep(SEARCH_THROTTLE)
 
         return results
 

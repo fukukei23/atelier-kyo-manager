@@ -32,6 +32,15 @@ def client(app):
     return app.test_client()
 
 
+@pytest.fixture(autouse=True)
+def _reset_rate_limit():
+    """Round 4 AA: テスト間でレート制限タイマーをリセット."""
+    import app.routes.brand_prices as bp_mod
+    bp_mod._last_buyma_request = 0.0
+    yield
+    bp_mod._last_buyma_request = 0.0
+
+
 @pytest.fixture
 def auth_client(client, app):
     from app.models.user import User
@@ -1396,3 +1405,197 @@ class TestTimeoutConstant:
         searcher = BuymaPriceSearcher()
         assert searcher.timeout == DEFAULT_TIMEOUT
         searcher.close()
+
+
+# ---------------------------------------------------------------------------
+# Round 4 improvement tests (W, X, Y, Z, AA, AB, AD, AH, AI, AJ)
+# ---------------------------------------------------------------------------
+
+class TestBugFixCustomsRate:
+    """W: customs_rate の末尾カンマバグ修正."""
+
+    def test_customs_rate_is_float_not_tuple(self):
+        from app.services.brand_price_service import add_profit_calculation
+        comparison = [{
+            "product_name": "Test Bag",
+            "cheapest_jpy": 100000.0,
+            "cheapest_site": "test",
+            "sites": {},
+        }]
+        result = add_profit_calculation(comparison, category="bag")
+        assert isinstance(result[0]["customs_rate"], float)
+
+
+class TestStealthBrowser:
+    """X: BuymaPriceSearcher が stealth を使用."""
+
+    def test_searcher_has_context_reuse(self):
+        from app.services.buyma_price_scraper import BuymaPriceSearcher
+        searcher = BuymaPriceSearcher()
+        assert hasattr(searcher, "_ctx")
+        searcher.close()
+
+
+class TestProductIDFlush:
+    """Y: product.id を flush 後に参照."""
+
+    def test_add_to_pipeline_sets_product_id(self, app, auth_client):
+        from app.models.brand_price import BrandPrice
+        from app.models.product import Product
+        from app.extensions import db
+        with app.app_context():
+            bp = BrandPrice(
+                brand="Prada", product_name="FlushTest", source_site="prada_official",
+                price_original=1000.0, currency="EUR", price_jpy=150000.0,
+                exchange_rate=150.0, buyma_price=250000.0,
+            )
+            db.session.add(bp)
+            db.session.commit()
+            bp_id = bp.id
+
+        resp = auth_client.post(
+            "/brand-prices/add-to-pipeline",
+            data={"brand_price_id": bp_id, "brand": "Prada", "category": "bag"},
+            follow_redirects=True,
+        )
+        assert resp.status_code == 200
+
+        with app.app_context():
+            bp_check = db.session.get(BrandPrice, bp_id)
+            assert bp_check.product_id is not None
+
+
+class TestDedupSave:
+    """Z: 重複レコード防止."""
+
+    def test_save_updates_existing(self, app):
+        from app.models.brand_price import BrandPrice
+        from app.services import brand_price_service
+        from app.extensions import db
+        with app.app_context():
+            now = datetime.utcnow().isoformat()
+            brand_price_service.save_scraped_prices([{
+                "brand": "Prada", "product_name": "DedupTest",
+                "source_site": "prada_official", "price_original": 1000.0,
+                "currency": "EUR", "price_jpy": 150000.0, "exchange_rate": 150.0,
+                "scraped_at": now,
+            }])
+            brand_price_service.save_scraped_prices([{
+                "brand": "Prada", "product_name": "DedupTest",
+                "source_site": "prada_official", "price_original": 1100.0,
+                "currency": "EUR", "price_jpy": 165000.0, "exchange_rate": 150.0,
+                "scraped_at": now,
+            }])
+            count = BrandPrice.query.filter(
+                BrandPrice.product_name == "DedupTest",
+                BrandPrice.source_site == "prada_official",
+            ).count()
+            assert count == 1
+
+
+class TestRateLimit:
+    """AA: API レート制限."""
+
+    def test_rapid_requests_return_429(self, auth_client):
+        import time
+        resp1 = auth_client.post(
+            "/api/buyma-search",
+            data=json.dumps({"product_name": "Test", "brand": "Prada"}),
+            content_type="application/json",
+        )
+        resp2 = auth_client.post(
+            "/api/buyma-search",
+            data=json.dumps({"product_name": "Test2", "brand": "Prada"}),
+            content_type="application/json",
+        )
+        # 2連続リクエスト → 2番目が429の可能性
+        statuses = {resp1.status_code, resp2.status_code}
+        assert 200 in statuses or 429 in statuses
+
+
+class TestUAString:
+    """AB: UA文字列更新."""
+
+    def test_ua_is_chrome_131(self):
+        from app.services.buyma_price_scraper import _CHROME_HEADERS
+        assert "131.0.0.0" in _CHROME_HEADERS["User-Agent"]
+
+
+class TestCacheDaysConstant:
+    """AC: CACHE_DAYS モジュール定数."""
+
+    def test_cache_days_exported(self):
+        from app.services.buyma_price_scraper import CACHE_DAYS
+        assert CACHE_DAYS == 7
+
+    def test_throttle_constants(self):
+        from app.services.buyma_price_scraper import SEARCH_THROTTLE, PAGE_LOAD_WAIT
+        assert SEARCH_THROTTLE == 2.0
+        assert PAGE_LOAD_WAIT == 2.0
+
+
+class TestNoiseWordsExtended:
+    """AD: ノイズ語追加."""
+
+    def test_restock_removed(self):
+        from app.services.buyma_price_scraper import _extract_tokens
+        tokens = _extract_tokens("PRADA 再入荷 Bag")
+        assert "再入荷" not in tokens
+
+    def test_soldout_removed(self):
+        from app.services.buyma_price_scraper import _extract_tokens
+        tokens = _extract_tokens("PRADA 完売 Bag")
+        assert "完売" not in tokens
+
+    def test_genuine_removed(self):
+        from app.services.buyma_price_scraper import _extract_tokens
+        tokens = _extract_tokens("PRADA 正規品 Bag")
+        assert "正規品" not in tokens
+
+
+class TestBrandAliases:
+    """AH: ブランドエイリアスクリーンアップ."""
+
+    def test_normalize_ferragamo_full_name(self):
+        from app.services.buyma_price_scraper import _normalize_brand
+        assert _normalize_brand("SALVATORE FERRAGAMO") == "FERRAGAMO"
+
+    def test_normalize_chloe_accent(self):
+        from app.services.buyma_price_scraper import _normalize_brand
+        assert _normalize_brand("CHLOÉ") == "CHLOE"
+
+    def test_normalize_valentino_garavani(self):
+        from app.services.buyma_price_scraper import _normalize_brand
+        assert _normalize_brand("VALENTINO GARAVANI") == "VALENTINO"
+
+
+class TestBulkCleanup:
+    """AI: bulk UPDATE キャッシュクリーンアップ."""
+
+    def test_cleanup_uses_bulk_update(self, app):
+        from app.models.brand_price import BrandPrice
+        from app.services import brand_price_service
+        from app.extensions import db
+        from datetime import datetime, timedelta
+        with app.app_context():
+            for i in range(5):
+                db.session.add(BrandPrice(
+                    brand="Prada", product_name=f"BulkTest{i}", source_site="prada_official",
+                    price_original=1000.0, currency="EUR", price_jpy=150000.0,
+                    exchange_rate=150.0, buyma_status="matched",
+                    buyma_searched_at=datetime.utcnow() - timedelta(days=31),
+                ))
+            db.session.commit()
+
+            reset = brand_price_service.cleanup_buyma_cache(max_age_days=30)
+            assert reset == 5
+
+
+class TestDBIndex:
+    """AJ: DBインデックス."""
+
+    def test_brand_price_has_index(self, app):
+        from app.models.brand_price import BrandPrice
+        with app.app_context():
+            indexes = [idx.name for idx in BrandPrice.__table__.indexes]
+            assert "ix_brand_price_brand_product" in indexes

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from datetime import datetime, timedelta
 
 from flask import flash, jsonify, make_response, redirect, render_template, request, url_for
@@ -11,6 +12,7 @@ from app.services.brand_price_scraper import SUPPORTED_BRANDS, SUPPORTED_SITES, 
 from app.services.buyma_price_scraper import (
     BRAND_THRESHOLDS,
     BUYMA_UNAVAILABLE_BRANDS,
+    CACHE_DAYS,
     DEFAULT_THRESHOLD,
     get_shared_searcher,
 )
@@ -18,6 +20,9 @@ from app.services.buyma_price_scraper import (
 from . import bp
 
 logger = logging.getLogger(__name__)
+
+_last_buyma_request: float = 0.0
+_BUIMA_MIN_INTERVAL = 2.0
 
 
 @bp.get("/brand-prices")
@@ -137,6 +142,7 @@ def brand_prices_add_to_pipeline():
         pipeline_status="pending",
     )
     db.session.add(product)
+    db.session.flush()
     record.product_id = product.id
     db.session.commit()
 
@@ -237,11 +243,16 @@ def api_buyma_search_single():
     from app.extensions import db
     from app.models.brand_price import BrandPrice
 
-    CACHE_DAYS = 7
-
     data = request.get_json(force=True)
     product_name = data.get("product_name", "")
     brand = data.get("brand", "")
+
+    # AA: サーバー側レート制限（2秒間隔）
+    global _last_buyma_request
+    now = time.time()
+    if now - _last_buyma_request < _BUIMA_MIN_INTERVAL:
+        return jsonify({"status": "rate_limited", "message": "too fast"}), 429
+    _last_buyma_request = now
 
     if not product_name or not brand:
         return jsonify({"status": "error", "message": "missing params"}), 400

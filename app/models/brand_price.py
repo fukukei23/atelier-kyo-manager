@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String
+from sqlalchemy.schema import Index
 
 from app.extensions import db
 
@@ -51,3 +52,7 @@ class BrandPrice(db.Model):
 
     def __repr__(self) -> str:
         return f"<BrandPrice brand={self.brand!r} site={self.source_site!r} price={self.price_jpy}>"
+
+    __table_args__ = (
+        Index("ix_brand_price_brand_product", "brand", "product_name"),
+    )
