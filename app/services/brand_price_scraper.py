@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 PROXY_POOL_PATH = Path(__file__).resolve().parents[1] / "config" / "proxy_pool.json"
 
-SUPPORTED_SITES = ["farfetch", "gucci_official", "prada_official"]
+SUPPORTED_SITES = ["farfetch", "gucci_official", "prada_official", "ferragamo_official"]
 SUPPORTED_BRANDS = ["Gucci", "Prada", "Ferragamo"]
 
 _FARFETCH_BRAND_SLUGS = {
@@ -30,6 +30,9 @@ _OFFICIAL_SITE_URLS: dict[str, dict[str, str]] = {
     },
     "Prada": {
         "prada_official": "https://www.prada.com/jp/ja/women/bags.html",
+    },
+    "Ferragamo": {
+        "ferragamo_official": "https://www.ferragamo.com/shop/jpn/ja/sf/hug-bag-category",
     },
 }
 
@@ -289,6 +292,79 @@ class BrandPriceScraper:
         logger.info(f"[prada_official] Extracted {len(results)} products for {brand}")
         return results
 
+    def _scrape_official_ferragamo(self, brand: str, item_limit: int = 10) -> list[dict]:
+        urls = _OFFICIAL_SITE_URLS.get(brand, {})
+        url = urls.get("ferragamo_official")
+        if not url:
+            return []
+
+        from playwright_stealth import Stealth
+
+        results = []
+        try:
+            with Stealth().use_sync(sync_playwright()) as p:
+                browser = p.chromium.launch(headless=True)
+                ctx = browser.new_context(
+                    viewport={"width": 1280, "height": 800},
+                    locale="ja-JP",
+                    timezone_id="Asia/Tokyo",
+                    user_agent=_CHROME_HEADERS["User-Agent"],
+                )
+                page = ctx.new_page()
+
+                logger.info(f"[ferragamo_official] Navigating to {url}")
+                page.goto(url, wait_until="domcontentloaded", timeout=60000)
+                time.sleep(8)
+
+                for _ in range(10):
+                    page.evaluate("window.scrollBy(0, 500)")
+                    time.sleep(0.5)
+
+                FERRAGAMO_EXTRACT_JS = """
+                (() => {
+                    const items = document.querySelectorAll('.product-list-r23__description');
+                    const results = [];
+                    items.forEach(item => {
+                        const nameEl = item.querySelector('.product-list-r23__name');
+                        const priceEl = item.querySelector('.product-list-r23__price');
+                        if (nameEl && priceEl) {
+                            const name = nameEl.innerText.trim();
+                            const priceMatch = priceEl.innerText.match(/[¥￥]\\s*([\\d,]+)/);
+                            const price = priceMatch ? parseInt(priceMatch[1].replace(/,/g, '')) : null;
+                            if (price) results.push({name, price});
+                        }
+                    });
+                    return results;
+                })()
+                """
+
+                products = page.evaluate(FERRAGAMO_EXTRACT_JS) or []
+                logger.info(f"[ferragamo_official] Found {len(products)} products for {brand}")
+
+                for product in products[:item_limit]:
+                    results.append({
+                        "brand": brand,
+                        "product_name": product["name"],
+                        "source_site": "ferragamo_official",
+                        "source_url": url,
+                        "price_original": float(product["price"]),
+                        "currency": "JPY",
+                        "price_jpy": float(product["price"]),
+                        "exchange_rate": 1.0,
+                        "in_stock": True,
+                        "size_available": "",
+                        "scraped_at": datetime.utcnow().isoformat(),
+                    })
+
+                ctx.close()
+                browser.close()
+
+        except Exception as e:
+            logger.error(f"[ferragamo_official] Scraping failed: {e}")
+
+        logger.info(f"[ferragamo_official] Extracted {len(results)} products for {brand}")
+        return results
+
     def scrape(
         self, brand: str, sites: list[str] | None = None, item_limit: int = 10
     ) -> list[dict]:
@@ -304,6 +380,11 @@ class BrandPriceScraper:
 
         if "prada_official" in sites:
             results = self._scrape_official_prada(brand, item_limit)
+            all_results.extend(results)
+
+        # Ferragamo needs playwright-stealth for JS rendering
+        if "ferragamo_official" in sites:
+            results = self._scrape_official_ferragamo(brand, item_limit)
             all_results.extend(results)
 
         # Farfetch requires Playwright browser
