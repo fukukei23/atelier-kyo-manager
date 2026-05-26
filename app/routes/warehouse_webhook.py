@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hmac
 import json
+import logging
 import os
 from hashlib import sha256
 from pathlib import Path
@@ -10,8 +11,10 @@ from typing import Any
 from flask import Blueprint, abort, jsonify, request
 
 from app.services.warehouse_event_service import handle_forward2me_event
+from app.utils.validation import sanitize_filename
 
 router = Blueprint("warehouse_webhook", __name__)
+logger = logging.getLogger(__name__)
 
 
 @router.post("/api/warehouse/events")
@@ -25,7 +28,18 @@ def forward2me_events():
         abort(401, description="Invalid signature")
 
     payload = request.get_json(force=True, silent=True) or {}
-    handle_forward2me_event(payload)
+
+    # parcel_idサニタイズ
+    if "parcel_id" in payload:
+        payload["parcel_id"] = sanitize_filename(str(payload["parcel_id"]))
+
+    try:
+        handle_forward2me_event(payload)
+    except Exception as e:
+        logger.error("Webhook handler error: %s", e, exc_info=True)
+        # エラー時も200を返す（Webhookリトライ防止）
+        return jsonify({"status": "error", "message": "processing failed"})
+
     return jsonify({"status": "ok"})
 
 

@@ -7,6 +7,7 @@ from app.models.order import (
     PAYMENT_METHOD_EXTENSION_DAYS,
     Order,
 )
+from app.utils.presentation import deadline_color, deadline_message
 
 # ---- 期限計算テスト ----
 
@@ -66,7 +67,7 @@ def test_deadline_color_green():
         order_date=datetime.utcnow(),
     )
     order.deadline_18 = datetime.utcnow() + timedelta(days=7)
-    assert order.deadline_color() == "green"
+    assert deadline_color(order) == "green"
 
 
 def test_deadline_color_yellow():
@@ -77,7 +78,7 @@ def test_deadline_color_yellow():
         order_date=datetime.utcnow(),
     )
     order.deadline_18 = datetime.utcnow() + timedelta(days=4)
-    assert order.deadline_color() == "yellow"
+    assert deadline_color(order) == "yellow"
 
 
 def test_deadline_color_orange():
@@ -88,7 +89,7 @@ def test_deadline_color_orange():
         order_date=datetime.utcnow(),
     )
     order.deadline_18 = datetime.utcnow() + timedelta(days=2)
-    assert order.deadline_color() == "orange"
+    assert deadline_color(order) == "orange"
 
 
 def test_deadline_color_red():
@@ -99,7 +100,7 @@ def test_deadline_color_red():
         order_date=datetime.utcnow(),
     )
     order.deadline_18 = datetime.utcnow() + timedelta(days=0)
-    assert order.deadline_color() == "red"
+    assert deadline_color(order) == "red"
 
 
 def test_deadline_color_black():
@@ -110,13 +111,13 @@ def test_deadline_color_black():
         order_date=datetime.utcnow(),
     )
     order.deadline_18 = datetime.utcnow() - timedelta(days=1)
-    assert order.deadline_color() == "black"
+    assert deadline_color(order) == "black"
 
 
 def test_deadline_color_gray_no_deadline():
     """期限なし → gray"""
     order = Order(order_number="T015", product_name="テスト")
-    assert order.deadline_color() == "gray"
+    assert deadline_color(order) == "gray"
 
 
 # ---- メッセージテスト ----
@@ -126,21 +127,21 @@ def test_deadline_message_expired():
     """期限切れメッセージ"""
     order = Order(order_number="T020", product_name="テスト")
     order.deadline_18 = datetime.utcnow() - timedelta(days=1)
-    assert "期限切れ" in order.deadline_message()
+    assert "期限切れ" in deadline_message(order)
 
 
 def test_deadline_message_today():
     """本日期限メッセージ"""
     order = Order(order_number="T021", product_name="テスト")
     order.deadline_18 = datetime.utcnow()
-    assert "本日が期限" in order.deadline_message()
+    assert "本日が期限" in deadline_message(order)
 
 
 def test_deadline_message_safe():
     """安全圏メッセージ（空文字）"""
     order = Order(order_number="T022", product_name="テスト")
     order.deadline_18 = datetime.utcnow() + timedelta(days=10)
-    assert order.deadline_message() == ""
+    assert deadline_message(order) == ""
 
 
 # ---- 利益計算テスト（calculator.py統合）----

@@ -13,9 +13,11 @@ from datetime import datetime
 from pathlib import Path
 
 from app.config.config import AppConfig
+from app.core.timezone import _utcnow
 from app.extensions import db
 from app.models.product import Product
 from app.services.image_service import ImageService
+from app.utils.validation import sanitize_filename
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +97,7 @@ class PipelineService:
 
             # 結果保存
             product.processed_images = json.dumps(result.processed_paths)
-            product.pipeline_run_at = datetime.utcnow()
+            product.pipeline_run_at = _utcnow()
 
             # ステータス判定
             if result.errors:
@@ -112,7 +114,7 @@ class PipelineService:
             result.status = "failed"
             result.errors.append(str(e))
             product.pipeline_status = "failed"
-            product.pipeline_error = str(e)[:500]
+            product.pipeline_error = f"Pipeline error: {type(e).__name__}"
             db.session.commit()
             logger.exception("Pipeline failed for product %d", product_id)
 
@@ -264,7 +266,7 @@ class PipelineService:
             filename = f.filename or ""
             if not filename.lower().endswith((".jpg", ".jpeg", ".png")):
                 continue
-            dest = upload_dir / filename
+            dest = upload_dir / sanitize_filename(filename)
             f.save(dest)
             saved.append(dest)
             logger.info("Uploaded: %s", dest.name)

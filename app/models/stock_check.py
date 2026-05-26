@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
-
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -21,8 +20,8 @@ class StockCheck(db.Model):
     stock_changed = db.Column(db.Boolean, default=False, comment="在庫変動あり")
     notes = db.Column(db.Text, nullable=True)
     previous_in_stock = db.Column(db.Boolean, nullable=True, comment="前回在庫あり")
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
 
     product = db.relationship("Product", backref=db.backref("stock_checks", lazy=True))
 
@@ -50,16 +49,3 @@ class StockCheck(db.Model):
             return ((self.current_price - self.previous_price) / self.previous_price) * 100
         return None
 
-    def status_label(self) -> str:
-        if not self.in_stock:
-            return "在庫切れ"
-        if self.price_changed:
-            return "価格変動"
-        return "正常"
-
-    def status_color(self) -> str:
-        if not self.in_stock:
-            return "red"
-        if self.price_changed:
-            return "yellow"
-        return "green"

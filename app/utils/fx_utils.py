@@ -21,16 +21,19 @@ from __future__ import annotations
 import json
 import logging
 import os
+import ssl
 import urllib.request
 import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+from app.config.constants import FX_CACHE_TTL_HOURS, FX_REQUEST_TIMEOUT
 
 logger = logging.getLogger(__name__)
 
 
 # --- 共通 ---
 def _now_iso() -> str:
-    return datetime.utcnow().replace(microsecond=0).isoformat()
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
 def _app_root() -> str:
@@ -82,8 +85,9 @@ def parse_fx_rates_str(rates_str: str) -> dict[str, float]:
 _ECB_XML_URL = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml"
 
 
-def _ecb_fetch_xml(timeout_sec: int = 10) -> tuple[str, str]:
-    with urllib.request.urlopen(_ECB_XML_URL, timeout=timeout_sec) as resp:
+def _ecb_fetch_xml(timeout_sec: int = FX_REQUEST_TIMEOUT) -> tuple[str, str]:
+    ctx = ssl.create_default_context()
+    with urllib.request.urlopen(_ECB_XML_URL, timeout=timeout_sec, context=ctx) as resp:
         xml_bytes = resp.read()
     xml_text = xml_bytes.decode("utf-8", errors="ignore")
     asof = "unknown"
@@ -132,7 +136,7 @@ def build_jpy_table_from_eur(eur_table: dict[str, float]) -> dict[str, float]:
 
 
 def get_fx_table_jpy(
-    manual_table: dict[str, float] | None = None, auto: bool = True, ttl_hours: int = 12
+    manual_table: dict[str, float] | None = None, auto: bool = True, ttl_hours: int = FX_CACHE_TTL_HOURS
 ) -> tuple[dict[str, float], dict]:
     """
     最終レート表（1通貨→JPY）とメタ情報を返す。

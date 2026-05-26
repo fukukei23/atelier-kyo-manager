@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 import csv
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from io import StringIO
 
 from flask import Response, render_template, request
@@ -60,9 +60,9 @@ def dashboard():
     query = Product.query
     period = request.args.get("period", "")
     if period == "7d":
-        query = query.filter(Product.created_at >= datetime.utcnow() - timedelta(days=7))
+        query = query.filter(Product.created_at >= datetime.now(timezone.utc) - timedelta(days=7))
     elif period == "30d":
-        query = query.filter(Product.created_at >= datetime.utcnow() - timedelta(days=30))
+        query = query.filter(Product.created_at >= datetime.now(timezone.utc) - timedelta(days=30))
     brand = request.args.get("brand", "")
     if brand:
         query = query.filter(Product.brand == brand)
@@ -119,8 +119,8 @@ def dashboard():
         if key in pipeline_summary:
             pipeline_summary[key] = cnt
 
-    # 在庫ステータス
-    in_stock = Product.query.filter(Product.stock_status).count()
+    # 在庫ステータス（フィルタ適用済みクエリを使用）
+    in_stock = query.filter(Product.stock_status).count()
     stock_summary = {"in_stock": in_stock, "out_of_stock": total_products - in_stock}
 
     # 出品ステータス

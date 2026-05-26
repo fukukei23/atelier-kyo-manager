@@ -10,6 +10,13 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal
 
+from app.config.constants import (
+    LLM_CACHE_TTL_SECONDS,
+    LLM_LOCAL_CTX_SIZE,
+    LLM_LOCAL_MAX_TOKENS,
+    LLM_LOCAL_TEMPERATURE,
+    LLM_RETRY_BACKOFF_BASE,
+)
 from app.models.result_models import GenerateResult
 
 logger = logging.getLogger(__name__)
@@ -159,7 +166,7 @@ class AILlmController:
             result = self._generate_with_retry(family, prompt, tools, stream, chunk_callback)
 
             if _CACHE:
-                _CACHE.set(cache_key, result.to_dict(), expire=2_592_000)
+                _CACHE.set(cache_key, result.to_dict(), expire=LLM_CACHE_TTL_SECONDS)
 
             from app.utils.chat_history_saver import save_chat_history
             save_chat_history(prompt, result)
@@ -198,7 +205,7 @@ class AILlmController:
                 logger.warning(f"{fam} failed: {e}")
                 if attempt == len(families):
                     raise
-                time.sleep(1.5**attempt)
+                time.sleep(LLM_RETRY_BACKOFF_BASE**attempt)
 
     # ---- Provider dispatch ----
 
@@ -237,12 +244,12 @@ class AILlmController:
             try:
                 from llama_cpp import Llama
                 if LOCAL_MODEL_PATH.exists():
-                    self._local_llama = Llama(model_path=str(LOCAL_MODEL_PATH), n_ctx=2048)
+                    self._local_llama = Llama(model_path=str(LOCAL_MODEL_PATH), n_ctx=LLM_LOCAL_CTX_SIZE)
             except Exception:
                 pass
         if self._local_llama is None:
             raise RuntimeError("Local Llama model not available")
-        out = self._local_llama(prompt, max_tokens=512, temperature=0.3)
+        out = self._local_llama(prompt, max_tokens=LLM_LOCAL_MAX_TOKENS, temperature=LLM_LOCAL_TEMPERATURE)
         txt = out["choices"][0]["text"]
         return txt, {"input": len(prompt) // 4, "output": len(txt) // 4}
 

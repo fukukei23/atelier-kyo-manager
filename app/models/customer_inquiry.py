@@ -2,8 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -21,8 +20,8 @@ class CustomerInquiry(db.Model):
     response_text = db.Column(db.Text, nullable=True)
     faq_template_id = db.Column(db.Integer, db.ForeignKey("faq_template.id"), nullable=True)
     escalation_reason = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
 
     def mark_matched(self, faq_template_id: int, response: str) -> None:
         self.status = "matched"

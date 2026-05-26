@@ -31,5 +31,11 @@ class FaqTemplate(db.Model):
         return any(kw in lower_text for kw in keywords)
 
     def render(self, **kwargs) -> str:
-        """テンプレート変数を置換して返す"""
-        return self.answer_template.format_map(kwargs)
+        """テンプレート変数を置換して返す。未定義プレースホルダーは空文字にフォールバック。"""
+        return self.answer_template.format_map({k: "" for k in _extract_placeholders(self.answer_template)} | kwargs)
+
+
+def _extract_placeholders(template: str) -> set[str]:
+    """テンプレート文字列から {name} プレースホルダーを抽出する。"""
+    import re
+    return set(re.findall(r"\{(\w+)\}", template))

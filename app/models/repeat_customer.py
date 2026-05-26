@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
-
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -21,8 +20,8 @@ class RepeatCustomer(db.Model):
     avg_order_value = db.Column(db.Float, comment="平均注文額")
     segment = db.Column(db.String(32), default="new", comment="セグメント")
     notes = db.Column(db.Text, nullable=True)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
 
     def calc_segment(self) -> str:
         n = self.total_orders or 0
@@ -39,27 +38,7 @@ class RepeatCustomer(db.Model):
     def days_since_last(self) -> int | None:
         if self.last_order_date is None:
             return None
-        return (datetime.utcnow() - self.last_order_date).days
-
-    def segment_label(self) -> str:
-        labels = {
-            "new": "新規",
-            "active": "アクティブ",
-            "vip": "VIP",
-            "at_risk": "離脱危惧",
-            "churned": "離脱済",
-        }
-        return labels.get(self.segment or "new", "不明")
-
-    def segment_color(self) -> str:
-        colors = {
-            "new": "blue",
-            "active": "green",
-            "vip": "purple",
-            "at_risk": "yellow",
-            "churned": "red",
-        }
-        return colors.get(self.segment or "new", "gray")
+        return (_utcnow() - self.last_order_date).days
 
     def update_avg(self) -> None:
         if self.total_orders and self.total_orders > 0:

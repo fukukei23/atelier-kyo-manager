@@ -3,45 +3,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
+import logging
 
 # ---------------------------------------------------------------------------
 # 定数
 # ---------------------------------------------------------------------------
 
-
-class OrderStatus:
-    PENDING = "pending"
-    SOURCING = "sourcing"
-    CART_ADDED = "cart_added"
-    CHECKOUT = "checkout"
-    PAYMENT_DONE = "payment_done"
-    SHIPPED = "shipped"
-    COMPLETED = "completed"
-    ERROR = "error"
-
-
-VALID_TRANSITIONS: dict[str, list[str]] = {
-    OrderStatus.PENDING: [OrderStatus.SOURCING, OrderStatus.ERROR],
-    OrderStatus.SOURCING: [OrderStatus.CART_ADDED, OrderStatus.ERROR],
-    OrderStatus.CART_ADDED: [OrderStatus.CHECKOUT, OrderStatus.ERROR],
-    OrderStatus.CHECKOUT: [OrderStatus.PAYMENT_DONE, OrderStatus.ERROR],
-    OrderStatus.PAYMENT_DONE: [OrderStatus.SHIPPED, OrderStatus.ERROR],
-    OrderStatus.SHIPPED: [OrderStatus.COMPLETED, OrderStatus.ERROR],
-    OrderStatus.ERROR: [OrderStatus.PENDING],
-}
-
-STATUS_LABELS: dict[str, str] = {
-    OrderStatus.PENDING: "未処理",
-    OrderStatus.SOURCING: "仕入先アクセス中",
-    OrderStatus.CART_ADDED: "カート投入済み",
-    OrderStatus.CHECKOUT: "決済中",
-    OrderStatus.PAYMENT_DONE: "決済完了",
-    OrderStatus.SHIPPED: "発送済み",
-    OrderStatus.COMPLETED: "完了",
-    OrderStatus.ERROR: "エラー",
-}
+from app.models.enums import (
+    OrderStatus,
+    STATUS_LABELS,
+    VALID_TRANSITIONS,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -55,7 +29,7 @@ class AutoOrderLog:
     from_status: str
     to_status: str
     note: Optional[str] = None
-    created_at: datetime = field(default_factory=datetime.utcnow)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 # ---------------------------------------------------------------------------
@@ -65,6 +39,8 @@ class AutoOrderLog:
 
 class AutoOrderService:
     """自動発注ステートマシン"""
+
+    _logger = logging.getLogger(__name__)
 
     def __init__(self, order, notification_service=None) -> None:
         self.order = order
@@ -122,7 +98,13 @@ class AutoOrderService:
             return False, f"No executable step for status: {current}"
 
         handler, next_status = entry
-        ok = handler()
+        try:
+            ok = handler()
+        except Exception as e:
+            self._logger.error("Step handler exception for order %s: %s", getattr(self.order, "id", "?"), e, exc_info=True)
+            self.advance_to(OrderStatus.ERROR, note=f"Handler exception: {type(e).__name__}")
+            return False, f"Handler exception: {type(e).__name__}"
+
         if not ok:
             return False, f"Step handler failed for status: {current}"
 
@@ -166,6 +148,7 @@ class AutoOrderService:
             note=note,
         )
         self.logs.append(entry)
+        self._logger.info("Order %s: %s → %s (%s)", entry.order_id, from_status, to_status, note or "")
 
     def _notify(self, from_status: str, to_status: str, note: Optional[str]) -> None:
         if to_status == OrderStatus.ERROR:

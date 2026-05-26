@@ -12,8 +12,11 @@ from flask_login import LoginManager
 
 from .config.config import AppConfig
 from .extensions import csrf, db, migrate
+from .services.notification_service import NotificationService
 
 __version__ = "2.0.0"
+
+notification = NotificationService()
 
 login_manager = LoginManager()
 login_manager.login_view = "auth.login"
@@ -35,6 +38,8 @@ def create_app(config_name: str | None = None) -> Flask:
     migrate.init_app(app, db)
     csrf.init_app(app)
     login_manager.init_app(app)
+    notification.init_app(app)
+    app.notification = notification
 
     # --- Blueprint 登録 ---
     from .routes import bp as main_bp  # noqa: F811
@@ -51,11 +56,38 @@ def create_app(config_name: str | None = None) -> Flask:
 
         db.create_all()
 
+    # --- テンプレートフィルタ登録 ---
+    _register_template_filters(app)
+
     # --- CLI コマンド登録 ---
     from .commands import register_commands
     register_commands(app)
 
     return app
+
+
+def _register_template_filters(app: Flask) -> None:
+    from .utils import presentation as pres
+
+    app.jinja_env.filters.update({
+        "segment_label": pres.segment_label,
+        "segment_color": pres.segment_color,
+        "priority_label": pres.priority_label,
+        "priority_color": pres.priority_color,
+        "partner_status_label": pres.partner_status_label,
+        "deadline_color": pres.deadline_color,
+        "deadline_message": pres.deadline_message,
+        "score_label": pres.score_label,
+        "score_color": pres.score_color,
+        "shipment_status_label": pres.shipment_status_label,
+        "daily_status_color": pres.daily_status_color,
+        "monthly_status_color": pres.monthly_status_color,
+        "stock_status_label": pres.stock_status_label,
+        "stock_status_color": pres.stock_status_color,
+        "risk_label": pres.risk_label,
+        "risk_color": pres.risk_color,
+        "recommendation_label": pres.recommendation_label,
+    })
 
 
 @login_manager.user_loader

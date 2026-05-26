@@ -26,15 +26,20 @@ class DescriptionGenerator:
         logging.info(f"Generating description for product: {product_info.get('name', 'N/A')}")
 
         # あなたが作り上げた、高品質な出力を引き出すプロンプトを維持・活用します
+        brand = str(product_info.get("brand", "未設定"))[:100]
+        name = str(product_info.get("name", "未設定"))[:200]
+        category = str(product_info.get("category", "未設定"))[:100]
+        features = str(product_info.get("features", "特記事項なし"))[:500]
+
         prompt = f"""
 あなたはBUYMA専門のプロのコピーライターです。
 以下の商品情報に基づき、顧客の購買意欲を掻き立てる、魅力的で分かりやすい商品説明文を作成してください。
 
 # 商品情報
-- ブランド: {product_info.get("brand", "未設定")}
-- 商品名: {product_info.get("name", "未設定")}
-- カテゴリ: {product_info.get("category", "未設定")}
-- 特徴: {product_info.get("features", "特記事項なし")}
+- ブランド: {brand}
+- 商品名: {name}
+- カテゴリ: {category}
+- 特徴: {features}
 
 # 作成ルール
 - 全体で200〜300文字程度にまとめてください。
@@ -62,7 +67,8 @@ class DescriptionGenerator:
 
 # --- このファイルが直接実行された場合のテスト用コード ---
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="[%(asctime)s] %(levelname)s:%(name)s: %(message)s")
+    # テスト用: Flask app contextが必要
+    logger.info("これは商品説明文生成モジュールです。Flaskアプリケーションのルートから呼び出して使用してください。")
     # このテストを実行するには、Flaskアプリケーションのコンテキストが必要です。
     # 実際の使用時は、Flaskのルート（routes.pyなど）から呼び出してください。
     logger.info("これは商品説明文生成モジュールです。Flaskアプリケーションのルートから呼び出して使用してください。")

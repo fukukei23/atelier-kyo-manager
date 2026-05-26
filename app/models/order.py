@@ -5,10 +5,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 
+from app.core.timezone import _utcnow
+from app.models.enums import OrderStatus
 from app.config.constants import (
     EXPECTED_PAYMENT_DAYS,
     PAYMENT_METHOD_EXTENSION_DAYS,
@@ -27,7 +29,7 @@ class Order(db.Model):
     customer_name = db.Column(String(128), nullable=True)
 
     # 日付
-    order_date = db.Column(DateTime, nullable=False, default=datetime.utcnow, comment="注文日")
+    order_date = db.Column(DateTime, nullable=False, default=_utcnow, index=True, comment="注文日")
     deadline_18 = db.Column(DateTime, nullable=True, comment="18日ルール期限")
     extension_deadline = db.Column(DateTime, nullable=True, comment="決済別延長期限")
     expected_payment_date = db.Column(DateTime, nullable=True, comment="入金予定日（extension_deadlineから計算）")
@@ -45,7 +47,7 @@ class Order(db.Model):
     # 区分
     payment_method = db.Column(String(32), nullable=True, comment="決済方法")
     source_type = db.Column(String(16), nullable=True, default="domestic", comment="domestic/overseas")
-    status = db.Column(String(32), default="pending", comment="pending/shipped/completed/cancelled")
+    status = db.Column(String(32), default=OrderStatus.PENDING, index=True, comment="pending/shipped/completed/cancelled")
 
     # 紐付け
     product_id = db.Column(Integer, db.ForeignKey("product.id"), nullable=True)
@@ -56,8 +58,8 @@ class Order(db.Model):
     extension_reason = db.Column(Text, nullable=True, comment="延長理由")
 
     notes = db.Column(Text, nullable=True)
-    created_at = db.Column(DateTime, default=datetime.utcnow)
-    updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(DateTime, default=_utcnow)
+    updated_at = db.Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     # ---- 自動計算 ----
     def calc_deadlines(self) -> None:
@@ -93,38 +95,8 @@ class Order(db.Model):
         """18日ルールの残日数"""
         if not self.deadline_18:
             return None
-        delta = self.deadline_18.date() - datetime.utcnow().date()
+        delta = self.deadline_18.date() - _utcnow().date()
         return delta.days
-
-    def deadline_color(self) -> str:
-        """残日数に応じた色（仕様準拠4段階）"""
-        remaining = self.remaining_days()
-        if remaining is None:
-            return "gray"
-        if remaining < 0:
-            return "black"  # 期限切れ（キャンセル対象）
-        if remaining == 0:
-            return "red"  # 当日（危険）
-        if remaining <= 2:
-            return "orange"  # 2日以内（警告）
-        if remaining <= 4:
-            return "yellow"  # 4日以内（注意）
-        return "green"
-
-    def deadline_message(self) -> str:
-        """残日数に応じたメッセージ"""
-        remaining = self.remaining_days()
-        if remaining is None:
-            return ""
-        if remaining < 0:
-            return "期限切れです。至急対応してください。"
-        if remaining == 0:
-            return "本日が期限です。発送準備をお願いします。"
-        if remaining <= 2:
-            return "残りわずかです。発送手配を確認してください。"
-        if remaining <= 4:
-            return "期限が近づいています。発送準備を始めてください。"
-        return ""
 
     @staticmethod
     def get_extension_days(payment_method: str) -> int:

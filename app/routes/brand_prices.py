@@ -7,6 +7,7 @@ from datetime import datetime, timedelta
 from flask import flash, jsonify, make_response, redirect, render_template, request, url_for
 from flask_login import login_required
 
+from app.core.timezone import _utcnow
 from app.services import brand_price_service
 from app.services.brand_price_scraper import SUPPORTED_BRANDS, SUPPORTED_SITES, BrandPriceScraper
 from app.services.buyma_price_scraper import (
@@ -274,7 +275,7 @@ def api_buyma_search_single():
     if rows:
         newest = max(rows, key=lambda r: r.buyma_searched_at or datetime.min)
         if newest.buyma_searched_at and newest.buyma_status == "matched":
-            age = datetime.utcnow() - newest.buyma_searched_at
+            age = _utcnow() - newest.buyma_searched_at
             if age.days < CACHE_DAYS:
                 return jsonify({
                     "status": "cached",
@@ -303,11 +304,11 @@ def api_buyma_search_single():
             err_type = "navigation"
         for row in rows:
             row.buyma_status = "error"
-            row.buyma_searched_at = datetime.utcnow()
+            row.buyma_searched_at = _utcnow()
         db.session.commit()
         return jsonify({"status": "error", "message": str(e), "error_type": err_type})
 
-    now = datetime.utcnow()
+    now = _utcnow()
 
     if not match:
         for row in rows:

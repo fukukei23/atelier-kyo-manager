@@ -5,15 +5,18 @@ from __future__ import annotations
 
 from datetime import datetime
 
+import markupsafe
 from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 from sqlalchemy.orm import joinedload
 
+from app.core.timezone import _utcnow
 from app.extensions import csrf, db
 from app.models import Product
 from app.models.stock_check import StockCheck
 from app.services.price_scraper import PriceScraper
 from app.utils.decorators import handle_api_error, handle_db_error
+from app.utils.errors import safe_error_msg
 
 from . import bp
 
@@ -22,7 +25,7 @@ from . import bp
 @login_required
 def stock_check_list():
     """在庫＆価格チェック一覧"""
-    checks = StockCheck.query.options(joinedload(StockCheck.product)).order_by(StockCheck.checked_at.desc()).all()
+    checks = StockCheck.query.options(joinedload(StockCheck.product)).order_by(StockCheck.checked_at.desc()).paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
     return render_template("stock_check.html", checks=checks)
 
 
@@ -33,14 +36,14 @@ def create_stock_check():
     """在庫チェック登録"""
     if request.method == "POST":
         product_id = int(request.form.get("product_id", 0))
-        current_price = float(request.form.get("current_price", 0) or 0)
+        current_price = float(request.form.get("current_price", 0) or 0)  # noqa: E741
         if product_id <= 0:
             flash("商品を選択してください。", "error")
             return render_template("stock_check_form.html", preselected_id=None)
         if current_price < 0:
             flash("価格に負の値は入力できません。", "error")
             return render_template("stock_check_form.html", preselected_id=product_id)
-        product = Product.query.get(product_id)
+        product = db.session.get(Product, product_id)
         if not product:
             flash("指定された商品が存在しません。", "error")
             return render_template("stock_check_form.html", preselected_id=None)
@@ -49,7 +52,7 @@ def create_stock_check():
             source_url=request.form.get("source_url", ""),
             current_price=current_price,
             in_stock="in_stock" in request.form,
-            checked_at=datetime.utcnow(),
+            checked_at=_utcnow(),
             notes=request.form.get("notes", ""),
         )
         db.session.add(sc)
@@ -91,7 +94,7 @@ def api_fetch_stock(sid: int):
                 sc.price_changed = sc.previous_price is not None and sc.previous_price != result["price"]
             sc.in_stock = result["in_stock"]
             sc.stock_changed = sc.previous_in_stock is not None and sc.previous_in_stock != result["in_stock"]
-            sc.checked_at = datetime.utcnow()
+            sc.checked_at = _utcnow()
             if result["title"]:
                 sc.notes = f"タイトル: {result['title']}"
             db.session.commit()
@@ -99,7 +102,7 @@ def api_fetch_stock(sid: int):
         return jsonify({"success": False, "message": result["error"]}), 502
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": safe_error_msg(e, context="stock_fetch")}), 500
     finally:
         scraper.close()
 
@@ -107,7 +110,6 @@ def api_fetch_stock(sid: int):
 # ---- F10-a: クイック価格入力API -----------------------------------------
 @bp.post("/api/stock-check/quick-update")
 @login_required
-@csrf.exempt
 @handle_api_error()
 def api_quick_update_price():
     """インライン価格更新"""
@@ -122,21 +124,20 @@ def api_quick_update_price():
         return jsonify({"success": False, "error": "current_price must be a number"}), 400
     if new_price < 0:
         return jsonify({"success": False, "error": "current_price must be >= 0"}), 400
-    sc = StockCheck.query.get(sid)
+    sc = db.session.get(StockCheck, sid)
     if not sc:
         return jsonify({"success": False, "error": "not found"}), 404
     if sc.current_price != new_price:
         sc.previous_price = sc.current_price
         sc.price_changed = sc.previous_price is not None and sc.previous_price != new_price
     sc.current_price = new_price
-    sc.checked_at = datetime.utcnow()
+    sc.checked_at = _utcnow()
     db.session.commit()
     return jsonify({"success": True, "data": sc.to_dict()})
 
 
 @bp.post("/api/stock-check/quick-add")
 @login_required
-@csrf.exempt
 @handle_api_error(status_code=500)
 def api_quick_add_check():
     """クイック追加（商品ID・価格・在庫のみ）"""
@@ -151,18 +152,17 @@ def api_quick_add_check():
         return jsonify({"success": False, "error": "current_price must be a number"}), 400
     if price < 0:
         return jsonify({"success": False, "error": "current_price must be >= 0"}), 400
-    product = Product.query.get(pid)
+    product = db.session.get(Product, pid)
     if not product:
         return jsonify({"success": False, "error": f"product_id {pid} not found"}), 400
     source_url = str(data.get("source_url", ""))[:2000]
-    source_url = source_url.replace("<", "&lt;").replace(">", "&gt;")
     sc = StockCheck(
         product_id=pid,
-        source_url=source_url,
+        source_url=markupsafe.escape(source_url),
         current_price=price,
         in_stock=bool(data.get("in_stock", True)),
-        checked_at=datetime.utcnow(),
-        notes=str(data.get("notes", "")).replace("<", "&lt;").replace(">", "&gt;"),
+        checked_at=_utcnow(),
+        notes=str(markupsafe.escape(data.get("notes", ""))),
     )
     db.session.add(sc)
     db.session.commit()
@@ -201,7 +201,7 @@ def api_fetch_all_stocks():
                     sc.price_changed = sc.previous_price is not None and sc.previous_price != r["price"]
                 sc.in_stock = r["in_stock"]
                 sc.stock_changed = sc.previous_in_stock is not None and sc.previous_in_stock != r["in_stock"]
-                sc.checked_at = datetime.utcnow()
+                sc.checked_at = _utcnow()
                 ok_count += 1
             else:
                 err_count += 1
@@ -210,6 +210,6 @@ def api_fetch_all_stocks():
         return jsonify({"success": True, "total": len(stocks), "ok": ok_count, "err": err_count, "results": results})
     except Exception as e:
         db.session.rollback()
-        return jsonify({"success": False, "message": str(e)}), 500
+        return jsonify({"success": False, "message": safe_error_msg(e, context="fetch_all_stocks")}), 500
     finally:
         scraper.close()

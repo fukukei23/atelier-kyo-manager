@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import func
 
+from app.core.timezone import _utcnow
 from app.config.cost_table import DEFAULT_MARKUP_RATE, get_buyandship_shipping
 from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.schemas import PricingInput
@@ -31,7 +32,7 @@ def save_scraped_prices(items: list[dict]) -> int:
             existing.exchange_rate = item["exchange_rate"]
             existing.in_stock = item.get("in_stock", True)
             existing.size_available = item.get("size_available", "")
-            existing.scraped_at = datetime.fromisoformat(item["scraped_at"]) if isinstance(item.get("scraped_at"), str) else item.get("scraped_at", datetime.utcnow())
+            existing.scraped_at = datetime.fromisoformat(item["scraped_at"]) if isinstance(item.get("scraped_at"), str) else item.get("scraped_at", _utcnow())
             saved += 1
             continue
         bp = BrandPrice(
@@ -45,7 +46,7 @@ def save_scraped_prices(items: list[dict]) -> int:
             exchange_rate=item["exchange_rate"],
             in_stock=item.get("in_stock", True),
             size_available=item.get("size_available", ""),
-            scraped_at=datetime.fromisoformat(item["scraped_at"]) if isinstance(item.get("scraped_at"), str) else item.get("scraped_at", datetime.utcnow()),
+            scraped_at=datetime.fromisoformat(item["scraped_at"]) if isinstance(item.get("scraped_at"), str) else item.get("scraped_at", _utcnow()),
         )
         db.session.add(bp)
         saved += 1
@@ -128,7 +129,7 @@ def get_cheapest_source(brand: str) -> dict[str, dict]:
 
 
 def cleanup_old_records(keep_days: int = 90) -> int:
-    cutoff = datetime.utcnow() - timedelta(days=keep_days)
+    cutoff = _utcnow() - timedelta(days=keep_days)
     count = db.session.execute(
         db.delete(BrandPrice).where(BrandPrice.scraped_at < cutoff)
     ).rowcount
@@ -146,7 +147,7 @@ def get_available_brands() -> list[str]:
 
 def cleanup_buyma_cache(max_age_days: int = 30) -> int:
     """BUYMA検索キャッシュが古くなったレコードのbuyma_status/buyma_searched_atをリセット。"""
-    cutoff = datetime.utcnow() - timedelta(days=max_age_days)
+    cutoff = _utcnow() - timedelta(days=max_age_days)
     count = db.session.execute(
         db.update(BrandPrice)
         .where(

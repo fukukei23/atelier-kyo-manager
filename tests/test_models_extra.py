@@ -10,6 +10,13 @@ from app.models.listing_template import ListingTemplate
 from app.models.order import Order
 from app.models.partner import Partner
 from app.models.product import Product
+from app.utils.presentation import (
+    deadline_color,
+    deadline_message,
+    partner_status_label,
+    priority_color,
+    priority_label,
+)
 
 
 @pytest.fixture(scope="function")
@@ -84,7 +91,7 @@ class TestOrderModel:
                 order_date=datetime.utcnow() - timedelta(days=5),
             )
             order.calc_deadlines()
-            assert order.deadline_color() == "green"
+            assert deadline_color(order) == "green"
 
     def test_deadline_color_black(self, app):
         with app.app_context():
@@ -94,12 +101,12 @@ class TestOrderModel:
                 order_date=datetime.utcnow() - timedelta(days=30),
             )
             order.calc_deadlines()
-            assert order.deadline_color() == "black"
+            assert deadline_color(order) == "black"
 
     def test_deadline_color_gray_no_deadline(self, app):
         with app.app_context():
             order = Order(order_number="B-006", product_name="Test")
-            assert order.deadline_color() == "gray"
+            assert deadline_color(order) == "gray"
 
     def test_deadline_message_expired(self, app):
         with app.app_context():
@@ -109,12 +116,12 @@ class TestOrderModel:
                 order_date=datetime.utcnow() - timedelta(days=30),
             )
             order.calc_deadlines()
-            assert "期限切れ" in order.deadline_message()
+            assert "期限切れ" in deadline_message(order)
 
     def test_deadline_message_no_deadline(self, app):
         with app.app_context():
             order = Order(order_number="B-008", product_name="Test")
-            assert order.deadline_message() == ""
+            assert deadline_message(order) == ""
 
 
 # ---- Partner model ----
@@ -151,20 +158,20 @@ class TestPartnerModel:
 
     def test_priority_label(self, app):
         with app.app_context():
-            assert Partner(name="T", priority_level="high").priority_label() == "高"
-            assert Partner(name="T", priority_level="medium").priority_label() == "中"
-            assert Partner(name="T", priority_level="low").priority_label() == "低"
+            assert priority_label(Partner(name="T", priority_level="high")) == "高"
+            assert priority_label(Partner(name="T", priority_level="medium")) == "中"
+            assert priority_label(Partner(name="T", priority_level="low")) == "低"
 
     def test_priority_color(self, app):
         with app.app_context():
-            assert Partner(name="T", priority_level="high").priority_color() == "red"
-            assert Partner(name="T", priority_level="medium").priority_color() == "yellow"
+            assert priority_color(Partner(name="T", priority_level="high")) == "red"
+            assert priority_color(Partner(name="T", priority_level="medium")) == "yellow"
 
     def test_status_label(self, app):
         with app.app_context():
-            assert Partner(name="T", status="active").status_label() == "稼働"
-            assert Partner(name="T", status="inactive").status_label() == "停止"
-            assert Partner(name="T", status="suspended").status_label() == "保留"
+            assert partner_status_label(Partner(name="T", status="active")) == "稼働"
+            assert partner_status_label(Partner(name="T", status="inactive")) == "停止"
+            assert partner_status_label(Partner(name="T", status="suspended")) == "保留"
 
 
 # ---- ListingTemplate model ----

@@ -6,12 +6,11 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from flask_login import UserMixin
 from sqlalchemy import Boolean, DateTime, Integer, String
 from werkzeug.security import check_password_hash, generate_password_hash
 
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -24,7 +23,7 @@ class User(UserMixin, db.Model):
     display_name = db.Column(String(128), nullable=True)
     is_admin = db.Column(Boolean, default=False, nullable=False)
     is_active = db.Column(Boolean, default=True, nullable=False)
-    created_at = db.Column(DateTime, default=datetime.utcnow)
+    created_at = db.Column(DateTime, default=_utcnow)
 
     def set_password(self, password: str) -> None:
         self.password_hash = generate_password_hash(password)

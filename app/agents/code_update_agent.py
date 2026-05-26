@@ -20,6 +20,8 @@ from datetime import datetime  # ★ NEW (diff で要求)
 from pathlib import Path
 from typing import Any
 
+from app.core.timezone import _utcnow
+
 logger = logging.getLogger(__name__)
 
 
@@ -57,7 +59,7 @@ class CodeUpdateAgent:
 
         # --- ALWAYS dump diffs/patch-like text for auditing (diff の意図) ---
         try:
-            ts = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+            ts = _utcnow().strftime("%Y%m%d_%H%M%S")
             site = (proposal.get("site") or proposal.get("site_key") or "unknown").lower()
             patches_dir = os.path.join("exports", "patches")
             os.makedirs(patches_dir, exist_ok=True)
@@ -290,7 +292,7 @@ class CodeUpdateAgent:
         return json.dumps(data, ensure_ascii=False, indent=2)
 
     def _stamp(self) -> str:
-        return datetime.utcnow().strftime("%Y%m%d_%H%M%S_%f")[:-3]
+        return _utcnow().strftime("%Y%m%d_%H%M%S_%f")[:-3]
 
     def _git_add(self, path: Path) -> None:
         with contextlib.suppress(Exception):

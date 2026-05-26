@@ -7,6 +7,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from app.core.timezone import _utcnow
 from typing import TypedDict
 
 
@@ -54,7 +55,7 @@ def build_moncler_analysis_payload(
         "version": "1.0",
         "run_id": run_id,
         "site": site,
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": _utcnow().isoformat() + "Z",
         "current_url": current_url,
         "moncler_outcome": moncler_outcome,
     }
@@ -167,7 +168,7 @@ def build_moncler_patch_candidate(
 ) -> dict[str, Any]:
     run_id = analysis_payload.get("run_id", "unknown")
     site = analysis_payload.get("site", "MONCLER_OFFICIAL")
-    timestamp = analysis_payload.get("timestamp", datetime.utcnow().isoformat() + "Z")
+    timestamp = analysis_payload.get("timestamp", _utcnow().isoformat() + "Z")
 
     changes: dict[str, Any] = {}
     changes.update(_generate_selector_changes(analysis_payload.get("selector_discovery", {}), current_site_config))

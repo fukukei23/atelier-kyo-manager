@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
 from urllib.parse import urlparse
 
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -14,7 +14,7 @@ class ProhibitedSource(db.Model):
     reason = db.Column(db.Text, nullable=True)
     severity = db.Column(db.String(16), default="blocked")  # warning / blocked
     source_type = db.Column(db.String(16), default="domestic")  # domestic / overseas
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utcnow)
 
     @staticmethod
     def is_prohibited(url: str, source_type: str = "domestic") -> tuple[bool, str]:
@@ -28,7 +28,8 @@ class ProhibitedSource(db.Model):
         host = host.lower()
         entries = ProhibitedSource.query.filter_by(source_type=source_type).all()
         for entry in entries:
-            if entry.domain.lower() in host:
+            ed = entry.domain.lower()
+            if host == ed or host.endswith("." + ed):
                 return True, entry.reason or f"{entry.domain} は禁止買付先です"
         return False, ""
 

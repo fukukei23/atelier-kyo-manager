@@ -23,7 +23,7 @@ def listing_progress_view():
     records = (
         ListingProgress.query.filter(ListingProgress.record_date >= today.replace(day=1))
         .order_by(ListingProgress.record_date.desc())
-        .all()
+        .paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
     )
     summary = ListingProgress.get_monthly_summary(today.year, today.month)
     return render_template("listing_progress.html", records=records, summary=summary)

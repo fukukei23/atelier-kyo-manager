@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
-
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -13,8 +12,8 @@ class ListingTemplate(db.Model):
     template_text = db.Column(db.Text, nullable=False)
     category = db.Column(db.String(50), default="general")
     is_default = db.Column(db.Boolean, default=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
 
     def render(self, product) -> str:
         mapping = {

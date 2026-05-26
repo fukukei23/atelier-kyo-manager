@@ -173,7 +173,7 @@ class TestPriceScraper:
             from app.services.price_scraper import PriceScraper
 
             scraper = PriceScraper()
-            result = scraper.fetch("http://example.com")
+            result = scraper.fetch("https://example.com")
             assert result["success"] is True
             assert result["price"] == 12345
             scraper.close()
@@ -186,7 +186,7 @@ class TestPriceScraper:
 
             from app.services.price_scraper import PriceScraper
 
-            result = PriceScraper().fetch("http://bad.example.com")
+            result = PriceScraper().fetch("https://bad.example.com")
             assert result["success"] is False
 
     def test_fetch_sold_out(self):
@@ -200,7 +200,7 @@ class TestPriceScraper:
 
             from app.services.price_scraper import PriceScraper
 
-            result = PriceScraper().fetch("http://example.com")
+            result = PriceScraper().fetch("https://example.com")
             assert result["in_stock"] is False
 
 
@@ -251,7 +251,7 @@ class TestPriceScraperFallback:
             mock_get.return_value = mock_resp
 
             scraper = PriceScraper()
-            result = scraper.fetch_with_retry("http://example.com")
+            result = scraper.fetch_with_retry("https://example.com")
             assert result["success"] is True
             assert result["retry_count"] == 0
             assert result.get("error_category") is None
@@ -273,7 +273,7 @@ class TestPriceScraperFallback:
             mock_get.return_value = mock_resp
 
             scraper = PriceScraper()
-            result = scraper.fetch_with_retry("http://example.com", max_retries=3)
+            result = scraper.fetch_with_retry("https://example.com", max_retries=3)
             assert result["success"] is False
             assert result["retry_count"] == 2
             assert result["error_category"] == "blocked"
@@ -296,7 +296,7 @@ class TestPriceScraperFallback:
             mock_get.return_value = mock_resp
 
             scraper = PriceScraper()
-            result = scraper.fetch_with_retry("http://example.com")
+            result = scraper.fetch_with_retry("https://example.com")
             assert result["success"] is False
             assert result["retry_count"] == 0
             assert result["error_category"] == "not_found"
@@ -315,9 +315,9 @@ class TestPriceScraperFallback:
             mock_get.return_value = mock_resp
 
             scraper = PriceScraper()
-            r1 = scraper.fetch_cached("http://example.com/cached")
+            r1 = scraper.fetch_cached("https://example.com/cached")
             assert r1["success"] is True
-            r2 = scraper.fetch_cached("http://example.com/cached")
+            r2 = scraper.fetch_cached("https://example.com/cached")
             assert r2["success"] is True
             assert mock_get.call_count == 1  # キャッシュヒットで2回目は呼ばれない
             scraper.close()

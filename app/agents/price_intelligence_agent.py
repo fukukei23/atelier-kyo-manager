@@ -28,8 +28,6 @@ from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 from app.extractors.product_info_extractor import extract_product_info
 
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-
 USER_DATA_DIR = Path(__file__).resolve().parents[2] / "instance" / "pw_profile" / "price_intelligence"
 
 

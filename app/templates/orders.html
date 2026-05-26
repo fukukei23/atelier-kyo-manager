@@ -72,8 +72,8 @@
                     {% else %}
                         <span class="px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-bold">残{{ remaining }}日</span>
                     {% endif %}
-                    {% if order.deadline_message() %}
-                        <div class="text-xs text-gray-500 mt-1">{{ order.deadline_message() }}</div>
+                    {% if order|deadline_message %}
+                        <div class="text-xs text-gray-500 mt-1">{{ order|deadline_message }}</div>
                     {% endif %}
                 </td>
                 <td class="px-4 py-3 text-xs">{{ order.payment_method or '-' }}</td>

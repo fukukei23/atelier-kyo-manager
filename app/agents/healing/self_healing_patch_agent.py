@@ -16,6 +16,7 @@ from datetime import datetime
 from typing import Any
 
 from app.core.run_context import RunContext
+from app.core.timezone import _utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -135,7 +136,7 @@ class SelfHealingPatchAgent:
         patch_candidate = {
             "target_site": site_code,
             "run_id": run_id,
-            "generated_at": datetime.utcnow().isoformat() + "Z",
+            "generated_at": _utcnow().isoformat() + "Z",
             "strategy": strategy,
             "changes": changes,
             "notes": {

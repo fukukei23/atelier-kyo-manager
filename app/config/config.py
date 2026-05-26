@@ -87,6 +87,10 @@ class AppConfig:
     # ---- 環境設定 ----
     STAGE: Literal["test", "staging", "prod"] = os.getenv("AK_STAGE", "test")
 
+    # STAGE=prod時にSECRET_KEYがデフォルト値なら警告
+    if STAGE == "prod" and SECRET_KEY == "dev-secret-key-change-in-production":
+        raise RuntimeError("STAGE=prod requires SECRET_KEY environment variable to be set")
+
     # ---- サイト設定 ----
     SITES: dict[str, Any] = _load_layered_site_config(CONFIG_DIR)
 

@@ -8,6 +8,7 @@ from datetime import datetime
 from flask import flash, redirect, render_template, request, url_for
 from flask_login import login_required
 
+from app.core.timezone import _utcnow
 from app.extensions import db
 from app.models.region_recommendation import RegionRecommendation
 from app.utils.decorators import handle_db_error
@@ -29,22 +30,32 @@ def region_list():
 def create_region():
     """地域登録"""
     if request.method == "POST":
-        avg_profit_rate = float(request.form.get("avg_profit_rate", 0) or 0)
-        avg_shipping_days = int(request.form.get("avg_shipping_days", 0) or 0)
-        risk_score = float(request.form.get("risk_score", 50) or 50)
-        reliability_score = float(request.form.get("reliability_score", 50) or 50)
+        region = request.form.get("region", "").strip()
+        region_name = request.form.get("region_name", "").strip()
+        if not region or not region_name:
+            flash("地域コード・地域名は必須です。", "error")
+            return render_template("region_form.html")
+        try:
+            avg_profit_rate = float(request.form.get("avg_profit_rate", 0) or 0)
+            avg_shipping_days = int(request.form.get("avg_shipping_days", 0) or 0)
+            risk_score = float(request.form.get("risk_score", 50) or 50)
+            reliability_score = float(request.form.get("reliability_score", 50) or 50)
+            avg_customs_rate = float(request.form.get("avg_customs_rate", 0) or 0)
+        except (ValueError, TypeError):
+            flash("数値項目は正しい形式で入力してください。", "error")
+            return render_template("region_form.html")
         if avg_shipping_days < 0:
             flash("配送日数に負の値は入力できません。", "error")
             return render_template("region_form.html")
         rr = RegionRecommendation(
-            region=request.form.get("region", ""),
-            region_name=request.form.get("region_name", ""),
+            region=region,
+            region_name=region_name,
             avg_profit_rate=avg_profit_rate,
             avg_shipping_days=avg_shipping_days,
-            avg_customs_rate=float(request.form.get("avg_customs_rate", 0) or 0),
+            avg_customs_rate=avg_customs_rate,
             risk_score=risk_score,
             reliability_score=reliability_score,
-            last_updated=datetime.utcnow(),
+            last_updated=_utcnow(),
         )
         rr.recommendation_score = rr.calc_recommendation() or 0
         db.session.add(rr)

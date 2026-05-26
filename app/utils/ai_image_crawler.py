@@ -12,9 +12,6 @@ from urllib.parse import quote_plus
 
 from playwright.sync_api import Browser, BrowserContext, Page, sync_playwright
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-
 class CrawlerService:
     """対象サイトから商品画像URLを収集するクローラー"""
 

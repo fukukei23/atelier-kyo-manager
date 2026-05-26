@@ -32,3 +32,26 @@ EXPECTED_PAYMENT_DAYS: dict[str, int] = {
     "domestic": 15,
     "overseas": 25,
 }
+
+# ---- 技術定数（インフラ・キャッシュ・リトライ） ----
+
+# ChatBot 入力制限
+MAX_SUBJECT_LENGTH: int = 200
+MAX_MESSAGE_LENGTH: int = 1000
+
+# PriceScraper
+SCRAPER_CACHE_SIZE: int = 100
+SCRAPER_REQUEST_TIMEOUT: int = 10
+SCRAPER_MAX_RETRIES: int = 3
+
+# 為替ユーティリティ
+FX_REQUEST_TIMEOUT: int = 10
+FX_CACHE_TTL_HOURS: int = 12
+
+# LLM コントローラ
+LLM_RETRY_BACKOFF_BASE: float = 1.5
+LLM_LOCAL_CTX_SIZE: int = 2048
+LLM_LOCAL_MAX_TOKENS: int = 512
+LLM_LOCAL_TEMPERATURE: float = 0.3
+LLM_CACHE_TTL_SECONDS: int = 2_592_000  # 30日
+CHAT_HISTORY_RETENTION_DAYS: int = 7

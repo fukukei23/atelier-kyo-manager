@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import Boolean, DateTime, Float, Integer, String
 from sqlalchemy.schema import Index
 
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -29,10 +28,10 @@ class BrandPrice(db.Model):
     buyma_match_score = db.Column(Float, nullable=True)
     buyma_searched_at = db.Column(DateTime, nullable=True)
     buyma_status = db.Column(String(16), nullable=True)
-    scraped_at = db.Column(DateTime, default=datetime.utcnow)
-    created_at = db.Column(DateTime, default=datetime.utcnow)
+    scraped_at = db.Column(DateTime, default=_utcnow)
+    created_at = db.Column(DateTime, default=_utcnow)
     updated_at = db.Column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=_utcnow, onupdate=_utcnow
     )
 
     @classmethod

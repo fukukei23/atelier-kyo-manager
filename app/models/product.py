@@ -8,10 +8,10 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 
+from app.core.timezone import _utcnow
+from app.models.enums import ListingStatus, PipelineStatus
 from app.config.constants import (
     DOMESTIC_COMMISSION_RATE,
     OVERSEAS_COMMISSION_RATE,
@@ -86,7 +86,7 @@ class Product(db.Model):
     description = db.Column(Text, nullable=True)  # 説明文
     retail_price = db.Column(Float, nullable=True)  # 定価
     target_profit_rate = db.Column(Float, default=0.10)  # 目標利益率
-    listing_status = db.Column(String(32), default="draft")  # draft/listed/sold/archived
+    listing_status = db.Column(String(32), default=ListingStatus.DRAFT, index=True)  # draft/listed/sold/archived
 
     # --- FR-005 実ベース利益計算フィールド ---
     warehouse_shipping_cost = db.Column(Float, default=0.0)  # 転送倉庫送料（海外→転送倉庫）
@@ -95,16 +95,16 @@ class Product(db.Model):
     item_category = db.Column(String(64), nullable=True)  # 品目カテゴリ（関税率自動決定用）
 
     # --- FR-002/003 パイプライン ---
-    pipeline_status = db.Column(String(16), default="pending")  # pending/running/success/partial/failed
+    pipeline_status = db.Column(String(16), default=PipelineStatus.PENDING, index=True)  # pending/running/success/partial/failed
     pipeline_error = db.Column(Text, nullable=True)
     processed_images = db.Column(Text, nullable=True)  # JSON: ["path1.png", ...]
     pipeline_run_at = db.Column(DateTime, nullable=True)
 
-    created_at = db.Column(DateTime, default=datetime.utcnow, nullable=True)
+    created_at = db.Column(DateTime, default=_utcnow, nullable=True)
     updated_at = db.Column(
         DateTime,
-        default=datetime.utcnow,
-        onupdate=datetime.utcnow,
+        default=_utcnow,
+        onupdate=_utcnow,
         nullable=True,
     )
 

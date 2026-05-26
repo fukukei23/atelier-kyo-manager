@@ -9,6 +9,7 @@ from flask_login import login_required
 
 from app.extensions import csrf
 from app.forms import AutoResearchForm
+from app.utils.errors import safe_error_msg
 
 from . import bp
 
@@ -67,7 +68,6 @@ def _error_json(msg: str, code: int) -> tuple[dict[str, str], int]:
 
 @bp.get("/api/warehouses")
 @login_required
-@csrf.exempt
 def api_warehouses() -> tuple[dict[str, Any], int]:
     country = (request.args.get("country") or "").strip().upper()
     if not country:
@@ -79,4 +79,4 @@ def api_warehouses() -> tuple[dict[str, Any], int]:
         return {"country": country, "warehouses": warehouses}, 200
     except Exception as e:
         logger.error("[api/warehouses] failed: %s", e, exc_info=True)
-        return _error_json(f"failed: {e}", 500)
+        return _error_json(safe_error_msg(e, context="api/warehouses"), 500)

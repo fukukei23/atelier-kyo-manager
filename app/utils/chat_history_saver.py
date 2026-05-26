@@ -3,8 +3,10 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
+from app.config.constants import CHAT_HISTORY_RETENTION_DAYS
+from app.core.timezone import _utcnow
 from app.models.result_models import GenerateResult
 
 logger = logging.getLogger(__name__)
@@ -27,7 +29,7 @@ def save_chat_history(prompt: str, result: GenerateResult) -> None:
             elif isinstance(result.tokens, (int, float)):
                 total_tokens = int(result.tokens)
 
-        user_msg = ChatHistory(session_id=session_id, role="user", content=prompt, created_at=datetime.utcnow())
+        user_msg = ChatHistory(session_id=session_id, role="user", content=prompt, created_at=_utcnow())
         db.session.add(user_msg)
 
         assistant_msg = ChatHistory(
@@ -37,11 +39,17 @@ def save_chat_history(prompt: str, result: GenerateResult) -> None:
             model_family=result.model_family,
             tokens=total_tokens,
             cost_usd=result.cost_usd,
-            created_at=datetime.utcnow(),
+            created_at=_utcnow(),
         )
         db.session.add(assistant_msg)
 
         db.session.commit()
+
+        # 7日経過した履歴を削除
+        cutoff = _utcnow() - timedelta(days=CHAT_HISTORY_RETENTION_DAYS)
+        ChatHistory.query.filter(ChatHistory.created_at < cutoff).delete()
+        db.session.commit()
+
         logger.info(f"Chat history saved for session {session_id}")
     except ImportError:
         logger.debug("ChatHistory model not available, skipping database save")

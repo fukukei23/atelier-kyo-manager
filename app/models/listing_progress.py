@@ -5,10 +5,11 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 
 from sqlalchemy import Date, DateTime, Integer, Text, func
 
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -29,8 +30,8 @@ class ListingProgress(db.Model):
     # メモ
     notes = db.Column(Text, nullable=True)
 
-    created_at = db.Column(DateTime, default=datetime.utcnow)
-    updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(DateTime, default=_utcnow)
+    updated_at = db.Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     # ---- ヘルパー ----
     def daily_achievement_rate(self) -> float:
@@ -44,24 +45,6 @@ class ListingProgress(db.Model):
         if self.target_monthly <= 0:
             return 0.0
         return min(self.cumulative_monthly / self.target_monthly * 100, 100.0)
-
-    def daily_status_color(self) -> str:
-        """達成率に応じた色"""
-        rate = self.daily_achievement_rate()
-        if rate >= 100:
-            return "green"
-        if rate >= 70:
-            return "yellow"
-        return "red"
-
-    def monthly_status_color(self) -> str:
-        """月間達成率に応じた色"""
-        rate = self.monthly_achievement_rate()
-        if rate >= 100:
-            return "green"
-        if rate >= 70:
-            return "yellow"
-        return "red"
 
     @staticmethod
     def get_monthly_summary(year: int, month: int) -> dict:

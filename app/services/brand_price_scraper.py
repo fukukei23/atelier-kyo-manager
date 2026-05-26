@@ -11,6 +11,8 @@ from typing import Any
 
 from playwright.sync_api import Browser, BrowserContext, sync_playwright
 
+from app.core.timezone import _utcnow
+
 logger = logging.getLogger(__name__)
 
 PROXY_POOL_PATH = Path(__file__).resolve().parents[1] / "config" / "proxy_pool.json"
@@ -311,7 +313,7 @@ def _make_item(brand: str, product_name: str, price: float, source_site: str, so
         "exchange_rate": exchange_rate,
         "in_stock": True,
         "size_available": "",
-        "scraped_at": datetime.utcnow().isoformat(),
+        "scraped_at": _utcnow().isoformat(),
     }
 
 

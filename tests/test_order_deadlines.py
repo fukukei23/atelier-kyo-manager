@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from app.models.order import Order
+from app.utils.presentation import deadline_color, deadline_message
 
 
 class TestCalcDeadlines:
@@ -90,54 +91,54 @@ class TestDeadlineColor:
         """期限切れ → black"""
         order = Order()
         order.deadline_18 = datetime.utcnow() - timedelta(days=1)
-        assert order.deadline_color() == "black"
+        assert deadline_color(order) == "black"
 
     def test_red_today(self):
         """当日 → red"""
         order = Order()
         order.deadline_18 = datetime.utcnow()
-        assert order.deadline_color() == "red"
+        assert deadline_color(order) == "red"
 
     def test_orange_1_day(self):
         """残り1日 → orange"""
         order = Order()
         order.deadline_18 = datetime.utcnow() + timedelta(days=1)
-        assert order.deadline_color() == "orange"
+        assert deadline_color(order) == "orange"
 
     def test_orange_2_days(self):
         """残り2日 → orange"""
         order = Order()
         order.deadline_18 = datetime.utcnow() + timedelta(days=2)
-        assert order.deadline_color() == "orange"
+        assert deadline_color(order) == "orange"
 
     def test_yellow_3_days(self):
         """残り3日 → yellow"""
         order = Order()
         order.deadline_18 = datetime.utcnow() + timedelta(days=3)
-        assert order.deadline_color() == "yellow"
+        assert deadline_color(order) == "yellow"
 
     def test_yellow_4_days(self):
         """残り4日 → yellow"""
         order = Order()
         order.deadline_18 = datetime.utcnow() + timedelta(days=4)
-        assert order.deadline_color() == "yellow"
+        assert deadline_color(order) == "yellow"
 
     def test_green_5_days(self):
         """残り5日 → green"""
         order = Order()
         order.deadline_18 = datetime.utcnow() + timedelta(days=5)
-        assert order.deadline_color() == "green"
+        assert deadline_color(order) == "green"
 
     def test_green_10_days(self):
         """残り10日 → green"""
         order = Order()
         order.deadline_18 = datetime.utcnow() + timedelta(days=10)
-        assert order.deadline_color() == "green"
+        assert deadline_color(order) == "green"
 
     def test_gray_no_deadline(self):
         """期限なし → gray"""
         order = Order()
-        assert order.deadline_color() == "gray"
+        assert deadline_color(order) == "gray"
 
 
 class TestDeadlineMessage:
@@ -145,13 +146,13 @@ class TestDeadlineMessage:
         """期限切れ"""
         order = Order()
         order.deadline_18 = datetime.utcnow() - timedelta(days=1)
-        assert "期限切れ" in order.deadline_message()
+        assert "期限切れ" in deadline_message(order)
 
     def test_today(self):
         """当日"""
         order = Order()
         order.deadline_18 = datetime.utcnow()
-        msg = order.deadline_message()
+        msg = deadline_message(order)
         assert "本日" in msg
         assert "期限" in msg
 
@@ -159,26 +160,26 @@ class TestDeadlineMessage:
         """残り1日"""
         order = Order()
         order.deadline_18 = datetime.utcnow() + timedelta(days=1)
-        msg = order.deadline_message()
+        msg = deadline_message(order)
         assert "わずか" in msg
 
     def test_3_days_remaining(self):
         """残り3日"""
         order = Order()
         order.deadline_18 = datetime.utcnow() + timedelta(days=3)
-        msg = order.deadline_message()
+        msg = deadline_message(order)
         assert "近づ" in msg
 
     def test_5_days_no_message(self):
         """残り5日 → メッセージなし"""
         order = Order()
         order.deadline_18 = datetime.utcnow() + timedelta(days=5)
-        assert order.deadline_message() == ""
+        assert deadline_message(order) == ""
 
     def test_no_deadline(self):
         """期限なし → 空文字"""
         order = Order()
-        assert order.deadline_message() == ""
+        assert deadline_message(order) == ""
 
 
 class TestGetExtensionDays:

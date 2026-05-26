@@ -21,7 +21,7 @@ from . import bp
 @login_required
 def partner_list():
     """パートナー一覧"""
-    partners = Partner.query.order_by(Partner.priority_level.asc(), Partner.name.asc()).all()
+    partners = Partner.query.order_by(Partner.priority_level.asc(), Partner.name.asc()).paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
     return render_template("partners.html", partners=partners)
 
 
@@ -94,7 +94,7 @@ def delete_partner(pid: int):
 @login_required
 def customer_list():
     """リピーター一覧"""
-    customers = RepeatCustomer.query.order_by(RepeatCustomer.total_orders.desc()).all()
+    customers = RepeatCustomer.query.order_by(RepeatCustomer.total_orders.desc()).paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
     return render_template("repeat_customers.html", customers=customers)
 
 
@@ -104,8 +104,12 @@ def customer_list():
 def create_customer():
     """顧客新規登録"""
     if request.method == "POST":
-        total_orders = int(request.form.get("total_orders", 0) or 0)
-        total_spent = float(request.form.get("total_spent", 0) or 0)
+        try:
+            total_orders = int(request.form.get("total_orders", 0) or 0)
+            total_spent = float(request.form.get("total_spent", 0) or 0)
+        except (ValueError, TypeError):
+            flash("注文件数・合計金額は数値で入力してください。", "error")
+            return render_template("repeat_customer_form.html", customer=None)
         if total_orders < 0 or total_spent < 0:
             flash("注文件数・合計金額に負の値は入力できません。", "error")
             return render_template("repeat_customer_form.html", customer=None)
@@ -118,10 +122,14 @@ def create_customer():
         )
         fod = request.form.get("first_order_date", "")
         lod = request.form.get("last_order_date", "")
-        if fod:
-            c.first_order_date = datetime.strptime(fod, "%Y-%m-%d")
-        if lod:
-            c.last_order_date = datetime.strptime(lod, "%Y-%m-%d")
+        try:
+            if fod:
+                c.first_order_date = datetime.strptime(fod, "%Y-%m-%d")
+            if lod:
+                c.last_order_date = datetime.strptime(lod, "%Y-%m-%d")
+        except ValueError:
+            flash("日付の形式が正しくありません（YYYY-MM-DD）。", "error")
+            return render_template("repeat_customer_form.html", customer=None)
         c.notes = request.form.get("notes", "")
         c.update_avg()
         c.segment = c.calc_segment()
@@ -142,17 +150,25 @@ def edit_customer(cid: int):
         c.customer_name = request.form.get("customer_name", c.customer_name)
         c.email = request.form.get("email", "")
         c.phone = request.form.get("phone", "")
-        c.total_orders = int(request.form.get("total_orders", 0) or 0)
-        c.total_spent = float(request.form.get("total_spent", 0) or 0)
+        try:
+            c.total_orders = int(request.form.get("total_orders", 0) or 0)
+            c.total_spent = float(request.form.get("total_spent", 0) or 0)
+        except (ValueError, TypeError):
+            flash("注文件数・合計金額は数値で入力してください。", "error")
+            return render_template("repeat_customer_form.html", customer=c)
         if c.total_orders < 0 or c.total_spent < 0:
             flash("注文件数・合計金額に負の値は入力できません。", "error")
             return render_template("repeat_customer_form.html", customer=c)
         fod = request.form.get("first_order_date", "")
         lod = request.form.get("last_order_date", "")
-        if fod:
-            c.first_order_date = datetime.strptime(fod, "%Y-%m-%d")
-        if lod:
-            c.last_order_date = datetime.strptime(lod, "%Y-%m-%d")
+        try:
+            if fod:
+                c.first_order_date = datetime.strptime(fod, "%Y-%m-%d")
+            if lod:
+                c.last_order_date = datetime.strptime(lod, "%Y-%m-%d")
+        except ValueError:
+            flash("日付の形式が正しくありません（YYYY-MM-DD）。", "error")
+            return render_template("repeat_customer_form.html", customer=c)
         c.notes = request.form.get("notes", "")
         c.update_avg()
         c.segment = c.calc_segment()

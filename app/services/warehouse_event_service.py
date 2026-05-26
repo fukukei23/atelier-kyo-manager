@@ -12,6 +12,7 @@ except Exception:  # pragma: no cover - optional import guard
     RunContext = None  # type: ignore
 
 from app.agents.ai_vision_agent import AIVisionAgent
+from app.utils.validation import sanitize_filename
 
 try:
     from app.agents.reporting_agent import ReportingAgent
@@ -85,7 +86,8 @@ def _resolve_run_context(client_reference: str | None):
 
 def _persist_event(parcel_id: str, record: dict[str, Any]) -> None:
     ts = int(time.time())
-    path = EVENT_LOG_DIR / f"{parcel_id}_{ts}.json"
+    safe_id = sanitize_filename(parcel_id)
+    path = EVENT_LOG_DIR / f"{safe_id}_{ts}.json"
     try:
         path.write_text(json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8")
         logger.info("[WarehouseEvent] Recorded event -> %s", path)

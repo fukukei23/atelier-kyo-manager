@@ -11,6 +11,7 @@ from flask_login import login_required
 from app.extensions import db
 from app.models.listing_template import ListingTemplate
 from app.utils.decorators import handle_db_error
+from app.utils.errors import safe_error_msg
 
 from . import bp
 
@@ -29,7 +30,7 @@ def listing_templates():
 @handle_db_error()
 def edit_listing_template(tid: int | None = None):
     """テンプレート新規/編集"""
-    tpl = ListingTemplate.query.get(tid) if tid else None
+    tpl = db.session.get(ListingTemplate, tid) if tid else None
 
     if request.method == "POST":
         name = request.form.get("name", "").strip()

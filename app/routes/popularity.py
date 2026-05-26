@@ -24,7 +24,7 @@ def popularity_list():
     trackers = (
         PopularityTracker.query.options(joinedload(PopularityTracker.product))
         .order_by(PopularityTracker.popularity_score.desc())
-        .all()
+        .paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
     )
     avg_score = db.session.query(func.avg(PopularityTracker.popularity_score)).scalar() or 0
     top_count = sum(1 for t in trackers if (t.popularity_score or 0) >= 100)
@@ -44,10 +44,14 @@ def popularity_list():
 def create_popularity():
     """人気度記録登録"""
     if request.method == "POST":
-        views = int(request.form.get("views", 0) or 0)
-        favorites = int(request.form.get("favorites", 0) or 0)
-        inquiries = int(request.form.get("inquiries", 0) or 0)
-        sold_count = int(request.form.get("sold_count", 0) or 0)
+        try:
+            views = int(request.form.get("views", 0) or 0)
+            favorites = int(request.form.get("favorites", 0) or 0)
+            inquiries = int(request.form.get("inquiries", 0) or 0)
+            sold_count = int(request.form.get("sold_count", 0) or 0)
+        except (ValueError, TypeError):
+            flash("数値項目は整数で入力してください。", "error")
+            return render_template("popularity_form.html")
         if any(v < 0 for v in [views, favorites, inquiries, sold_count]):
             flash("閲覧数・お気に入り・問い合わせ・販売数に負の値は入力できません。", "error")
             return render_template("popularity_form.html")

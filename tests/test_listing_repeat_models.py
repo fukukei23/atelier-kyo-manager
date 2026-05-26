@@ -15,6 +15,12 @@ from app import create_app
 from app.extensions import db
 from app.models.listing_progress import ListingProgress
 from app.models.repeat_customer import RepeatCustomer
+from app.utils.presentation import (
+    daily_status_color,
+    monthly_status_color,
+    segment_color,
+    segment_label,
+)
 
 
 @pytest.fixture(scope="function")
@@ -85,38 +91,38 @@ class TestListingProgressMonthlyAchievementRate:
 class TestListingProgressDailyStatusColor:
     def test_green_at_100_percent(self, app):
         lp = ListingProgress(listings_count=20, target_daily=20, target_monthly=600)
-        assert lp.daily_status_color() == "green"
+        assert daily_status_color(lp) == "green"
 
     def test_yellow_at_70_percent(self, app):
         lp = ListingProgress(listings_count=14, target_daily=20, target_monthly=600)
-        assert lp.daily_status_color() == "yellow"
+        assert daily_status_color(lp) == "yellow"
 
     def test_red_below_70_percent(self, app):
         lp = ListingProgress(listings_count=5, target_daily=20, target_monthly=600)
-        assert lp.daily_status_color() == "red"
+        assert daily_status_color(lp) == "red"
 
     def test_red_at_zero(self, app):
         lp = ListingProgress(listings_count=0, target_daily=20, target_monthly=600)
-        assert lp.daily_status_color() == "red"
+        assert daily_status_color(lp) == "red"
 
     def test_yellow_boundary_exactly_70(self, app):
         # 14/20 = 70% → "yellow"
         lp = ListingProgress(listings_count=14, target_daily=20, target_monthly=600)
-        assert lp.daily_status_color() == "yellow"
+        assert daily_status_color(lp) == "yellow"
 
 
 class TestListingProgressMonthlyStatusColor:
     def test_green_at_100_percent(self, app):
         lp = ListingProgress(listings_count=0, target_daily=20, target_monthly=600, cumulative_monthly=600)
-        assert lp.monthly_status_color() == "green"
+        assert monthly_status_color(lp) == "green"
 
     def test_yellow_at_70_percent(self, app):
         lp = ListingProgress(listings_count=0, target_daily=20, target_monthly=600, cumulative_monthly=420)
-        assert lp.monthly_status_color() == "yellow"
+        assert monthly_status_color(lp) == "yellow"
 
     def test_red_below_70_percent(self, app):
         lp = ListingProgress(listings_count=0, target_daily=20, target_monthly=600, cumulative_monthly=100)
-        assert lp.monthly_status_color() == "red"
+        assert monthly_status_color(lp) == "red"
 
 
 class TestListingProgressGetMonthlySummary:
@@ -268,61 +274,61 @@ class TestRepeatCustomerDaysSinceLast:
 class TestRepeatCustomerSegmentLabel:
     def test_new_label(self, app):
         c = RepeatCustomer(customer_name="A", segment="new")
-        assert c.segment_label() == "新規"
+        assert segment_label(c) == "新規"
 
     def test_active_label(self, app):
         c = RepeatCustomer(customer_name="A", segment="active")
-        assert c.segment_label() == "アクティブ"
+        assert segment_label(c) == "アクティブ"
 
     def test_vip_label(self, app):
         c = RepeatCustomer(customer_name="A", segment="vip")
-        assert c.segment_label() == "VIP"
+        assert segment_label(c) == "VIP"
 
     def test_at_risk_label(self, app):
         c = RepeatCustomer(customer_name="A", segment="at_risk")
-        assert c.segment_label() == "離脱危惧"
+        assert segment_label(c) == "離脱危惧"
 
     def test_churned_label(self, app):
         c = RepeatCustomer(customer_name="A", segment="churned")
-        assert c.segment_label() == "離脱済"
+        assert segment_label(c) == "離脱済"
 
     def test_unknown_segment_label(self, app):
         c = RepeatCustomer(customer_name="A", segment="unknown_xyz")
-        assert c.segment_label() == "不明"
+        assert segment_label(c) == "不明"
 
     def test_none_segment_defaults_to_new_label(self, app):
         c = RepeatCustomer(customer_name="A", segment=None)
-        assert c.segment_label() == "新規"
+        assert segment_label(c) == "新規"
 
 
 class TestRepeatCustomerSegmentColor:
     def test_new_color(self, app):
         c = RepeatCustomer(customer_name="A", segment="new")
-        assert c.segment_color() == "blue"
+        assert segment_color(c) == "blue"
 
     def test_active_color(self, app):
         c = RepeatCustomer(customer_name="A", segment="active")
-        assert c.segment_color() == "green"
+        assert segment_color(c) == "green"
 
     def test_vip_color(self, app):
         c = RepeatCustomer(customer_name="A", segment="vip")
-        assert c.segment_color() == "purple"
+        assert segment_color(c) == "purple"
 
     def test_at_risk_color(self, app):
         c = RepeatCustomer(customer_name="A", segment="at_risk")
-        assert c.segment_color() == "yellow"
+        assert segment_color(c) == "yellow"
 
     def test_churned_color(self, app):
         c = RepeatCustomer(customer_name="A", segment="churned")
-        assert c.segment_color() == "red"
+        assert segment_color(c) == "red"
 
     def test_unknown_segment_color(self, app):
         c = RepeatCustomer(customer_name="A", segment="nope")
-        assert c.segment_color() == "gray"
+        assert segment_color(c) == "gray"
 
     def test_none_segment_defaults_to_new_color(self, app):
         c = RepeatCustomer(customer_name="A", segment=None)
-        assert c.segment_color() == "blue"
+        assert segment_color(c) == "blue"
 
 
 class TestRepeatCustomerUpdateAvg:

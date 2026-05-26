@@ -18,6 +18,8 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
+from app.core.timezone import _utcnow
+
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
@@ -419,7 +421,7 @@ class TelemetryService:
             if "timestamp" not in outcome:
                 from datetime import datetime
 
-                outcome["timestamp"] = datetime.utcnow().isoformat() + "Z"
+                outcome["timestamp"] = _utcnow().isoformat() + "Z"
 
             # キー名は設計書に準拠
             await self._save_json(outcome, "moncler_plp_pdp_outcome")

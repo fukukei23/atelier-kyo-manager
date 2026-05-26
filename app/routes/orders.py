@@ -9,9 +9,11 @@ from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 from sqlalchemy import desc, func
 
+from app.core.timezone import _utcnow
 from app.extensions import db
 from app.models.order import PAYMENT_METHOD_EXTENSION_DAYS, Order
 from app.utils.decorators import handle_db_error
+from app.utils.presentation import deadline_color, deadline_message
 
 from . import bp
 
@@ -21,7 +23,8 @@ from . import bp
 @login_required
 def order_list():
     """注文一覧（18日ルール対応）"""
-    orders = Order.query.order_by(desc(Order.order_date)).all()
+    page = request.args.get("page", 1, type=int)
+    orders = Order.query.order_by(desc(Order.order_date)).paginate(page=page, per_page=50, error_out=False).items
     return render_template("orders.html", orders=orders)
 
 
@@ -32,7 +35,7 @@ def create_order():
     """注文新規登録"""
     if request.method == "POST":
         order_date_str = request.form.get("order_date", "")
-        order_date = datetime.strptime(order_date_str, "%Y-%m-%d") if order_date_str else datetime.utcnow()
+        order_date = datetime.strptime(order_date_str, "%Y-%m-%d") if order_date_str else _utcnow()
 
         selling_price = float(request.form.get("selling_price", 0) or 0)
         purchase_cost = float(request.form.get("purchase_cost", 0) or 0)
@@ -116,7 +119,7 @@ def delete_order(oid: int):
 @login_required
 def api_order_dashboard():
     """18日ルールダッシュボードAPI"""
-    datetime.utcnow()
+    _utcnow()
     orders = Order.query.filter(Order.status.in_(["pending", "shipped"])).all()
     result = []
     for o in orders:
@@ -130,8 +133,8 @@ def api_order_dashboard():
                 "deadline_18": o.deadline_18.isoformat() if o.deadline_18 else None,
                 "extension_deadline": o.extension_deadline.isoformat() if o.extension_deadline else None,
                 "remaining_days": remaining,
-                "color": o.deadline_color(),
-                "message": o.deadline_message(),
+                "color": deadline_color(o),
+                "message": deadline_message(o),
                 "extension_requested": o.extension_requested or False,
                 "profit": o.profit,
                 "status": o.status,
@@ -163,7 +166,7 @@ def extend_order(oid: int):
 @login_required
 def cashflow_dashboard():
     """キャッシュフロー予測ダッシュボード"""
-    now = datetime.utcnow()
+    now = _utcnow()
     pending_orders = Order.query.filter(Order.status.in_(["pending", "shipped"])).all()
 
     forecast_days = int(request.args.get("days", 30))

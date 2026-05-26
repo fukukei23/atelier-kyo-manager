@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import DateTime, Float, Integer, String
 
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -20,4 +19,4 @@ class BuymaPriceHistory(db.Model):
     match_score = db.Column(Float, nullable=True)
     buyma_matched_name = db.Column(String(255), nullable=True)
     source = db.Column(String(32), nullable=True, default="buyma_search")
-    recorded_at = db.Column(DateTime, default=datetime.utcnow)
+    recorded_at = db.Column(DateTime, default=_utcnow)

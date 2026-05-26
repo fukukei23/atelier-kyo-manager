@@ -33,6 +33,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol, TypedDict, runtime_checkable
 
+from app.core.timezone import _utcnow
+
 # --- DB (optional) ---
 try:
     from app import db
@@ -191,7 +193,7 @@ class DbSink:
         saved = 0
         try:
             for r in rows:
-                captured_at_dt = datetime.fromisoformat(r["captured_at"]) if r.get("captured_at") else datetime.utcnow()
+                captured_at_dt = datetime.fromisoformat(r["captured_at"]) if r.get("captured_at") else _utcnow()
                 rec = ProductPriceHistory(
                     brand=r.get("brand"),
                     name=r.get("name"),

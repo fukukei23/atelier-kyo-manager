@@ -14,6 +14,7 @@ from PIL import Image
 from rembg import remove
 
 from app.config.config import AppConfig
+from app.utils.validation import validate_url, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +51,12 @@ class ImageService:
 
     def _fetch_image(self, url: str, timeout: int = 20, max_bytes: int = 5_000_000) -> Image.Image | None:
         """URLから画像を取得（UA偽装・サイズ制限付き）"""
+        try:
+            url = validate_url(url)
+        except ValidationError:
+            logger.warning("Blocked non-https URL: %s", url)
+            return None
+
         headers = {
             "User-Agent": (
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -59,8 +66,14 @@ class ImageService:
         }
         r = requests.get(url, headers=headers, timeout=timeout, stream=True)
         r.raise_for_status()
-        content = r.content if len(r.content) <= max_bytes else r.raw.read(max_bytes)
-        return Image.open(io.BytesIO(content)).convert("RGB")
+
+        buf = io.BytesIO()
+        for chunk in r.iter_content(chunk_size=8192):
+            buf.write(chunk)
+            if buf.tell() > max_bytes:
+                logger.warning("Image too large: %s", url)
+                return None
+        return Image.open(buf).convert("RGB")
 
     # ------------------------------------------------------------------
     # 背景除去

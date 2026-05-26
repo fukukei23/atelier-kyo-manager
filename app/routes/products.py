@@ -91,7 +91,8 @@ def manage_products():
         flash("商品を登録しました。", "success")
         return redirect(url_for("main.manage_products"))
 
-    products = Product.query.order_by(Product.id.desc()).all()
+    page = request.args.get("page", 1, type=int)
+    products = Product.query.order_by(Product.id.desc()).paginate(page=page, per_page=50, error_out=False).items
     return render_template("products/manage.html", form=form, products=products)
 
 
@@ -99,7 +100,8 @@ def manage_products():
 @login_required
 def product_list():
     """登録データ一覧（シンプル）"""
-    products = Product.query.order_by(Product.id.desc()).all()
+    page = request.args.get("page", 1, type=int)
+    products = Product.query.order_by(Product.id.desc()).paginate(page=page, per_page=50, error_out=False).items
     return render_template("list.html", products=products)
 
 
@@ -120,7 +122,7 @@ def edit_product(product_id: int):
         flash("商品を更新しました。", "success")
         return redirect(url_for("main.manage_products"))
 
-    products = Product.query.order_by(Product.id.desc()).all()
+    products = Product.query.order_by(Product.id.desc()).paginate(page=1, per_page=50, error_out=False).items
     return render_template("products/manage.html", form=form, products=products)
 
 

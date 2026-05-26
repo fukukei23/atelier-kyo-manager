@@ -4,12 +4,19 @@ source_urlから価格・在庫情報を自動取得する
 """
 
 import json
+import logging
 import re
 import time
+from collections import OrderedDict
 from typing import Any
 
 import requests
 from bs4 import BeautifulSoup
+
+from app.config.constants import SCRAPER_CACHE_SIZE, SCRAPER_MAX_RETRIES, SCRAPER_REQUEST_TIMEOUT
+from app.utils.validation import validate_url, ValidationError
+
+logger = logging.getLogger(__name__)
 
 
 class PriceScraper:
@@ -21,7 +28,7 @@ class PriceScraper:
         "Chrome/120.0.0.0 Safari/537.36"
     )
 
-    TIMEOUT = 10
+    TIMEOUT = SCRAPER_REQUEST_TIMEOUT
 
     STOCK_OUT_KEYWORDS = [
         "売切れ",
@@ -52,10 +59,15 @@ class PriceScraper:
                 "Accept-Language": "ja,en-US;q=0.7,en;q=0.3",
             }
         )
-        self._cache: dict[str, dict[str, Any]] = {}
+        self._cache: OrderedDict[str, dict[str, Any]] = OrderedDict()
 
     def fetch(self, url: str) -> dict[str, Any]:
         """URLから価格・在庫情報を取得"""
+        try:
+            url = validate_url(url)
+        except ValidationError as e:
+            return {"success": False, "title": None, "price": None, "in_stock": True, "raw_price": None, "error": str(e)}
+
         result: dict[str, Any] = {
             "success": False,
             "title": None,
@@ -107,7 +119,7 @@ class PriceScraper:
             return "server_error"
         return "unknown"
 
-    def fetch_with_retry(self, url: str, max_retries: int = 3) -> dict[str, Any]:
+    def fetch_with_retry(self, url: str, max_retries: int = SCRAPER_MAX_RETRIES) -> dict[str, Any]:
         """リトライ付き取得（blocked/server_errorのみリトライ）"""
         attempts: list[dict[str, Any]] = []
         retry_count = 0
@@ -157,6 +169,8 @@ class PriceScraper:
 
         result = self.fetch_with_retry(url)
         self._cache[url] = {"result": result, "timestamp": time.time()}
+        if len(self._cache) > SCRAPER_CACHE_SIZE:
+            self._cache.popitem(last=False)
         return result
 
     # ---- private -------------------------------------------------------

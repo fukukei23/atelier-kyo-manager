@@ -5,6 +5,7 @@ import pytest
 from app import create_app
 from app.extensions import db as _db
 from app.models.shipment_notification import ShipmentNotification
+from app.utils.presentation import shipment_status_label
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -53,12 +54,12 @@ class TestShipmentNotificationModel:
             labels = {"pending": "未通知", "notified": "通知済み", "confirmed": "確認済み", "error": "エラー"}
             for status, expected in labels.items():
                 n = ShipmentNotification(status=status)
-                assert n.status_label() == expected
+                assert shipment_status_label(n) == expected
 
     def test_status_label_unknown(self, app):
         with app.app_context():
             n = ShipmentNotification(status="unknown_status")
-            assert n.status_label() == "unknown_status"
+            assert shipment_status_label(n) == "unknown_status"
 
     def test_mark_notified(self, app):
         with app.app_context():

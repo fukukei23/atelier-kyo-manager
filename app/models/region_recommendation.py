@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
-
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -21,34 +20,11 @@ class RegionRecommendation(db.Model):
     reliability_score = db.Column(db.Float, comment="信頼性スコア0-100")
     recommendation_score = db.Column(db.Float, comment="総合推奨スコア")
     last_updated = db.Column(db.DateTime)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(db.DateTime, default=_utcnow)
+    updated_at = db.Column(db.DateTime, default=_utcnow, onupdate=_utcnow)
 
     def calc_recommendation(self) -> float | None:
         if self.reliability_score is None or self.risk_score is None or self.avg_profit_rate is None:
             return None
         return self.reliability_score * 0.4 + (100 - self.risk_score) * 0.3 + self.avg_profit_rate * 0.3
 
-    def risk_label(self) -> str:
-        r = self.risk_score or 0
-        if r <= 20:
-            return "低リスク"
-        elif r <= 50:
-            return "中リスク"
-        return "高リスク"
-
-    def risk_color(self) -> str:
-        r = self.risk_score or 0
-        if r <= 20:
-            return "green"
-        elif r <= 50:
-            return "yellow"
-        return "red"
-
-    def recommendation_label(self) -> str:
-        s = self.recommendation_score or 0
-        if s >= 70:
-            return "推奨"
-        elif s >= 40:
-            return "普通"
-        return "非推奨"

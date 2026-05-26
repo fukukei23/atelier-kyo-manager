@@ -5,10 +5,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime
-
 from sqlalchemy import DateTime, Float, Integer, String, Text
 
+from app.core.timezone import _utcnow
 from app.extensions import db
 
 
@@ -37,8 +36,8 @@ class Partner(db.Model):
     status = db.Column(String(16), default="active", comment="active/inactive/suspended")
     notes = db.Column(Text, nullable=True)
 
-    created_at = db.Column(DateTime, default=datetime.utcnow)
-    updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = db.Column(DateTime, default=_utcnow)
+    updated_at = db.Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     # ---- ヘルパー ----
     def success_rate(self) -> float:
@@ -64,18 +63,6 @@ class Partner(db.Model):
         if not self.specialty_brands:
             return []
         return [b.strip() for b in self.specialty_brands.split(",") if b.strip()]
-
-    def priority_label(self) -> str:
-        labels = {"high": "高", "medium": "中", "low": "低"}
-        return labels.get(self.priority_level or "medium", "中")
-
-    def priority_color(self) -> str:
-        colors = {"high": "red", "medium": "yellow", "low": "green"}
-        return colors.get(self.priority_level or "medium", "gray")
-
-    def status_label(self) -> str:
-        labels = {"active": "稼働", "inactive": "停止", "suspended": "保留"}
-        return labels.get(self.status or "active", "不明")
 
     def __repr__(self) -> str:
         return f"<Partner id={self.id} name={self.name!r}>"

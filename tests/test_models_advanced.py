@@ -15,6 +15,15 @@ from app.models.popularity_tracker import PopularityTracker
 from app.models.prohibited_source import ProhibitedSource
 from app.models.region_recommendation import RegionRecommendation
 from app.models.stock_check import StockCheck
+from app.utils.presentation import (
+    recommendation_label,
+    risk_color,
+    risk_label,
+    score_color,
+    score_label,
+    stock_status_color,
+    stock_status_label,
+)
 
 
 @pytest.fixture(scope="function")
@@ -72,69 +81,69 @@ class TestPopularityTrackerCalcScore:
 class TestPopularityTrackerScoreLabel:
     def test_score_label_above_100_is_top_popular(self):
         pt = PopularityTracker(popularity_score=150.0)
-        assert pt.score_label() == "超人気"
+        assert score_label(pt) == "超人気"
 
     def test_score_label_exactly_100_is_top_popular(self):
         pt = PopularityTracker(popularity_score=100.0)
-        assert pt.score_label() == "超人気"
+        assert score_label(pt) == "超人気"
 
     def test_score_label_99_is_popular(self):
         pt = PopularityTracker(popularity_score=99.0)
-        assert pt.score_label() == "人気"
+        assert score_label(pt) == "人気"
 
     def test_score_label_exactly_50_is_popular(self):
         pt = PopularityTracker(popularity_score=50.0)
-        assert pt.score_label() == "人気"
+        assert score_label(pt) == "人気"
 
     def test_score_label_49_is_normal(self):
         pt = PopularityTracker(popularity_score=49.0)
-        assert pt.score_label() == "普通"
+        assert score_label(pt) == "普通"
 
     def test_score_label_exactly_20_is_normal(self):
         pt = PopularityTracker(popularity_score=20.0)
-        assert pt.score_label() == "普通"
+        assert score_label(pt) == "普通"
 
     def test_score_label_19_is_attention_needed(self):
         pt = PopularityTracker(popularity_score=19.0)
-        assert pt.score_label() == "要注力"
+        assert score_label(pt) == "要注力"
 
     def test_score_label_zero_is_attention_needed(self):
         pt = PopularityTracker(popularity_score=0.0)
-        assert pt.score_label() == "要注力"
+        assert score_label(pt) == "要注力"
 
     def test_score_label_none_is_attention_needed(self):
         pt = PopularityTracker(popularity_score=None)
-        assert pt.score_label() == "要注力"
+        assert score_label(pt) == "要注力"
 
 
 class TestPopularityTrackerScoreColor:
     def test_score_color_above_100_is_green(self):
         pt = PopularityTracker(popularity_score=100.0)
-        assert pt.score_color() == "green"
+        assert score_color(pt) == "green"
 
     def test_score_color_50_to_99_is_blue(self):
         pt = PopularityTracker(popularity_score=75.0)
-        assert pt.score_color() == "blue"
+        assert score_color(pt) == "blue"
 
     def test_score_color_exactly_50_is_blue(self):
         pt = PopularityTracker(popularity_score=50.0)
-        assert pt.score_color() == "blue"
+        assert score_color(pt) == "blue"
 
     def test_score_color_20_to_49_is_yellow(self):
         pt = PopularityTracker(popularity_score=35.0)
-        assert pt.score_color() == "yellow"
+        assert score_color(pt) == "yellow"
 
     def test_score_color_exactly_20_is_yellow(self):
         pt = PopularityTracker(popularity_score=20.0)
-        assert pt.score_color() == "yellow"
+        assert score_color(pt) == "yellow"
 
     def test_score_color_below_20_is_red(self):
         pt = PopularityTracker(popularity_score=10.0)
-        assert pt.score_color() == "red"
+        assert score_color(pt) == "red"
 
     def test_score_color_none_is_red(self):
         pt = PopularityTracker(popularity_score=None)
-        assert pt.score_color() == "red"
+        assert score_color(pt) == "red"
 
 
 class TestPopularityTrackerSoldCountOrZero:
@@ -245,33 +254,33 @@ class TestStockCheckPriceDiffPct:
 class TestStockCheckStatusLabel:
     def test_status_label_out_of_stock(self):
         sc = StockCheck(in_stock=False, price_changed=False)
-        assert sc.status_label() == "在庫切れ"
+        assert stock_status_label(sc) == "在庫切れ"
 
     def test_status_label_out_of_stock_overrides_price_changed(self):
         sc = StockCheck(in_stock=False, price_changed=True)
-        assert sc.status_label() == "在庫切れ"
+        assert stock_status_label(sc) == "在庫切れ"
 
     def test_status_label_price_changed(self):
         sc = StockCheck(in_stock=True, price_changed=True)
-        assert sc.status_label() == "価格変動"
+        assert stock_status_label(sc) == "価格変動"
 
     def test_status_label_normal(self):
         sc = StockCheck(in_stock=True, price_changed=False)
-        assert sc.status_label() == "正常"
+        assert stock_status_label(sc) == "正常"
 
 
 class TestStockCheckStatusColor:
     def test_status_color_out_of_stock_is_red(self):
         sc = StockCheck(in_stock=False, price_changed=False)
-        assert sc.status_color() == "red"
+        assert stock_status_color(sc) == "red"
 
     def test_status_color_price_changed_is_yellow(self):
         sc = StockCheck(in_stock=True, price_changed=True)
-        assert sc.status_color() == "yellow"
+        assert stock_status_color(sc) == "yellow"
 
     def test_status_color_normal_is_green(self):
         sc = StockCheck(in_stock=True, price_changed=False)
-        assert sc.status_color() == "green"
+        assert stock_status_color(sc) == "green"
 
 
 # ─────────────────────────── RegionRecommendation ───────────────────────────
@@ -315,71 +324,71 @@ class TestRegionRecommendationCalcRecommendation:
 class TestRegionRecommendationRiskLabel:
     def test_risk_label_low_risk(self):
         rr = RegionRecommendation(risk_score=10.0)
-        assert rr.risk_label() == "低リスク"
+        assert risk_label(rr) == "低リスク"
 
     def test_risk_label_exactly_20_is_low_risk(self):
         rr = RegionRecommendation(risk_score=20.0)
-        assert rr.risk_label() == "低リスク"
+        assert risk_label(rr) == "低リスク"
 
     def test_risk_label_21_is_medium_risk(self):
         rr = RegionRecommendation(risk_score=21.0)
-        assert rr.risk_label() == "中リスク"
+        assert risk_label(rr) == "中リスク"
 
     def test_risk_label_exactly_50_is_medium_risk(self):
         rr = RegionRecommendation(risk_score=50.0)
-        assert rr.risk_label() == "中リスク"
+        assert risk_label(rr) == "中リスク"
 
     def test_risk_label_51_is_high_risk(self):
         rr = RegionRecommendation(risk_score=51.0)
-        assert rr.risk_label() == "高リスク"
+        assert risk_label(rr) == "高リスク"
 
     def test_risk_label_none_is_low_risk(self):
         rr = RegionRecommendation(risk_score=None)
-        assert rr.risk_label() == "低リスク"
+        assert risk_label(rr) == "低リスク"
 
 
 class TestRegionRecommendationRiskColor:
     def test_risk_color_low_is_green(self):
         rr = RegionRecommendation(risk_score=15.0)
-        assert rr.risk_color() == "green"
+        assert risk_color(rr) == "green"
 
     def test_risk_color_medium_is_yellow(self):
         rr = RegionRecommendation(risk_score=35.0)
-        assert rr.risk_color() == "yellow"
+        assert risk_color(rr) == "yellow"
 
     def test_risk_color_high_is_red(self):
         rr = RegionRecommendation(risk_score=75.0)
-        assert rr.risk_color() == "red"
+        assert risk_color(rr) == "red"
 
 
 class TestRegionRecommendationLabel:
     def test_recommendation_label_recommended(self):
         rr = RegionRecommendation(recommendation_score=80.0)
-        assert rr.recommendation_label() == "推奨"
+        assert recommendation_label(rr) == "推奨"
 
     def test_recommendation_label_exactly_70_is_recommended(self):
         rr = RegionRecommendation(recommendation_score=70.0)
-        assert rr.recommendation_label() == "推奨"
+        assert recommendation_label(rr) == "推奨"
 
     def test_recommendation_label_69_is_normal(self):
         rr = RegionRecommendation(recommendation_score=69.0)
-        assert rr.recommendation_label() == "普通"
+        assert recommendation_label(rr) == "普通"
 
     def test_recommendation_label_exactly_40_is_normal(self):
         rr = RegionRecommendation(recommendation_score=40.0)
-        assert rr.recommendation_label() == "普通"
+        assert recommendation_label(rr) == "普通"
 
     def test_recommendation_label_39_is_not_recommended(self):
         rr = RegionRecommendation(recommendation_score=39.0)
-        assert rr.recommendation_label() == "非推奨"
+        assert recommendation_label(rr) == "非推奨"
 
     def test_recommendation_label_zero_is_not_recommended(self):
         rr = RegionRecommendation(recommendation_score=0.0)
-        assert rr.recommendation_label() == "非推奨"
+        assert recommendation_label(rr) == "非推奨"
 
     def test_recommendation_label_none_is_not_recommended(self):
         rr = RegionRecommendation(recommendation_score=None)
-        assert rr.recommendation_label() == "非推奨"
+        assert recommendation_label(rr) == "非推奨"
 
 
 # ─────────────────────────── ProhibitedSource ───────────────────────────
