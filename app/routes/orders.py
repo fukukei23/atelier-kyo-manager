@@ -182,12 +182,15 @@ def cashflow_dashboard():
         or 0
     )
 
+    inflow_by_date: dict[str, float] = {}
+    for o in pending_orders:
+        if o.expected_payment_date and o.profit:
+            key = o.expected_payment_date.date().isoformat()
+            inflow_by_date[key] = inflow_by_date.get(key, 0) + float(o.profit)
+
     for i in range(forecast_days):
         target_date = (now + timedelta(days=i)).date()
-        inflow = 0.0
-        for o in pending_orders:
-            if o.expected_payment_date and o.expected_payment_date.date() == target_date:
-                inflow += float(o.profit or 0)
+        inflow = inflow_by_date.get(target_date.isoformat(), 0.0)
         running_balance += inflow
         daily_forecast.append(
             {

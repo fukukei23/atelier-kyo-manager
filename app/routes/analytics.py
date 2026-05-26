@@ -49,7 +49,7 @@ def brand_analytics():
             "avg_target_rate": round(float(ts.avg_target_rate or 0) * 100, 1),
         }
 
-    products = Product.query.order_by(Product.brand_tier, Product.id.desc()).all()
+    products = Product.query.order_by(Product.brand_tier, Product.id.desc()).limit(200).all()
     return render_template("brand_analytics.html", tier_data=tier_data, products=products)
 
 
@@ -91,7 +91,7 @@ def dashboard():
                     p.listing_status or "",
                 ]
             )
-        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         return Response(
             output.getvalue(),
             mimetype="text/csv; charset=utf-8-sig",
@@ -100,7 +100,7 @@ def dashboard():
 
     # KPI
     total_products = query.count()
-    products = query.all()
+    products = query.limit(200).all()
     rates = [p.profit_rate() for p in products]
     profits = [p.calculate_profit() for p in products]
     kpi = {

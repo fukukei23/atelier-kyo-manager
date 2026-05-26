@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from app.config.constants import (
+    LLM_CACHE_SIZE_LIMIT,
     LLM_CACHE_TTL_SECONDS,
     LLM_LOCAL_CTX_SIZE,
     LLM_LOCAL_MAX_TOKENS,
@@ -41,7 +42,7 @@ except ImportError:
 try:
     import diskcache
     _CACHE_DIR = Path(__file__).resolve().parents[2] / "instance" / "llm_cache"
-    _CACHE = diskcache.Cache(_CACHE_DIR, size_limit=500_000_000)
+    _CACHE = diskcache.Cache(_CACHE_DIR, size_limit=LLM_CACHE_SIZE_LIMIT)
 except Exception:
     _CACHE = None
 
