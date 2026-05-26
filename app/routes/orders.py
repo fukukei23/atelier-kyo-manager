@@ -3,7 +3,7 @@
 # ======================================================================
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
@@ -35,7 +35,7 @@ def create_order():
     """注文新規登録"""
     if request.method == "POST":
         order_date_str = request.form.get("order_date", "")
-        order_date = datetime.strptime(order_date_str, "%Y-%m-%d") if order_date_str else _utcnow()
+        order_date = datetime.strptime(order_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc) if order_date_str else _utcnow()
 
         selling_price = float(request.form.get("selling_price", 0) or 0)
         purchase_cost = float(request.form.get("purchase_cost", 0) or 0)
@@ -78,7 +78,7 @@ def edit_order(oid: int):
     if request.method == "POST":
         order_date_str = request.form.get("order_date", "")
         if order_date_str:
-            order.order_date = datetime.strptime(order_date_str, "%Y-%m-%d")
+            order.order_date = datetime.strptime(order_date_str, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         order.order_number = request.form.get("order_number", order.order_number)
         order.product_name = request.form.get("product_name", order.product_name)
         order.customer_name = request.form.get("customer_name", order.customer_name)

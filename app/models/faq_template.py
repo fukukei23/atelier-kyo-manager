@@ -1,12 +1,7 @@
 """FR-010基盤: FAQテンプレート返答モデル"""
 
-from datetime import datetime, timezone
-
+from app.core.timezone import _utcnow
 from app.extensions import db
-
-
-def _utcnow():
-    return datetime.now(timezone.utc)
 
 
 class FaqTemplate(db.Model):

@@ -183,7 +183,7 @@ def api_products_list():
 @login_required
 def api_fetch_all_stocks():
     """全レコードの価格・在庫を一括取得"""
-    stocks = StockCheck.query.filter(StockCheck.source_url.isnot(None)).all()
+    stocks = StockCheck.query.filter(StockCheck.source_url.isnot(None)).limit(200).all()
     if not stocks:
         return jsonify({"success": True, "message": "対象なし", "total": 0})
 

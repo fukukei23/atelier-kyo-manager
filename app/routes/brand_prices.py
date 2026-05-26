@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from datetime import datetime, timedelta
 
@@ -24,6 +25,7 @@ from . import bp
 logger = logging.getLogger(__name__)
 
 _last_buyma_request: float = 0.0
+_buyma_rate_lock = threading.Lock()
 _BUIMA_MIN_INTERVAL = 2.0
 
 
@@ -251,10 +253,11 @@ def api_buyma_search_single():
 
     # AA: サーバー側レート制限（2秒間隔）
     global _last_buyma_request
-    now = time.time()
-    if now - _last_buyma_request < _BUIMA_MIN_INTERVAL:
-        return jsonify({"status": "rate_limited", "message": "too fast"}), 429
-    _last_buyma_request = now
+    with _buyma_rate_lock:
+        now = time.time()
+        if now - _last_buyma_request < _BUIMA_MIN_INTERVAL:
+            return jsonify({"status": "rate_limited", "message": "too fast"}), 429
+        _last_buyma_request = now
 
     if not product_name or not brand:
         return jsonify({"status": "error", "message": "missing params"}), 400
