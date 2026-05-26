@@ -4,6 +4,7 @@ import json
 import logging
 import random
 import re
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -318,6 +319,8 @@ def _make_item(brand: str, product_name: str, price: float, source_site: str, so
 
 
 class BrandPriceScraper:
+    _browser_lock = threading.Lock()
+
     def __init__(self, headless: bool = True):
         self.headless = headless
         self.pw = None
@@ -326,35 +329,36 @@ class BrandPriceScraper:
         self.page = None
 
     def _init_browser(self, timeout_sec: int = 60):
-        if self.page:
-            return
-        self.pw = sync_playwright().start()
-        self.browser = self.pw.chromium.launch(headless=self.headless)
+        with self._browser_lock:
+            if self.page:
+                return
+            self.pw = sync_playwright().start()
+            self.browser = self.pw.chromium.launch(headless=self.headless)
 
-        opts: dict[str, Any] = {
-            "viewport": {"width": 1280, "height": 800},
-            "locale": "ja-JP",
-            "timezone_id": "Asia/Tokyo",
-            "user_agent": _CHROME_HEADERS["User-Agent"],
-        }
-
-        proxies = _load_proxies()
-        if proxies:
-            proxy = random.choice(proxies)
-            opts["proxy"] = {
-                "server": proxy["server"],
-                "username": proxy.get("username", ""),
-                "password": proxy.get("password", ""),
+            opts: dict[str, Any] = {
+                "viewport": {"width": 1280, "height": 800},
+                "locale": "ja-JP",
+                "timezone_id": "Asia/Tokyo",
+                "user_agent": _CHROME_HEADERS["User-Agent"],
             }
 
-        self.context = self.browser.new_context(**opts)
-        self.context.add_init_script("""
-            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-            Object.defineProperty(navigator, 'languages', {get: () => ['ja-JP', 'ja', 'en-US', 'en']});
-            Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
-        """)
-        self.page = self.context.new_page()
-        self.page.set_default_timeout(timeout_sec * 1000)
+            proxies = _load_proxies()
+            if proxies:
+                proxy = random.choice(proxies)
+                opts["proxy"] = {
+                    "server": proxy["server"],
+                    "username": proxy.get("username", ""),
+                    "password": proxy.get("password", ""),
+                }
+
+            self.context = self.browser.new_context(**opts)
+            self.context.add_init_script("""
+                Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+                Object.defineProperty(navigator, 'languages', {get: () => ['ja-JP', 'ja', 'en-US', 'en']});
+                Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3, 4, 5]});
+            """)
+            self.page = self.context.new_page()
+            self.page.set_default_timeout(timeout_sec * 1000)
 
     def _close_browser(self):
         for resource in [self.context, self.browser]:

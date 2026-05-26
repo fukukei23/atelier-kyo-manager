@@ -101,7 +101,22 @@ def _load_config() -> dict[str, Any]:
                     config_dict[k] = val
     except Exception:
         pass
-    config_dict.update(dict(os.environ))
+    _ENV_KEYS = [
+        "OPENAI_API_KEY", "GEMINI_API_KEY", "DEEPSEEK_API_KEY",
+        "DEEPSEEK_API_BASE", "LLM_ORDER_*", "CRAWLER_*",
+        "FLASK_APP", "STAGE", "BUYANDSHIP_*",
+    ]
+    for k in _ENV_KEYS:
+        # Support wildcard prefix matching (e.g. "LLM_ORDER_*")
+        if k.endswith("*"):
+            prefix = k.rstrip("*")
+            for ek, ev in os.environ.items():
+                if ek.startswith(prefix) and ev:
+                    config_dict[ek] = ev
+        else:
+            val = os.environ.get(k)
+            if val:
+                config_dict[k] = val
     return config_dict
 
 

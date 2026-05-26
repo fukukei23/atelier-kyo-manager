@@ -1,6 +1,10 @@
 """FR-009基盤: Slack Webhook通知サービス"""
 
+import logging
+
 import requests
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationService:
@@ -14,6 +18,8 @@ class NotificationService:
     def init_app(self, app):
         """Flask拡張パターンの初期化"""
         self.webhook_url = app.config.get("SLACK_WEBHOOK_URL")
+        if not self.webhook_url:
+            logger.warning("SLACK_WEBHOOK_URL未設定 — 通知機能は無効")
 
     def send(self, message: str, channel: str = None) -> dict:
         """

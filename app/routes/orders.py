@@ -169,7 +169,7 @@ def cashflow_dashboard():
     now = _utcnow()
     pending_orders = Order.query.filter(Order.status.in_(["pending", "shipped"])).all()
 
-    forecast_days = int(request.args.get("days", 30))
+    forecast_days = min(int(request.args.get("days", 30)), 365)
     daily_forecast: list[dict] = []
     running_balance = 0.0
 

@@ -17,6 +17,7 @@ from app.services.buyma_price_scraper import (
     DEFAULT_THRESHOLD,
     get_shared_searcher,
 )
+from app.utils.errors import safe_error_msg
 
 from . import bp
 
@@ -70,8 +71,8 @@ def brand_prices_scrape():
         saved = brand_price_service.save_scraped_prices(results)
         flash(f"{brand} の価格データを {saved} 件取得しました", "success")
     except Exception as e:
-        logger.error(f"Scraping error: {e}")
-        flash(f"スクレイピングエラー: {e}", "error")
+        logger.error("Scraping error: %s", e, exc_info=True)
+        flash(f"スクレイピングエラー: {safe_error_msg(e, context='brand_scrape')}", "error")
 
     return redirect(url_for("main.brand_prices_dashboard", brand=brand))
 
