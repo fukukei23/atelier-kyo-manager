@@ -22,6 +22,7 @@ from __future__ import annotations
 import copy
 import json
 import logging
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ APP_ROOT = Path(__file__).resolve().parents[2]
 
 # --- 内部キャッシュ ---
 _cached_config: dict[str, Any] | None = None
+_config_lock = threading.Lock()
 
 
 def deep_merge(source: dict, destination: dict) -> dict:
@@ -52,58 +54,59 @@ def load_full_config(force_reload: bool = False) -> dict[str, Any]:
     システムで唯一の公式な設定読み込みインターフェース。
     """
     global _cached_config
-    if _cached_config is not None and not force_reload:
-        logger.debug("Returning cached configuration.")
-        return _cached_config
+    with _config_lock:
+        if _cached_config is not None and not force_reload:
+            logger.debug("Returning cached configuration.")
+            return _cached_config
 
-    config_dir = APP_ROOT / "app" / "config" / "sites"
-    base_path = config_dir / "base.json"
-    override_path = config_dir / "overrides.local.json"
+        config_dir = APP_ROOT / "app" / "config" / "sites"
+        base_path = config_dir / "base.json"
+        override_path = config_dir / "overrides.local.json"
 
-    final_config: dict[str, Any] = {}
+        final_config: dict[str, Any] = {}
 
-    try:
-        # 1. base.jsonの読み込み
-        logger.info(f"Loading base configuration from: {base_path}")
-        with base_path.open("r", encoding="utf-8") as f:
-            base_data = json.load(f)
+        try:
+            # 1. base.jsonの読み込み
+            logger.info(f"Loading base configuration from: {base_path}")
+            with base_path.open("r", encoding="utf-8") as f:
+                base_data = json.load(f)
 
-        sites_list: list[dict[str, Any]] = base_data.get("sites", [])
-        default_discovery_settings: dict[str, Any] = base_data.get("default_discovery_settings", {})
+            sites_list: list[dict[str, Any]] = base_data.get("sites", [])
+            default_discovery_settings: dict[str, Any] = base_data.get("default_discovery_settings", {})
 
-        base_sites_dict = {site["name"]: site for site in sites_list}
+            base_sites_dict = {site["name"]: site for site in sites_list}
 
-        # 2. 各サイトにデフォルト設定を適用
-        for site_name, site_config in base_sites_dict.items():
-            merged_site_config = copy.deepcopy(site_config)
-            discovery_settings = merged_site_config.get("discovery_settings", {})
-            merged_discovery_settings = deep_merge(copy.deepcopy(default_discovery_settings), discovery_settings)
-            merged_site_config["discovery_settings"] = merged_discovery_settings
-            final_config[site_name] = merged_site_config
+            # 2. 各サイトにデフォルト設定を適用
+            for site_name, site_config in base_sites_dict.items():
+                merged_site_config = copy.deepcopy(site_config)
+                discovery_settings = merged_site_config.get("discovery_settings", {})
+                merged_discovery_settings = deep_merge(copy.deepcopy(default_discovery_settings), discovery_settings)
+                merged_site_config["discovery_settings"] = merged_discovery_settings
+                final_config[site_name] = merged_site_config
 
-        # 3. overrides.local.json の読み込みとマージ
-        if override_path.exists():
-            logger.info(f"Loading and merging overrides from: {override_path}")
-            with override_path.open("r", encoding="utf-8") as f:
-                overrides = json.load(f)
+            # 3. overrides.local.json の読み込みとマージ
+            if override_path.exists():
+                logger.info(f"Loading and merging overrides from: {override_path}")
+                with override_path.open("r", encoding="utf-8") as f:
+                    overrides = json.load(f)
 
-            for site_name, site_override in overrides.items():
-                target_node = final_config.get(site_name)
-                if target_node:
-                    deep_merge(site_override, target_node)
-                else:
-                    new_site_config = {}
-                    deep_merge(copy.deepcopy(default_discovery_settings), new_site_config)
-                    deep_merge(site_override, new_site_config)
-                    final_config[site_name] = new_site_config
-            logger.info("Successfully merged override configurations.")
+                for site_name, site_override in overrides.items():
+                    target_node = final_config.get(site_name)
+                    if target_node:
+                        deep_merge(site_override, target_node)
+                    else:
+                        new_site_config = {}
+                        deep_merge(copy.deepcopy(default_discovery_settings), new_site_config)
+                        deep_merge(site_override, new_site_config)
+                        final_config[site_name] = new_site_config
+                logger.info("Successfully merged override configurations.")
 
-    except (json.JSONDecodeError, FileNotFoundError) as e:
-        logger.error(f"FATAL: Failed to load or parse configuration files: {e}", exc_info=True)
-        raise  # 設定ファイルはシステムの生命線なので、なければ起動を中止
+        except (json.JSONDecodeError, FileNotFoundError) as e:
+            logger.error(f"FATAL: Failed to load or parse configuration files: {e}", exc_info=True)
+            raise  # 設定ファイルはシステムの生命線なので、なければ起動を中止
 
-    _cached_config = final_config
-    return final_config
+        _cached_config = final_config
+        return final_config
 
 
 def get_site_config(site_name: str) -> dict[str, Any] | None:

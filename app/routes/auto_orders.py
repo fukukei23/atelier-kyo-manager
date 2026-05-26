@@ -9,6 +9,7 @@ from flask_login import login_required
 from app.extensions import db
 from app.models.order import Order
 from app.services.auto_order_service import AutoOrderService, OrderStatus
+from app.utils.decorators import handle_db_error
 
 from . import bp
 
@@ -17,12 +18,14 @@ from . import bp
 @login_required
 def auto_orders():
     """自動発注ステータス一覧"""
-    orders = Order.query.order_by(Order.order_date.desc()).all()
-    return render_template("auto_orders.html", orders=orders)
+    page = request.args.get("page", 1, type=int)
+    pagination = Order.query.order_by(Order.order_date.desc()).paginate(page=page, per_page=50, error_out=False)
+    return render_template("auto_orders.html", orders=pagination.items, pagination=pagination)
 
 
 @bp.post("/auto-orders/<int:oid>/start")
 @login_required
+@handle_db_error("main.auto_orders")
 def start_auto_order(oid: int):
     """自動発注開始"""
     order = Order.query.get_or_404(oid)
@@ -44,6 +47,7 @@ def start_auto_order(oid: int):
 
 @bp.post("/auto-orders/<int:oid>/step")
 @login_required
+@handle_db_error("main.auto_orders")
 def execute_auto_order_step(oid: int):
     """自動発注ステップ実行"""
     order = Order.query.get_or_404(oid)
@@ -59,6 +63,7 @@ def execute_auto_order_step(oid: int):
 
 @bp.post("/auto-orders/<int:oid>/error")
 @login_required
+@handle_db_error("main.auto_orders")
 def report_auto_order_error(oid: int):
     """エラー報告"""
     order = Order.query.get_or_404(oid)

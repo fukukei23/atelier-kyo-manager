@@ -119,7 +119,6 @@ def delete_order(oid: int):
 @login_required
 def api_order_dashboard():
     """18日ルールダッシュボードAPI"""
-    _utcnow()
     orders = Order.query.filter(Order.status.in_(["pending", "shipped"])).all()
     result = []
     for o in orders:

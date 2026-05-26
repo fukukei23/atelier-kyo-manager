@@ -160,7 +160,7 @@ def get_fx_table_jpy(
                 asof_str = cached.get("asof")
                 if asof_str:
                     asof = datetime.fromisoformat(asof_str.replace("Z", "+00:00"))
-                    if datetime.utcnow().replace(tzinfo=None) - asof.replace(tzinfo=None) <= timedelta(hours=ttl_hours):
+                    if datetime.now(timezone.utc).replace(tzinfo=None) - asof.replace(tzinfo=None) <= timedelta(hours=ttl_hours):
                         tbl = cached.get("table") or {}
                         if tbl:
                             meta.update({"source": "ecb(cache)", "asof": asof_str, "cache": True})
