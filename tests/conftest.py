@@ -3,9 +3,20 @@ pytest 設定とフック
 - テスト結果を自動的にファイルに保存
 """
 
+import asyncio
 import sys
 from datetime import datetime
 from pathlib import Path
+
+import pytest
+
+
+@pytest.fixture(scope="function")
+def event_loop():
+    """pytest-asyncio互換のevent_loopフィクスチャ"""
+    loop = asyncio.new_event_loop()
+    yield loop
+    loop.close()
 
 
 def pytest_configure(config):
