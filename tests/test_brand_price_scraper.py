@@ -1496,8 +1496,12 @@ class TestDedupSave:
 class TestRateLimit:
     """AA: API レート制限."""
 
-    def test_rapid_requests_return_429(self, auth_client):
+    @patch("app.routes.brand_prices.get_shared_searcher")
+    def test_rapid_requests_return_429(self, mock_get, auth_client):
         import time
+        mock_searcher = MagicMock()
+        mock_searcher.search_single.return_value = None
+        mock_get.return_value = mock_searcher
         resp1 = auth_client.post(
             "/api/buyma-search",
             data=json.dumps({"product_name": "Test", "brand": "Prada"}),

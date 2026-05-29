@@ -107,9 +107,25 @@ class TestCommissionRate:
         expected = 30000 * 0.077
         assert p.commission_fee() == expected
 
+    def test_commission_fee_zero_price(self):
+        p = Product(selling_price=0, source_type="domestic")
+        assert p.commission_fee() == 0.0
+
     def test_transfer_fee_constant(self):
         p = Product()
         assert p.transfer_fee() == 220.0
+
+
+class TestAutoClassifyTier:
+    def test_sets_brand_tier(self):
+        p = Product(name="test", purchase_price=100, selling_price=200, brand="Dior Saddle")
+        p.auto_classify_tier()
+        assert p.brand_tier == "high"
+
+    def test_no_brand_sets_low(self):
+        p = Product(name="test", purchase_price=100, selling_price=200, brand=None)
+        p.auto_classify_tier()
+        assert p.brand_tier == "low"
 
 
 class TestRecommendedSellingPrice:
@@ -190,3 +206,27 @@ class TestRecommendedSellingPrice:
         )
         result = p.recommended_selling_price()
         assert result == round(result, 0)
+
+
+class TestCalculateProfit:
+    def test_profit_calculation(self):
+        p = Product(
+            purchase_price=50000,
+            selling_price=80000,
+            transaction_fee=0,
+            shipping_cost=2000,
+            customs_duty=5000,
+            procurement_fee=0,
+            source_type="domestic",
+        )
+        profit = p.calculate_profit()
+        assert isinstance(profit, float)
+
+    def test_profit_rate(self):
+        p = Product(
+            purchase_price=50000,
+            selling_price=80000,
+            source_type="domestic",
+        )
+        rate = p.profit_rate()
+        assert isinstance(rate, float)
