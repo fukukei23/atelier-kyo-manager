@@ -1,6 +1,7 @@
 """
 pytest 設定とフック
 - テスト結果を自動的にファイルに保存
+- ルートテスト共通フィクスチャ（app/client/auth_client）
 """
 
 import asyncio
@@ -9,6 +10,56 @@ from datetime import datetime
 from pathlib import Path
 
 import pytest
+
+from app import create_app
+from app.extensions import db
+from app.models.user import User
+
+
+# ---------------------------------------------------------------------------
+# ルートテスト共通フィクスチャ
+# ---------------------------------------------------------------------------
+@pytest.fixture(scope="function")
+def _env(monkeypatch):
+    """create_app() より前に環境変数を設定し、Flask-SQLAlchemy が :memory: DB を使うようにする"""
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///:memory:")
+    monkeypatch.setenv("AK_STAGE", "test")
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+
+
+@pytest.fixture(scope="function")
+def routes_app(_env):
+    """ルートテスト用 Flask アプリ（in-memory SQLite）"""
+    application = create_app()
+    application.config.update({"TESTING": True, "WTF_CSRF_ENABLED": False})
+    with application.app_context():
+        yield application
+        db.session.remove()
+        db.drop_all()
+
+
+@pytest.fixture()
+def routes_client(routes_app):
+    """ルートテスト用 Flask テストクライアント"""
+    return routes_app.test_client()
+
+
+@pytest.fixture()
+def routes_test_user(routes_app):
+    """ルートテスト用ユーザー（ログイン用）"""
+    with routes_app.app_context():
+        u = User(username="testuser", display_name="Test", is_active=True)
+        u.set_password("password123")
+        db.session.add(u)
+        db.session.commit()
+    return {"username": "testuser", "password": "password123"}
+
+
+@pytest.fixture()
+def routes_auth_client(routes_client, routes_app, routes_test_user):
+    """認証済みルートテスト用クライアント"""
+    routes_client.post("/auth/login", data=routes_test_user, follow_redirects=False)
+    return routes_client
 
 
 @pytest.fixture(scope="function")
