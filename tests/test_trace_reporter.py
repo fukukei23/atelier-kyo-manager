@@ -8,7 +8,23 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.utils.trace_reporter import _event_time_ms, _fmt_epoch_ms, _summarize
+from app.utils.trace_reporter import (
+    _event_time_ms,
+    _find_all,
+    _fmt_epoch_ms,
+    _load_jsonl,
+    _summarize,
+)
+
+
+def _make_zip(files: dict[str, str]) -> io.BytesIO:
+    """インメモリ zipfile を作成"""
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as zf:
+        for name, content in files.items():
+            zf.writestr(name, content)
+    buf.seek(0)
+    return buf
 
 
 # ---------- _fmt_epoch_ms ----------
@@ -151,3 +167,132 @@ class TestSummarize:
         events = [{"type": "action", "apiName": "a"}]
         result = _summarize(events, wall_time_start_ms=1000000000000)
         assert result["actions"]["a"] == 1
+
+    def test_nav_type_alias(self):
+        """'nav' は 'navigation' に正規化される"""
+        events = [{"type": "nav", "url": "https://nav.com"}]
+        result = _summarize(events)
+        assert result["navigations"] == 1
+
+    def test_timestamp_usec_field(self):
+        """timestamp フィールドが 大きな値でも処理できる"""
+        events = [{"timestamp": 9466848000001000}]  # usec
+        result = _summarize(events)
+        assert result["event_count"] == 1
+
+    def test_ts_usec_field(self):
+        """ts フィールドが usec として処理される"""
+        events = [{"ts": 5000000000}]
+        result = _summarize(events)
+        assert result["event_count"] == 1
+
+    def test_metadata_start_time(self):
+        """metadata.startTime フィールドが処理される"""
+        events = [{"metadata": {"startTime": 1000000000000}}]
+        result = _summarize(events)
+        assert result["event_count"] == 1
+
+    def test_action_with_error(self):
+        """action event に error がある場合カウントされる"""
+        events = [{"type": "action", "apiName": "fill", "error": "timeout"}]
+        result = _summarize(events)
+        assert result["errors"] == 1
+
+    def test_large_ts_usec_conversion(self):
+        """ts > 9466848000000 の場合 1000 で割る"""
+        large_ts = 9466848000001 * 1000
+        events = [{"ts": large_ts}]
+        result = _summarize(events)
+        assert isinstance(result, dict)
+
+
+# ── _load_jsonl ───────────────────────────────────────────────────────────────
+
+class TestLoadJsonl:
+    def test_missing_file_returns_empty(self):
+        buf = _make_zip({})
+        with zipfile.ZipFile(buf) as zf:
+            result = _load_jsonl(zf, "missing.jsonl")
+        assert result == []
+
+    def test_loads_valid_jsonl(self):
+        content = '{"a": 1}\n{"b": 2}\n'
+        buf = _make_zip({"trace.jsonl": content})
+        with zipfile.ZipFile(buf) as zf:
+            result = _load_jsonl(zf, "trace.jsonl")
+        assert len(result) == 2
+        assert result[0] == {"a": 1}
+
+    def test_skips_invalid_json_lines(self):
+        content = '{"valid": 1}\nnot json\n{"also": 2}\n'
+        buf = _make_zip({"trace.jsonl": content})
+        with zipfile.ZipFile(buf) as zf:
+            result = _load_jsonl(zf, "trace.jsonl")
+        assert len(result) == 2
+
+    def test_skips_empty_lines(self):
+        content = '{"a": 1}\n\n\n{"b": 2}\n'
+        buf = _make_zip({"trace.jsonl": content})
+        with zipfile.ZipFile(buf) as zf:
+            result = _load_jsonl(zf, "trace.jsonl")
+        assert len(result) == 2
+
+    def test_skips_non_dict_json(self):
+        content = '[1,2,3]\n{"dict": true}\n'
+        buf = _make_zip({"trace.jsonl": content})
+        with zipfile.ZipFile(buf) as zf:
+            result = _load_jsonl(zf, "trace.jsonl")
+        assert len(result) == 1
+
+    def test_tries_multiple_candidates(self):
+        content = '{"found": true}\n'
+        buf = _make_zip({"second.jsonl": content})
+        with zipfile.ZipFile(buf) as zf:
+            result = _load_jsonl(zf, "first.jsonl", "second.jsonl")
+        assert result == [{"found": True}]
+
+    def test_returns_first_non_empty(self):
+        buf = _make_zip({
+            "first.jsonl": '{"x": 1}\n',
+            "second.jsonl": '{"y": 2}\n',
+        })
+        with zipfile.ZipFile(buf) as zf:
+            result = _load_jsonl(zf, "first.jsonl", "second.jsonl")
+        assert result == [{"x": 1}]
+
+
+# ── _find_all ─────────────────────────────────────────────────────────────────
+
+class TestFindAll:
+    def test_finds_files_by_extension(self):
+        buf = _make_zip({"a.trace": "", "b.trace": "", "c.other": ""})
+        with zipfile.ZipFile(buf) as zf:
+            result = _find_all(zf, ".trace")
+        assert "a.trace" in result
+        assert "b.trace" in result
+        assert "c.other" not in result
+
+    def test_prefix_filter(self):
+        buf = _make_zip({"traces/a.trace": "", "other/b.trace": ""})
+        with zipfile.ZipFile(buf) as zf:
+            result = _find_all(zf, ".trace", prefix="traces/")
+        assert "traces/a.trace" in result
+        assert "other/b.trace" not in result
+
+    def test_empty_zip_returns_empty(self):
+        buf = _make_zip({})
+        with zipfile.ZipFile(buf) as zf:
+            result = _find_all(zf, ".trace")
+        assert result == []
+
+    def test_no_prefix_matches_all(self):
+        buf = _make_zip({"dir1/a.png": "", "dir2/b.png": ""})
+        with zipfile.ZipFile(buf) as zf:
+            result = _find_all(zf, ".png")
+        assert len(result) == 2
+
+    def test_no_matching_extension(self):
+        buf = _make_zip({"a.txt": "", "b.log": ""})
+        with zipfile.ZipFile(buf) as zf:
+            result = _find_all(zf, ".trace")
+        assert result == []
