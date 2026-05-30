@@ -75,9 +75,9 @@ def overrides_json():
     }
 
 
-@pytest.fixture
+@pytest.fixture(scope="function")
 def orchestrator_with_sandbox():
-    """Sandbox 付き BrowserOrchestrator インスタンス"""
+    """Sandbox 付き BrowserOrchestrator インスタンス（関数ごとに独立生成）"""
     from app.agents.healing.self_healing_patch_agent import SelfHealingPatchAgent
     from app.agents.healing.self_healing_sandbox import SelfHealingSandbox
 

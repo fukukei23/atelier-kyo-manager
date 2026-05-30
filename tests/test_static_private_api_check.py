@@ -174,11 +174,12 @@ def check_file_for_private_api(file_path: Path) -> list[PrivateAPIViolation]:
         visitor.visit(tree)
 
         return visitor.violations
+    except (UnicodeDecodeError, OSError):
+        # ファイル読み込みエラーは違反として扱わない
+        # （バイナリファイルや権限问题是をスキップ）
+        return []
     except SyntaxError:
         # 構文エラーは違反として扱わない（別途lintで検出）
-        return []
-    except Exception:
-        # その他のエラーも無視
         return []
 
 
