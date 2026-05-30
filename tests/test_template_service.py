@@ -1,4 +1,4 @@
-"""template_service のテスト — DB依存はmock"""
+"""TemplateService のテスト — DB依存はmock"""
 
 import json
 from unittest.mock import MagicMock, patch
@@ -65,7 +65,7 @@ class TestGenerateBuymaCsv:
         products = [self._make_product()]
         csv_text, skipped = generate_buyma_csv(products)
         assert skipped == 0
-        assert "\ufeff" in csv_text  # BOM
+        assert "﻿" in csv_text  # BOM
         assert "テスト商品" in csv_text
         assert "Nike" in csv_text
 

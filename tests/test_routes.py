@@ -24,7 +24,10 @@ def app():
         db.create_all()
         yield app
         db.session.remove()
-        db.drop_all()
+        try:
+            db.drop_all()
+        except Exception:
+            pass  # テーブルがない場合は無視
 
 
 @pytest.fixture()

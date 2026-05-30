@@ -1,13 +1,4 @@
-"""Issue #73: notification_service.py カバレッジ 75→95%+
-
-Tests for uncovered paths:
-- L9-12: __init__ with app=None and with app
-- L14-16: init_app
-- L29-30: send with channel parameter
-- L40-41: requests exception handling
-- L52-55: send_order_status (error, same status, normal)
-- L68-75: send_pipeline_result (success, partial, failed, unknown)
-"""
+"""NotificationService のテスト — ユニットテスト（mock使用）"""
 
 from __future__ import annotations
 

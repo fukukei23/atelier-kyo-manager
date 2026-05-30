@@ -7,8 +7,9 @@ context issues with many sequential tests.
 from __future__ import annotations
 
 import os
-import tempfile
+from pathlib import Path
 from datetime import datetime, timedelta
+import uuid
 
 import pytest
 
@@ -26,22 +27,28 @@ from app.models.stock_check import StockCheck
 
 
 @pytest.fixture(scope="function")
-def app():
-    """In-memory SQLite Flask app for testing."""
-    app = create_app()
-    app.config.update(
+def app(tmp_path_factory, monkeypatch):
+    """Temp-file SQLite Flask app for testing — 各テストで独立したDBを使用"""
+    db_dir = tmp_path_factory.mktemp("db")
+    db_path = str(db_dir / "test.db")
+
+    # create_app前にDATABASE_URLをセット（AppConfig.get_db_url()据此）
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
+
+    application = create_app()
+    application.config.update(
         {
             "TESTING": True,
-            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
             "WTF_CSRF_ENABLED": False,
             "SECRET_KEY": "test-secret",
         }
     )
-    with app.app_context():
-        db.create_all()
-        yield app
+    with application.app_context():
+        yield application
         db.session.remove()
         db.drop_all()
+    if Path(db_path).exists():
+        Path(db_path).unlink()
 
 
 # =====================================================================
