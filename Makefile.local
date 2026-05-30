@@ -11,3 +11,30 @@ run-server: venv
 run-buyma-tests: venv
 	$(PYTHON) -m pytest -q tests/buyma
 
+# --- テスト系（scripts/dev/ 重複スクリプト統合） ---
+
+.PHONY: test-save
+test-save: venv
+	@echo ">>> pytest with output save..."
+	@$(PYTHON) -m pytest tests/ -v --tb=short 2>&1 | tee test_results_$$(date +%Y%m%d_%H%M%S).txt
+
+.PHONY: test-loop
+test-loop: venv
+	@echo ">>> pytest in loop (Ctrl+C to stop)..."
+	@while true; do $(PYTHON) -m pytest tests/ -q --tb=short 2>&1; echo "--- $$(date) ---"; sleep 5; done
+
+.PHONY: test-watch
+test-watch: venv
+	@echo ">>> Continuous tests (2h, 5min interval)..."
+	@$(PYTHON) scripts/dev/run_tests_continuous.py
+
+.PHONY: test-smoke
+test-smoke: venv
+	@echo ">>> Smoke test: FILE=<path> make test-smoke"
+	@$(PYTHON) -m pytest $(FILE) -v --tb=short
+
+.PHONY: diagnostics
+diagnostics: venv
+	@echo ">>> Run diagnostics..."
+	@$(PYTHON) scripts/run_moncler_drission_diagnostics.py $$DIAG_ARGS
+

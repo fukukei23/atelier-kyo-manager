@@ -7,8 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
-# プロジェクトルートをパスに追加
-project_root = Path(__file__).resolve().parent
+# プロジェクトルートをパスに追加（scripts/dev/ → プロジェクトルート）
+project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 # 仮想環境の Python を探す
