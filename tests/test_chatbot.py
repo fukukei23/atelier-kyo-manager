@@ -19,7 +19,7 @@ _mock_llm.quick = MagicMock()
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def app():
     app = create_app()
     app.config["TESTING"] = True

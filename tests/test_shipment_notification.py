@@ -12,7 +12,7 @@ from app.utils.presentation import shipment_status_label
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def app():
     app = create_app()
     app.config["TESTING"] = True
