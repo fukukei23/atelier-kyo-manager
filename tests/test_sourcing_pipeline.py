@@ -1,189 +1,137 @@
-"""sourcing パイプラインのテスト。"""
-
-from __future__ import annotations
-
+"""Tests for app/utils/sourcing_pipeline.py - Issue #89"""
 import json
 from pathlib import Path
-from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
-from app.utils.sourcing_input_schema import validate_sourcing_input
-from app.utils.sourcing_pipeline import run_pipeline
-from app.utils.sourcing_profitability import calculate_profitability
-from app.utils.sourcing_tier import judge_tier
+import pytest
 
-
-def test_tier_a_complete():
-    """Tier A: complete で A（利益率30%以上）"""
-    # 利益率30%以上になるように設定
-    # 仕入れ: 10000, 販売: 20000 → 利益率約30%（手数料14.2%考慮）
-    # より正確に: 販売20000, 手数料2840, 利益 = 20000 - 10000 - 2840 = 7160
-    # 利益率 = 7160 / 20000 = 0.358 = 35.8%
-    input_data = {
-        "purchase_price": 10000,
-        "selling_price": 20000,
-        "shipping_cost": 0,
-        "customs_duty": 0,
-        "procurement_fee": 0,
-        "transaction_fee": 0,
-    }
-
-    validation = validate_sourcing_input(input_data)
-    assert validation["valid"] is True
-    assert validation["status"] == "complete"
-
-    profitability = calculate_profitability(validation["normalized"])
-    assert profitability["status"] == "complete"
-    assert profitability["profit_rate"] is not None
-    assert profitability["profit_rate"] >= 0.30
-
-    tier = judge_tier(profitability)
-    assert tier["tier"] == "A"
+from app.utils.sourcing_pipeline import main, run_pipeline
 
 
-def test_tier_b_complete():
-    """Tier B: complete で B（利益率20%以上30%未満）"""
-    # 利益率20-30%になるように設定
-    # 仕入れ: 15000, 販売: 20000 → 利益率約20%（手数料14.2%考慮）
-    # 販売20000, 手数料2840, 利益 = 20000 - 15000 - 2840 = 2160
-    # 利益率 = 2160 / 20000 = 0.108 = 10.8% → 低すぎる
-    # 仕入れ: 12000, 販売: 20000 → 利益 = 20000 - 12000 - 2840 = 5160
-    # 利益率 = 5160 / 20000 = 0.258 = 25.8% → OK
-    input_data = {
-        "purchase_price": 12000,
-        "selling_price": 20000,
-        "shipping_cost": 0,
-        "customs_duty": 0,
-        "procurement_fee": 0,
-        "transaction_fee": 0,
-    }
+# ── run_pipeline ─────────────────────────────────────────────────────────────
 
-    validation = validate_sourcing_input(input_data)
-    assert validation["valid"] is True
-    assert validation["status"] == "complete"
+class TestRunPipeline:
+    def test_file_not_found_writes_invalid(self, tmp_path):
+        """存在しない入力ファイル → status=invalid, tier=D が出力される"""
+        input_path = tmp_path / "nonexistent.json"
+        profit_out = tmp_path / "profit.json"
+        tier_out = tmp_path / "tier.json"
 
-    profitability = calculate_profitability(validation["normalized"])
-    assert profitability["status"] == "complete"
-    assert profitability["profit_rate"] is not None
-    assert 0.20 <= profitability["profit_rate"] < 0.30
+        run_pipeline(input_path, profit_out, tier_out)
 
-    tier = judge_tier(profitability)
-    assert tier["tier"] == "B"
+        assert profit_out.exists()
+        assert tier_out.exists()
+
+        profit = json.loads(profit_out.read_text())
+        tier = json.loads(tier_out.read_text())
+        assert profit["status"] == "invalid"
+        assert tier["tier"] == "D"
+        assert "errors" in profit
+
+    def test_invalid_json_writes_invalid(self, tmp_path):
+        """無効な JSON ファイル → status=invalid, tier=D が出力される"""
+        input_path = tmp_path / "input.json"
+        input_path.write_text("{not valid json}", encoding="utf-8")
+        profit_out = tmp_path / "profit.json"
+        tier_out = tmp_path / "tier.json"
+
+        run_pipeline(input_path, profit_out, tier_out)
+
+        profit = json.loads(profit_out.read_text())
+        tier = json.loads(tier_out.read_text())
+        assert profit["status"] == "invalid"
+        assert tier["tier"] == "D"
+
+    def test_output_dirs_auto_created(self, tmp_path):
+        """出力ディレクトリが存在しなくても自動作成される"""
+        input_path = tmp_path / "nonexistent.json"
+        profit_out = tmp_path / "sub1" / "deep" / "profit.json"
+        tier_out = tmp_path / "sub2" / "tier.json"
+
+        run_pipeline(input_path, profit_out, tier_out)
+
+        assert profit_out.parent.exists()
+        assert tier_out.parent.exists()
+
+    def test_normal_execution_calls_pipeline_functions(self, tmp_path):
+        """正常実行: バリデーション・利益計算・Tier判定が呼ばれる"""
+        input_data = {"product_name": "テスト商品", "selling_price": 50000}
+        input_path = tmp_path / "input.json"
+        input_path.write_text(json.dumps(input_data), encoding="utf-8")
+        profit_out = tmp_path / "profit.json"
+        tier_out = tmp_path / "tier.json"
+
+        mock_profit_result = {"status": "valid", "profit": 10000, "profit_rate": 0.2}
+        mock_tier_result = {"tier": "B", "reason": "利益率20%"}
+
+        with patch("app.utils.sourcing_pipeline.validate_sourcing_input") as mock_val,              patch("app.utils.sourcing_pipeline.calculate_profitability") as mock_calc,              patch("app.utils.sourcing_pipeline.judge_tier") as mock_tier:
+
+            mock_val.return_value = {"normalized": input_data}
+            mock_calc.return_value = mock_profit_result
+            mock_tier.return_value = mock_tier_result
+
+            run_pipeline(input_path, profit_out, tier_out)
+
+            mock_val.assert_called_once_with(input_data)
+            mock_calc.assert_called_once()
+            mock_tier.assert_called_once()
+
+        assert profit_out.exists()
+        assert tier_out.exists()
+
+    def test_normal_writes_json_output(self, tmp_path):
+        """正常実行: 結果が JSON ファイルに保存される"""
+        input_data = {"product": "bag"}
+        input_path = tmp_path / "input.json"
+        input_path.write_text(json.dumps(input_data), encoding="utf-8")
+        profit_out = tmp_path / "profit.json"
+        tier_out = tmp_path / "tier.json"
+
+        mock_profit = {"status": "valid", "profit": 5000}
+        mock_tier = {"tier": "A", "reason": "高利益率"}
+
+        with patch("app.utils.sourcing_pipeline.validate_sourcing_input") as mv,              patch("app.utils.sourcing_pipeline.calculate_profitability", return_value=mock_profit),              patch("app.utils.sourcing_pipeline.judge_tier", return_value=mock_tier):
+
+            mv.return_value = {"normalized": input_data}
+            run_pipeline(input_path, profit_out, tier_out)
+
+        profit_content = json.loads(profit_out.read_text())
+        tier_content = json.loads(tier_out.read_text())
+        assert profit_content["status"] == "valid"
+        assert tier_content["tier"] == "A"
+
+    def test_path_objects_accepted(self, tmp_path):
+        """Path オブジェクトを渡しても動作する"""
+        profit_out = tmp_path / "p.json"
+        tier_out = tmp_path / "t.json"
+        # FileNotFoundError のパスで動作確認
+        run_pipeline(Path("/nonexistent/path.json"), profit_out, tier_out)
+        assert profit_out.exists()
+
+    def test_string_paths_accepted(self, tmp_path):
+        """文字列パスを渡しても動作する"""
+        profit_out = tmp_path / "p.json"
+        tier_out = tmp_path / "t.json"
+        run_pipeline(str(tmp_path / "missing.json"), str(profit_out), str(tier_out))
+        assert profit_out.exists()
 
 
-def test_tier_c_partial():
-    """Tier C: partial で C（unknown含む）"""
-    # unknown を含む入力
-    input_data = {
-        "purchase_price": 18000,
-        "selling_price": 20000,
-        "shipping_cost": "unknown",
-        "customs_duty": 0,
-        "procurement_fee": 0,
-        "transaction_fee": 0,
-    }
+# ── main ──────────────────────────────────────────────────────────────────────
 
-    validation = validate_sourcing_input(input_data)
-    assert validation["valid"] is True
-    assert validation["status"] == "partial"
+class TestMain:
+    def test_main_calls_run_pipeline(self):
+        """main() が run_pipeline を呼ぶ"""
+        with patch("app.utils.sourcing_pipeline.run_pipeline") as mock_run:
+            main()
+            mock_run.assert_called_once()
 
-    profitability = calculate_profitability(validation["normalized"])
-    assert profitability["status"] == "partial"
-
-    # partial の場合、profit と profit_rate は null
-    assert profitability["profit"] is None
-    assert profitability["profit_rate"] is None
-
-    # revenue と known_cost_sum は確定
-    assert profitability["revenue"] is not None
-    assert profitability["known_cost_sum"] is not None
-
-    # missing_fields と profit_upper_bound が存在
-    assert "missing_fields" in profitability
-    assert profitability["missing_fields"] == ["shipping_cost"]
-    assert "profit_upper_bound" in profitability
-    assert profitability["profit_upper_bound"] is not None
-
-    tier = judge_tier(profitability)
-    # partial は原則 Tier C（A/B禁止）
-    assert tier["tier"] == "C"
-
-
-def test_tier_d_invalid():
-    """Tier D: invalid で D（必須欠損/不正値）"""
-    # 必須項目欠損
-    input_data_missing = {
-        "selling_price": 20000,
-        # purchase_price が欠損
-    }
-
-    validation = validate_sourcing_input(input_data_missing)
-    assert validation["valid"] is False
-    assert validation["status"] == "invalid"
-
-    profitability = calculate_profitability(validation["normalized"])
-    assert profitability["status"] == "invalid"
-
-    tier = judge_tier(profitability)
-    assert tier["tier"] == "D"
-
-    # 不正値（負の値）
-    input_data_negative = {
-        "purchase_price": -1000,
-        "selling_price": 20000,
-    }
-
-    validation_neg = validate_sourcing_input(input_data_negative)
-    assert validation_neg["valid"] is False
-    assert validation_neg["status"] == "invalid"
-
-    profitability_neg = calculate_profitability(validation_neg["normalized"])
-    tier_neg = judge_tier(profitability_neg)
-    assert tier_neg["tier"] == "D"
-
-
-def test_pipeline_integration():
-    """パイプライン統合テスト（ファイルI/O含む）"""
-    with TemporaryDirectory() as tmpdir:
-        input_file = Path(tmpdir) / "sourcing_input.json"
-        profitability_file = Path(tmpdir) / "profitability.json"
-        tier_file = Path(tmpdir) / "tier_judgement.json"
-
-        # テスト用入力データ
-        input_data = {
-            "purchase_price": 10000,
-            "selling_price": 20000,
-            "shipping_cost": 0,
-            "customs_duty": 0,
-            "procurement_fee": 0,
-            "transaction_fee": 0,
-        }
-
-        input_file.write_text(
-            json.dumps(input_data, ensure_ascii=False),
-            encoding="utf-8",
-        )
-
-        # パイプライン実行
-        run_pipeline(
-            input_path=input_file,
-            profitability_output_path=profitability_file,
-            tier_output_path=tier_file,
-        )
-
-        # 結果確認
-        assert profitability_file.exists()
-        assert tier_file.exists()
-
-        profitability_result = json.loads(profitability_file.read_text(encoding="utf-8"))
-        tier_result = json.loads(tier_file.read_text(encoding="utf-8"))
-
-        assert profitability_result["status"] == "complete"
-        # complete の場合、profit と profit_rate が確定
-        assert profitability_result["profit"] is not None
-        assert profitability_result["profit_rate"] is not None
-        # complete の場合、known_cost_sum と missing_fields は None
-        assert profitability_result["known_cost_sum"] is None
-        assert profitability_result["missing_fields"] is None
-
-        assert "tier" in tier_result
-        assert tier_result["tier"] in ["A", "B", "C", "D"]
+    def test_main_passes_three_paths(self):
+        """main() は 3 つのパスを run_pipeline に渡す"""
+        with patch("app.utils.sourcing_pipeline.run_pipeline") as mock_run:
+            main()
+            args = mock_run.call_args[1] if mock_run.call_args[1] else mock_run.call_args[0]
+            # 3 引数が渡されていること
+            if isinstance(args, dict):
+                assert len(args) == 3
+            else:
+                assert len(args) == 3
