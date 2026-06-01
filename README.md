@@ -12,10 +12,15 @@ BUYMA x Buyandshipを利用した転売管理システム（個人用）。出�
 
 ## スクリーンショット
 
+### 操作デモ（GIF）
+
 <p align="center">
-  <img src="docs/screenshots/demo-flow.gif" width="600" alt="操作デモ（ログイン→ダッシュボード→商品→注文→キャッシュフロー）">
-  <br><b>操作デモ（ログイン → 各画面遷移）</b>
+  <img src="docs/screenshots/demo-flow.gif" width="600" alt="操作デモ">
 </p>
+
+> ログイン → ダッシュボード（売上・注文状況を一覧表示） → 商品管理（仕入商品のCRUD・出品パイプライン実行） → 注文管理（18日ルールに基づく自動発注ステートマシン） → キャッシュフロー（月次の入出金・利益予測） の流れを1つのアニメーションで確認できます。Flask + SQLAlchemyで構築された転売管理システムの全体像です。
+
+### 各画面の詳細
 
 <table>
   <tr>
@@ -29,6 +34,11 @@ BUYMA x Buyandshipを利用した転売管理システム（個人用）。出�
     <td><img src="docs/screenshots/03-orders.png" width="300" alt="Orders"></td>
   </tr>
   <tr>
+    <td>売上推移・未処理注文数・在庫アラートを一覧表示。BUYMA/Buyandshipの両方のデータを集約</td>
+    <td>仕入商品の登録・編集・CSV一括登録。画像収集→AI背景除去→AI説明文生成の出品パイプラインをここから実行</td>
+    <td>注文の状態遷移（pending→sourcing→shipped→completed）を管理。18日ルールに基づく延長期限を決済方法別に自動計算</td>
+  </tr>
+  <tr>
     <td align="center"><b>分析</b></td>
     <td align="center"><b>キャッシュフロー</b></td>
     <td align="center"><b>リサーチ</b></td>
@@ -39,22 +49,34 @@ BUYMA x Buyandshipを利用した転売管理システム（個人用）。出�
     <td><img src="docs/screenshots/06-research.png" width="300" alt="Research"></td>
   </tr>
   <tr>
-    <td align="center" colspan="3"><b>モバイル表示</b></td>
+    <td>ブランド別・カテゴリ別の売上分析。利益率の高い仕入先を特定し、仕入戦略の意思決定を支援</td>
+    <td>月次の入出金スケジュール・利益予測。為替変動を考慮した実際の利益額を計算</td>
+    <td>海外仕入先サイトからPlaywrightで価格・在庫を自動取得。国別にリサーチ結果を管理</td>
+  </tr>
+  <tr>
+    <td align="center" colspan="3"><b>モバイル表示（レスポンシブ対応）</b></td>
   </tr>
   <tr>
     <td align="center" colspan="3"><img src="docs/screenshots/07-mobile.png" width="200" alt="Mobile"></td>
   </tr>
+  <tr>
+    <td align="center" colspan="3">スマートフォンからも全機能にアクセス可能。外出先でも注文状況確認・価格チェックができる</td>
+  </tr>
 </table>
+
+### 価格スクレイピング（バックエンド処理）
 
 <p align="center">
   <img src="docs/screenshots/price-scraping.png" width="500" alt="価格スクレイピング実行ログ">
-  <br><b>価格スクレイピング: Playwright/BeautifulSoupで仕入先サイトから価格・在庫を自動取得</b>
 </p>
+
+> `PriceScraper` がPlaywright/BeautifulSoupで仕入先サイトにアクセスし、商品名・価格・在庫状況を自動取得する実行ログ。為替レートを自動適用してEUR/USD → JPY換算を行い、24時間キャッシュで高速化。「売切れ」「在庫切れ」などのキーワードで在庫切れを自動判定します。
 
 <p align="center">
   <img src="docs/screenshots/scraping-demo.gif" width="600" alt="リサーチ画面操作デモ">
-  <br><b>リサーチ画面: 国選択 → 価格取得 → 商品管理へ反映</b>
 </p>
+
+> リサーチ画面の操作フロー: 国（アメリカ・イギリス・イタリア等）を選択 → 「取得」ボタンでスクレイピング実行 → 結果を商品管理ページに反映。仕入先の価格変動をリアルタイムにキャッチします。
 
 ---
 
