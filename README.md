@@ -12,6 +12,11 @@ BUYMA x Buyandshipを利用した転売管理システム（個人用）。出�
 
 ## スクリーンショット
 
+<p align="center">
+  <img src="docs/screenshots/demo-flow.gif" width="600" alt="操作デモ（ログイン→ダッシュボード→商品→注文→キャッシュフロー）">
+  <br><b>操作デモ（ログイン → 各画面遷移）</b>
+</p>
+
 <table>
   <tr>
     <td align="center"><b>ダッシュボード</b></td>
