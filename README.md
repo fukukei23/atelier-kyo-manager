@@ -46,6 +46,16 @@ BUYMA x Buyandshipを利用した転売管理システム（個人用）。出�
   </tr>
 </table>
 
+<p align="center">
+  <img src="docs/screenshots/price-scraping.png" width="500" alt="価格スクレイピング実行ログ">
+  <br><b>価格スクレイピング: Playwright/BeautifulSoupで仕入先サイトから価格・在庫を自動取得</b>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/scraping-demo.gif" width="600" alt="リサーチ画面操作デモ">
+  <br><b>リサーチ画面: 国選択 → 価格取得 → 商品管理へ反映</b>
+</p>
+
 ---
 
 ## 特徴
