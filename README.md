@@ -5,8 +5,41 @@ A personal resale management system for BUYMA x Buyandship. Automates product li
 BUYMA x Buyandshipを利用した転売管理システム（個人用）。出品パイプライン、注文ステートマシン、顧客対応AIチャットボット、LLMルーティングを統合したFlaskアプリケーション。
 
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-967%20passing-green)]()
+[![Tests](https://img.shields.io/badge/tests-2%2C070%20passing-green)]()
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+
+---
+
+## スクリーンショット
+
+<table>
+  <tr>
+    <td align="center"><b>ダッシュボード</b></td>
+    <td align="center"><b>商品管理</b></td>
+    <td align="center"><b>注文管理</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/01-dashboard.png" width="300" alt="Dashboard"></td>
+    <td><img src="docs/screenshots/02-products.png" width="300" alt="Products"></td>
+    <td><img src="docs/screenshots/03-orders.png" width="300" alt="Orders"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>分析</b></td>
+    <td align="center"><b>キャッシュフロー</b></td>
+    <td align="center"><b>リサーチ</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/04-analytics.png" width="300" alt="Analytics"></td>
+    <td><img src="docs/screenshots/05-cashflow.png" width="300" alt="Cashflow"></td>
+    <td><img src="docs/screenshots/06-research.png" width="300" alt="Research"></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="3"><b>モバイル表示</b></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="3"><img src="docs/screenshots/07-mobile.png" width="200" alt="Mobile"></td>
+  </tr>
+</table>
 
 ---
 
@@ -80,7 +113,7 @@ Flask App Factory (create_app)
 | スクレイピング | Playwright / Selenium |
 | 画像処理 | Pillow / OpenCV / rembg |
 | LLM | OpenAI API / Gemini API / Local LLM |
-| テスト | pytest (647 tests) |
+| テスト | pytest (2,070 tests) |
 
 ---
 
@@ -120,7 +153,7 @@ flask run              # 開発サーバー起動
 
 | 指標 | 値 |
 |------|-----|
-| テスト数 | 967 テストケース（pytest） |
+| テスト数 | 2,070 テストケース（pytest） |
 | モジュール数 | routes 14 + services 8 + models 16 + utils 20+ |
 | LLMプロバイダー | OpenAI / Gemini / Local LLM |
 | データベース | SQLite + Flask-Migrate |
