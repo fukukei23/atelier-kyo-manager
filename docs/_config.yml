@@ -1,0 +1,15 @@
+title: Atelier Kyo Manager
+description: BUYMA × Buyandship 転売管理システム — 機能ショーケース
+remote_theme: just-the-docs/just-the-docs
+
+baseurl: /atelier-kyo-manager
+url: https://fukukei23.github.io
+
+color_scheme: light
+search_enabled: true
+
+aux_links:
+  "GitHub リポジトリ":
+    - "https://github.com/fukukei23/atelier-kyo-manager"
+
+nav_enabled: true
