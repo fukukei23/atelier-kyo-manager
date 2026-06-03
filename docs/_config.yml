@@ -9,7 +9,7 @@ color_scheme: light
 search_enabled: true
 
 aux_links:
-  "GitHub リポジトリ":
+  "📂 GitHub リポジトリ":
     - "https://github.com/fukukei23/atelier-kyo-manager"
 
 nav_enabled: true

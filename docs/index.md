@@ -5,6 +5,8 @@ nav_order: 1
 
 # Atelier Kyo Manager
 
+> 📂 **[GitHub リポジトリ →](https://github.com/fukukei23/atelier-kyo-manager)**{: .btn .btn-blue } — ソースコード・テスト・技術詳細はこちら
+
 BUYMA × Buyandshipを利用した転売管理システム（個人用）。出品パイプライン、注文ステートマシン、AIチャットボット、LLMルーティングを統合したFlaskアプリケーション。
 
 ## 操作デモ
