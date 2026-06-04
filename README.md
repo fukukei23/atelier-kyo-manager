@@ -12,6 +12,37 @@ BUYMA x Buyandshipを利用した転売管理システム（個人用）。出�
 
 ## スクリーンショット
 
+### CLI デモ（GIF）
+
+<table>
+  <tr>
+    <td align="center"><b>ダッシュボード</b></td>
+    <td align="center"><b>注文ステートマシン</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/demo/gifs/01_dashboard.gif" width="280" alt="Dashboard CLI"></td>
+    <td><img src="docs/demo/gifs/02_orders.gif" width="280" alt="Orders CLI"></td>
+  </tr>
+  <tr>
+    <td>売上概要・商品一覧・システム状態</td>
+    <td>18日ルールの注文状態遷移</td>
+  </tr>
+  <tr>
+    <td align="center"><b>価格スクレイピング</b></td>
+    <td align="center"><b>テストスイート</b></td>
+  </tr>
+  <tr>
+    <td><img src="docs/demo/gifs/03_scraping.gif" width="280" alt="Scraping CLI"></td>
+    <td><img src="docs/demo/gifs/04_tests.gif" width="280" alt="Tests CLI"></td>
+  </tr>
+  <tr>
+    <td>Playwrightで海外サイト価格自動取得</td>
+    <td>2,070テスト全通過（カバレッジ78.5%）</td>
+  </tr>
+</table>
+
+### 操作デモ（GIF）
+
 <p align="center">
   <img src="docs/screenshots/demo-flow.gif" width="600" alt="操作デモ">
 </p>
