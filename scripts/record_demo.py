@@ -57,19 +57,19 @@ SCENES = [
 
 $ python -m app.cli dashboard
 
-📊 売上ダッシュボード
+[STAT] 売上ダッシュボード
 ---------------------------
 本日: ¥45,200 (目標 ¥50,000)
 今月: ¥1,234,500 (前月比 +12.3%)
 未処理注文: 3件
 
-📦 商品一覧
+[BOX] 商品一覧
 ---------------------------
 SKU-001  coach bag  在庫:12  ¥89,000
 SKU-002  wallet    在庫:8   ¥32,000
 SKU-003  sneakers  在庫:5   ¥67,000
 
-✅ システム正常稼働"""
+[OK] システム正常稼働"""
     },
     {
         "id": 2,
@@ -83,19 +83,19 @@ SKU-003  sneakers  在庫:5   ¥67,000
 
 $ python -m app.cli orders --list
 
-📋 注文一覧
+[LIST] 注文一覧
 ---------------------------
 #1023  pending  → 2026-06-12期限
 #1024  sourcing → 2026-06-15期限
 #1025  shipped  → 2026-06-20到着予定
 
-🔄 自動状态遷移
+[AUTO] 自動状态遷移
 ---------------------------
 pending → sourcing → shipped → completed
          ↕         ↕
       Buyandship 出庫待ち  通関中
 
-⚠️ 18日ルール適用:
+[WARN] 18日ルール適用:
   カード払い: 18日以内に出庫
   銀行振込み: 18日+N日以内"""
     },
@@ -111,18 +111,18 @@ pending → sourcing → shipped → completed
 
 $ python -m app.cli research --country US
 
-🌐 スクレイピング実行中...
+[WEB] スクレイピング実行中...
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 URL: https://example.com/bags
-✅ 取得成功: 12商品
+[OK] 取得成功: 12商品
 
-📊 結果（USD → JPY 149.5）
+[STAT] 結果（USD → JPY 149.5）
 ---------------------------
 Coach Tabby    $298 → ¥44,551
 Coach Swagger  $245 → ¥36,627
 Michael Kors    $189 → ¥28,240
 
-💾 データベース保存完了
+[SAVE] データベース保存完了
    price_cache: 12件更新"""
     },
     {
@@ -141,8 +141,8 @@ tests collected: 2070
 passed        2068
 failed           0
 
-✅ 全テスト通過 (99.9%)
-📊 カバレッジ: 78.5%"""
+[OK] 全テスト通過 (99.9%)
+[STAT] カバレッジ: 78.5%"""
     },
 ]
 
@@ -211,9 +211,9 @@ def cast_to_png_frames(cast_path: Path, png_dir: Path, fps: int, duration: float
                             color = PROMPT_COLOR
                         elif line_text.startswith("===") or line_text.startswith("---"):
                             color = HEADER_COLOR
-                        elif line_text.startswith("✅") or line_text.startswith("passed"):
+                        elif line_text.startswith("[OK]") or line_text.startswith("passed"):
                             color = GREEN
-                        elif line_text.startswith("⚠️") or line_text.startswith("❌"):
+                        elif line_text.startswith("[WARN]") or line_text.startswith("[FAIL]"):
                             color = RED
                         else:
                             color = TEXT_COLOR
@@ -226,9 +226,9 @@ def cast_to_png_frames(cast_path: Path, png_dir: Path, fps: int, duration: float
         png_files.append(frame_path)
 
         if (i + 1) % 50 == 0:
-            print(f"   📊 {i + 1}/{total_frames} フレーム")
+            print(f"   [STAT] {i + 1}/{total_frames} フレーム")
 
-    print(f"   ✅ PNG生成完了: {len(png_files)} フレーム")
+    print(f"   [OK] PNG生成完了: {len(png_files)} フレーム")
     return png_files
 
 
@@ -251,10 +251,10 @@ def png_to_gif(png_files: list, gif_path: Path, fps: int) -> bool:
             "-vf", f"fps={fps},split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
             "-loop", "0", str(gif_path)
         ], check=True, capture_output=True)
-        print(f"   ✅ GIF生成: {gif_path.name} ({gif_path.stat().st_size // 1024}KB)")
+        print(f"   [OK] GIF生成: {gif_path.name} ({gif_path.stat().st_size // 1024}KB)")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"   ❌ GIF生成失敗")
+        print(f"   [FAIL] GIF生成失敗")
         return False
     finally:
         Path(concat_file).unlink()
@@ -280,10 +280,10 @@ def png_to_mp4(png_files: list, mp4_path: Path, fps: int) -> bool:
             "-c:v", "libx264", "-preset", "fast", "-crf", "23",
             str(mp4_path)
         ], check=True, capture_output=True)
-        print(f"   ✅ MP4生成: {mp4_path.name} ({mp4_path.stat().st_size // 1024}KB)")
+        print(f"   [OK] MP4生成: {mp4_path.name} ({mp4_path.stat().st_size // 1024}KB)")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"   ❌ MP4生成失敗")
+        print(f"   [FAIL] MP4生成失敗")
         return False
     finally:
         Path(concat_file).unlink()
@@ -305,7 +305,7 @@ def generate_sample_cast(scene: dict) -> Path:
 
         f.write(json.dumps([round(timestamp, 4), "o", "$ "]) + "\n")
 
-    print(f"   ✅ Cast生成: {cast_path.name}")
+    print(f"   [OK] Cast生成: {cast_path.name}")
     return cast_path
 
 
@@ -348,7 +348,7 @@ def main():
     ensure_dirs()
 
     if args.list:
-        print("\n📋 シーン一覧:")
+        print("\n[LIST] シーン一覧:")
         for s in SCENES:
             print(f"  {s['id']}. {s['title']} ({s['duration']}秒)")
         return
@@ -362,11 +362,11 @@ def main():
             result = process_scene(scene, generate=True)
             results.append(result)
         except Exception as e:
-            print(f"\n❌ エラー: {e}")
+            print(f"\n[FAIL] エラー: {e}")
             continue
 
     success = sum(1 for r in results if r["success"])
-    print(f"\n✅ 成功: {success}/{len(results)} シーン")
+    print(f"\n[OK] 成功: {success}/{len(results)} シーン")
 
 
 if __name__ == "__main__":

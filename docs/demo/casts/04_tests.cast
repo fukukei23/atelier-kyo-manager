@@ -1,4 +1,4 @@
-{"version": 2, "width": 80, "height": 24, "timestamp": 1780547294, "env": {"TERM": "xterm-256color"}}
+{"version": 2, "width": 80, "height": 24, "timestamp": 1780575246, "env": {"TERM": "xterm-256color"}}
 [0.0, "o", "=== \u30c6\u30b9\u30c8\u5b9f\u884c ===\r\n"]
 [0.15, "o", "\r\n"]
 [0.3, "o", "$ python -m pytest tests/ -x -q\r\n"]
@@ -7,6 +7,6 @@
 [0.75, "o", "passed        2068\r\n"]
 [0.9, "o", "failed           0\r\n"]
 [1.05, "o", "\r\n"]
-[1.2, "o", "\u2705 \u5168\u30c6\u30b9\u30c8\u901a\u904e (99.9%)\r\n"]
-[1.35, "o", "\ud83d\udcca \u30ab\u30d0\u30ec\u30c3\u30b8: 78.5%\r\n"]
+[1.2, "o", "[OK] \u5168\u30c6\u30b9\u30c8\u901a\u904e (99.9%)\r\n"]
+[1.35, "o", "[STAT] \u30ab\u30d0\u30ec\u30c3\u30b8: 78.5%\r\n"]
 [1.5, "o", "$ "]
