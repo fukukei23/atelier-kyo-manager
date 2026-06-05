@@ -151,7 +151,7 @@ class TestImportProductsFromCsv:
     def test_imports_valid_rows(self):
         csv_content = "name,brand,purchase_price,selling_price\nJacket,Moncler,50000,80000\nShoes,Gucci,40000,60000"
         session = MagicMock()
-        count = import_products_from_csv(csv_content, session)
+        count, warnings = import_products_from_csv(csv_content, session)
         assert count == 2
         assert session.add.call_count == 2
         session.commit.assert_called_once()
@@ -159,20 +159,55 @@ class TestImportProductsFromCsv:
     def test_skips_rows_without_name(self):
         csv_content = "name,brand,purchase_price,selling_price\n,Moncler,50000,80000\nShoes,Gucci,40000,60000"
         session = MagicMock()
-        count = import_products_from_csv(csv_content, session)
+        count, warnings = import_products_from_csv(csv_content, session)
         assert count == 1
 
     def test_skips_rows_without_prices(self):
         csv_content = "name,brand,purchase_price,selling_price\nJacket,Moncler,,\nShoes,Gucci,40000,60000"
         session = MagicMock()
-        count = import_products_from_csv(csv_content, session)
+        count, warnings = import_products_from_csv(csv_content, session)
         assert count == 1
 
     def test_empty_csv_returns_zero(self):
         csv_content = "name,brand,purchase_price,selling_price\n"
         session = MagicMock()
-        count = import_products_from_csv(csv_content, session)
+        count, warnings = import_products_from_csv(csv_content, session)
         assert count == 0
+
+    def test_detects_double_currency_conversion(self):
+        """purchase_price=180810 + EUR + rate=184.5 → 二重為替変換警告"""
+        csv_content = (
+            "name,brand,purchase_price,selling_price,original_currency,exchange_rate\n"
+            "Shoes,Valentino,180810,322293,EUR,184.5"
+        )
+        session = MagicMock()
+        count, warnings = import_products_from_csv(csv_content, session)
+        assert count == 1
+        assert len(warnings) == 1
+        assert "異常に高値" in warnings[0]
+
+    def test_detects_double_commission(self):
+        """transaction_fee > 5% of selling_price → 手数料二重計上警告"""
+        csv_content = (
+            "name,brand,purchase_price,selling_price,transaction_fee\n"
+            "Shoes,Valentino,950,312427,54243"
+        )
+        session = MagicMock()
+        count, warnings = import_products_from_csv(csv_content, session)
+        assert count == 1
+        assert len(warnings) == 1
+        assert "二重計上" in warnings[0]
+
+    def test_no_warnings_for_clean_data(self):
+        """正常データなら警告なし"""
+        csv_content = (
+            "name,brand,purchase_price,selling_price,original_currency,exchange_rate\n"
+            "Shoes,Valentino,950,312427,EUR,184.5"
+        )
+        session = MagicMock()
+        count, warnings = import_products_from_csv(csv_content, session)
+        assert count == 1
+        assert len(warnings) == 0
 
 
 class TestExportProductsCsv:

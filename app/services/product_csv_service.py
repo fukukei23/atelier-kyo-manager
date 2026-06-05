@@ -91,21 +91,65 @@ def _row_to_product(row: dict[str, str]) -> Product:
     )
 
 
-def import_products_from_csv(file_content: str, db_session: Session) -> int:
-    """CSV文字列からProductを一括インポートし、件数を返す."""
+def _validate_row(row: dict[str, str]) -> list[str]:
+    """CSV行のデータ整合性を検証し、警告メッセージを返す."""
+    warnings: list[str] = []
+
+    currency = (row.get("original_currency") or "JPY").upper()
+    purchase = float(row.get("purchase_price", 0) or 0)
+    rate = float(row.get("exchange_rate", 1) or 1)
+
+    # --- パターン1: 二重為替変換検出 ---
+    # purchase_price が既にJPY換算済み（=大きすぎる）なのに currency != JPY の場合
+    # EUファッション商品は通常 €50-5,000。これを超えるなら既にJPY換算済みの可能性が高い
+    if currency != "JPY" and purchase > 10000 and rate > 1:
+        warnings.append(
+            f"purchase_price={purchase:,} は {currency} としては異常に高値です。"
+            f"既にJPY換算済みの可能性があります（exchange_rate={rate}）。"
+            f"→ purchase_price を原価通貨単位にするか、original_currency=JPY にしてください。"
+        )
+
+    # --- パターン2: 手数料二重計上の可能性 ---
+    # transaction_fee が selling_price の 10%以上ある場合、BUYMA手数料が含まれている可能性
+    selling = float(row.get("selling_price", 0) or 0)
+    txn_fee = float(row.get("transaction_fee", 0) or 0)
+    if selling > 0 and txn_fee > 0 and txn_fee / selling > 0.05:
+        warnings.append(
+            f"transaction_fee={txn_fee:,} は selling_price の {txn_fee/selling*100:.1f}% です。"
+            f"BUYMA成約手数料は calculator が自動計算するため、"
+            f"transaction_fee には含めないでください（二重計上になります）。"
+        )
+
+    return warnings
+
+
+def import_products_from_csv(
+    file_content: str,
+    db_session: Session,
+) -> tuple[int, list[str]]:
+    """CSV文字列からProductを一括インポートし、(件数, 警告リスト) を返す."""
     reader = csv.DictReader(io.StringIO(file_content))
     count = 0
-    for row in reader:
+    all_warnings: list[str] = []
+
+    for i, row in enumerate(reader, start=2):  # ヘッダーが1行目
         if not row.get("name"):
             continue
         if row.get("purchase_price") in (None, "") or row.get("selling_price") in (None, ""):
             continue
+
+        # バリデーション
+        warnings = _validate_row(row)
+        for w in warnings:
+            all_warnings.append(f"行{i}: {w}")
+
         p = _row_to_product(row)
         p.auto_classify_tier()
         db_session.add(p)
         count += 1
+
     db_session.commit()
-    return count
+    return count, all_warnings
 
 
 def _product_to_row(p: Product) -> dict[str, str | int | float]:

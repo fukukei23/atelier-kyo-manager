@@ -162,8 +162,11 @@ def import_csv():
         return redirect(url_for("main.manage_products"))
 
     data = file.read().decode("utf-8-sig")
-    count = import_products_from_csv(data, db.session)
+    count, warnings = import_products_from_csv(data, db.session)
     flash(f"CSV を {count} 件取り込みました。", "success")
+    # データ整合性警告を表示（インポートは継続）
+    for w in warnings:
+        flash(f"⚠️ {w}", "warning")
     return redirect(url_for("main.manage_products"))
 
 
