@@ -79,6 +79,33 @@ def brand_prices_scrape():
     return redirect(url_for("main.brand_prices_dashboard", brand=brand))
 
 
+@bp.post("/brand-prices/scrape-sale")
+@login_required
+def brand_prices_scrape_sale():
+    """YOOX/SSENSE セール価格を取得。"""
+    brand = request.form.get("brand", "Gucci")
+    category = request.form.get("category", "bag")
+    if brand not in SUPPORTED_BRANDS:
+        flash("対応していないブランドです", "error")
+        return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+    try:
+        from app.services.sale_scraper import SaleScraper
+        scraper = SaleScraper()
+        results = scraper.scrape(brand)
+
+        if not results:
+            flash(f"{brand} のセール価格を取得できませんでした", "warning")
+        else:
+            saved = brand_price_service.save_scraped_prices(results)
+            flash(f"{brand} のセール価格を {saved} 件取得しました (YOOX/SSENSE)", "success")
+    except Exception as e:
+        logger.error("Sale scrape error: %s", e, exc_info=True)
+        flash(f"セール価格取得エラー: {safe_error_msg(e, context='sale_scrape')}", "error")
+
+    return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+
 @bp.post("/brand-prices/update-selling-price")
 @login_required
 def brand_prices_update_selling_price():

@@ -33,6 +33,9 @@ def save_scraped_prices(items: list[dict]) -> int:
             existing.in_stock = item.get("in_stock", True)
             existing.size_available = item.get("size_available", "")
             existing.scraped_at = datetime.fromisoformat(item["scraped_at"]) if isinstance(item.get("scraped_at"), str) else item.get("scraped_at", _utcnow())
+            if item.get("actual_purchase_jpy"):
+                existing.actual_purchase_jpy = item["actual_purchase_jpy"]
+                existing.actual_purchase_source = item.get("actual_purchase_source")
             saved += 1
             continue
         bp = BrandPrice(
@@ -46,6 +49,8 @@ def save_scraped_prices(items: list[dict]) -> int:
             exchange_rate=item["exchange_rate"],
             in_stock=item.get("in_stock", True),
             size_available=item.get("size_available", ""),
+            actual_purchase_jpy=item.get("actual_purchase_jpy"),
+            actual_purchase_source=item.get("actual_purchase_source"),
             scraped_at=datetime.fromisoformat(item["scraped_at"]) if isinstance(item.get("scraped_at"), str) else item.get("scraped_at", _utcnow()),
         )
         db.session.add(bp)
