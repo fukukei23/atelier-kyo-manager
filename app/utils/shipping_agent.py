@@ -313,8 +313,14 @@ class ShippingAgent:
                     debug_dir = os.path.dirname(self.state_path)
                     await page.screenshot(path=os.path.join(debug_dir, "login_debug.png"), full_page=True)
                     html = await page.content()
-                    with open(os.path.join(debug_dir, "login_debug.html"), "w", encoding="utf-8") as f:
+                    # Strip sensitive input values before saving debug HTML
+                    import re
+                    html = re.sub(r'value="[^"]*@[^"]*"', 'value="<REDACTED>"', html)
+                    html = re.sub(r'(type="email"[^>]*?)value="[^"]*"', r'\1value="<REDACTED>"', html)
+                    debug_path = os.path.join(debug_dir, "login_debug.html")
+                    with open(debug_path, "w", encoding="utf-8") as f:
                         f.write(html)
+                    os.chmod(debug_path, 0o600)
                     self.logger.error(f"デバッグ情報: {os.path.join(debug_dir, 'login_debug.*')} を確認してください。")
                 except Exception as e:
                     self.logger.error(f"デバッグ情報の保存中にエラー: {e}")

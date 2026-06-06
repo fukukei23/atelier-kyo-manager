@@ -118,7 +118,7 @@ def brand_prices_update_purchase_price():
 
     if bp_id and actual_price and actual_price > 0:
         record = db.session.get(BrandPrice, bp_id)
-        if record:
+        if record and record.brand == brand:
             record.actual_purchase_jpy = actual_price
             record.actual_purchase_source = "manual"
             db.session.commit()

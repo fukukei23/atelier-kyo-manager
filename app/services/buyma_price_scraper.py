@@ -307,8 +307,13 @@ class BuymaPriceSearcher:
         if self._browser:
             return
         from playwright.sync_api import sync_playwright
+        from playwright_stealth import Stealth
 
-        self._pw = sync_playwright().start()
+        # playwright-stealth 2.x: wrap PlaywrightContextManager (not started Playwright)
+        pw_cm = sync_playwright()
+        self._stealth_cm = Stealth().use_sync(pw_cm)
+        pw_instance = self._stealth_cm.__enter__()
+        self._pw = pw_instance
         self._browser = self._pw.chromium.launch(headless=self.headless)
 
     def close(self):
@@ -322,9 +327,10 @@ class BuymaPriceSearcher:
                 self._browser.close()
             except Exception:
                 pass
-        if self._pw:
+        if hasattr(self, '_stealth_cm') and self._stealth_cm:
             try:
-                self._pw.stop()
+                self._stealth_cm.__exit__(None, None, None)
+                self._stealth_cm = None
             except Exception:
                 pass
         self._ctx = None
