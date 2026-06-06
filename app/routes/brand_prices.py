@@ -104,6 +104,31 @@ def brand_prices_update_selling_price():
     return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
 
 
+@bp.post("/brand-prices/update-purchase-price")
+@login_required
+def brand_prices_update_purchase_price():
+    """実際の仕入れ価格（セール価格等）を手動設定。"""
+    from app.extensions import db
+    from app.models.brand_price import BrandPrice
+
+    bp_id = request.form.get("brand_price_id", type=int)
+    actual_price = request.form.get("actual_purchase_price", type=float)
+    brand = request.form.get("brand", "Gucci")
+    category = request.form.get("category", "bag")
+
+    if bp_id and actual_price and actual_price > 0:
+        record = db.session.get(BrandPrice, bp_id)
+        if record:
+            record.actual_purchase_jpy = actual_price
+            record.actual_purchase_source = "manual"
+            db.session.commit()
+            flash(f"仕入れ価格を ¥{actual_price:,.0f} に更新しました", "success")
+    else:
+        flash("仕入れ価格の更新に失敗しました", "error")
+
+    return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+
 @bp.post("/brand-prices/add-to-pipeline")
 @login_required
 def brand_prices_add_to_pipeline():

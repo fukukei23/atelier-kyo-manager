@@ -112,6 +112,8 @@ class ShippingAgent:
         "button:has-text('次へ')",
         "button:has-text('ログイン')",
         "button[type='submit']",
+        "button.baseButton",  # SPA renewed UI (2026-06)
+        "div[role='button']:has-text('次へ')",
     ]
     _PASSWORD_SELECTORS = [
         "input[placeholder*='パスワード']",
@@ -287,22 +289,22 @@ class ShippingAgent:
         await page.wait_for_timeout(300)
         if not await _fill_first(page, self._EMAIL_SELECTORS, creds["email"], timeout_ms=12000):
             filled_in_frame = any(
-                await _fill_first(frame, self._EMAIL_SELECTORS, creds["email"], timeout_ms=8000)
-                for frame in page.frames
+                [await _fill_first(frame, self._EMAIL_SELECTORS, creds["email"], timeout_ms=8000)
+                 for frame in page.frames]
             )
             if not filled_in_frame:
                 raise RuntimeError("メール入力欄が見つかりませんでした。UIが変わっている可能性があります。")
 
         # 4) 「次へ進む」
         await _click_first(page, self._NEXT_SELECTORS)
+        await page.wait_for_timeout(1500)
 
         # 5) パスワード入力
-        await page.wait_for_timeout(600)
         if not await _fill_first(page, self._PASSWORD_SELECTORS, creds["password"], timeout_ms=15000):
             try:
                 filled_in_frame = any(
-                    await _fill_first(frame, self._PASSWORD_SELECTORS, creds["password"], timeout_ms=8000)
-                    for frame in page.frames
+                    [await _fill_first(frame, self._PASSWORD_SELECTORS, creds["password"], timeout_ms=8000)
+                     for frame in page.frames]
                 )
                 if not filled_in_frame:
                     raise RuntimeError("パスワード入力欄が見つかりませんでした。")

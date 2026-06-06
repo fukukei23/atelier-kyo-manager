@@ -28,6 +28,9 @@ class BrandPrice(db.Model):
     buyma_match_score = db.Column(Float, nullable=True)
     buyma_searched_at = db.Column(DateTime, nullable=True)
     buyma_status = db.Column(String(16), nullable=True)
+    # 実際の仕入れ価格（セール・アウトレット等の実際購入価格。未設定時はprice_jpyを使用）
+    actual_purchase_jpy = db.Column(Float, nullable=True)
+    actual_purchase_source = db.Column(String(32), nullable=True)  # "manual", "yoox", "ssense", etc.
     scraped_at = db.Column(DateTime, default=_utcnow)
     created_at = db.Column(DateTime, default=_utcnow)
     updated_at = db.Column(

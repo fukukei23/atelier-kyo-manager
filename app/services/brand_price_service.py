@@ -108,6 +108,10 @@ def get_price_comparison(brand: str) -> list[dict]:
                 entry["buyma_status"] = p.buyma_status
             if p.buyma_searched_at and not entry.get("buyma_searched_at"):
                 entry["buyma_searched_at"] = p.buyma_searched_at.isoformat()
+            # 実際仕入れ価格（セール・アウトレット等）
+            if p.actual_purchase_jpy and "actual_purchase_jpy" not in entry:
+                entry["actual_purchase_jpy"] = p.actual_purchase_jpy
+                entry["actual_purchase_source"] = p.actual_purchase_source
         result.append(entry)
 
     return result
@@ -178,13 +182,17 @@ def add_profit_calculation(
     各商品の cheapest_jpy を仕入れ原価とし、BUYMA販売価格（buyma_price または
     マークアップ価格）から利益・利益率・安全判定を計算する。
 
+    actual_purchase_jpy が設定されている場合は、EU定価ではなく実際の仕入れ価格
+    （セール・アウトレット・代理購入等）を原価として使用する。
+
     経営者判断に基づく計算式:
-      仕入れ原価 = EU価格(JPY) + Buyandship送料 + 関税
+      仕入れ原価 = 実際仕入れ価格(JPY) + Buyandship送料 + 関税
       利益 = BUYMA販売価格 - 総コスト（既存 calculator.py 使用）
       安全判定 = 利益 > max(10,000, 原価 × 5%)
     """
     for item in comparison:
-        cheapest = item.get("cheapest_jpy")
+        # 実際仕入れ価格があれば優先、なければEU定価
+        cheapest = item.get("actual_purchase_jpy") or item.get("cheapest_jpy")
         if cheapest is None or cheapest <= 0:
             item["profit"] = None
             item["profit_rate"] = None

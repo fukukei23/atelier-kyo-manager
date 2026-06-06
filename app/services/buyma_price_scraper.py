@@ -23,6 +23,14 @@ _BLOCK_RE = re.compile(
     r'price="(\d+)"',
 )
 
+# 2026-06: BUYMA renewed HTML — item-url + brand-name-eigo + price attributes
+_NEW_BLOCK_RE = re.compile(
+    r'item-url="/item/(\d+)/?"[^>]*?'
+    r'brand-name-eigo="([^"]*?)"[^>]*?'
+    r'(?:price="(\d+)")?',
+    re.DOTALL,
+)
+
 _NOISE_WORDS = {
     "中古", "USED", "used", "新品", "未使用", "即発", "国内発送",
     "送料込", "関税込", "送料・関税込", "送料・関税込み",
@@ -44,7 +52,7 @@ _BRAND_ALIASES: dict[str, str] = {
     "CHLOE": "CHLOE",
 }
 
-BUYMA_UNAVAILABLE_BRANDS = {"Gucci", "Ferragamo", "Valentino", "Chloe"}
+BUYMA_UNAVAILABLE_BRANDS = set()  # 2026-06: 全ブランド検索可能（旧: Gucci等をブロック）
 
 BRAND_THRESHOLDS: dict[str, float] = {
     "Prada": 0.30,
@@ -188,6 +196,7 @@ def _parse_buyma_results(html: str) -> list[dict]:
     results: list[dict] = []
     seen_ids: set[str] = set()
 
+    # Try legacy format first (syo_id/syo_name/brand_name)
     for m in _BLOCK_RE.finditer(html):
         item_id = m.group(1)
         name = m.group(2)
@@ -205,6 +214,41 @@ def _parse_buyma_results(html: str) -> list[dict]:
             "item_id": item_id,
             "item_url": f"https://www.buyma.com/item/{item_id}/",
         })
+
+    # If legacy found nothing, try new BUYMA format (2026-06: SPA renewed)
+    if not results:
+        # Extract from a[item-url] + price attribute
+        _NEW_RE = re.compile(
+            r'<a\b[^>]*?href="https?://www\.buyma\.com/item/(\d+)/?"[^>]*?'
+            r'(?:brand-name-eigo="([^"]*)")?[^>]*?'
+            r'(?:price="(\d+)")?[^>]*?>'
+            r'(.*?)</a>',
+            re.DOTALL,
+        )
+        for m in _NEW_RE.finditer(html):
+            item_id = m.group(1)
+            brand = m.group(2) or ""
+            price_str = m.group(3)
+            name_html = m.group(4) or ""
+
+            if item_id in seen_ids:
+                continue
+            if not price_str:
+                continue
+            seen_ids.add(item_id)
+
+            # Strip HTML tags from name
+            name = re.sub(r"<[^>]+>", "", name_html).strip()
+            if not name or len(name) < 3:
+                continue
+
+            results.append({
+                "name": name,
+                "brand": brand.replace("&amp;", "&"),
+                "price_jpy": int(price_str),
+                "item_id": item_id,
+                "item_url": f"https://www.buyma.com/item/{item_id}/",
+            })
 
     return results
 
@@ -263,10 +307,9 @@ class BuymaPriceSearcher:
         if self._browser:
             return
         from playwright.sync_api import sync_playwright
-        from playwright_stealth import Stealth
 
         self._pw = sync_playwright().start()
-        self._browser = Stealth().use_sync(self._pw).chromium.launch(headless=self.headless)
+        self._browser = self._pw.chromium.launch(headless=self.headless)
 
     def close(self):
         if self._ctx:
