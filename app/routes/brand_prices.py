@@ -5,7 +5,7 @@ import threading
 import time
 from datetime import datetime, timedelta
 
-from flask import flash, jsonify, make_response, redirect, render_template, request, url_for
+from flask import flash, jsonify, make_response, redirect, render_template, request, session, url_for
 from flask_login import login_required
 
 from app.core.timezone import _utcnow
@@ -66,7 +66,15 @@ def brand_prices_scrape():
     try:
         from app.tasks.scrape_tasks import scrape_brand_prices
 
+        # 同時実行制限: セッション内の未完了タスクが5件以上なら拒否
+        pending = session.get("pending_tasks", [])
+        if len(pending) >= 5:
+            flash("同時実行数の上限に達しています。少し待ってから再試行してください。", "warning")
+            return redirect(url_for("main.brand_prices_dashboard", brand=brand))
+
         task = scrape_brand_prices.delay(brand)
+        pending.append(task.id)
+        session["pending_tasks"] = pending
         return jsonify({"task_id": task.id, "brand": brand, "status": "started"})
     except Exception as e:
         # Redis未起動等のフォールバック: 同期実行
@@ -99,7 +107,15 @@ def brand_prices_scrape_sale():
     try:
         from app.tasks.scrape_tasks import scrape_sale_prices
 
+        # 同時実行制限
+        pending = session.get("pending_tasks", [])
+        if len(pending) >= 5:
+            flash("同時実行数の上限に達しています。少し待ってから再試行してください。", "warning")
+            return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
         task = scrape_sale_prices.delay(brand, category)
+        pending.append(task.id)
+        session["pending_tasks"] = pending
         return jsonify({"task_id": task.id, "brand": brand, "status": "started"})
     except Exception as e:
         # Redis未起動等のフォールバック: 同期実行
@@ -419,7 +435,12 @@ def api_buyma_search_single():
 @login_required
 def task_status(task_id: str):
     """Celery タスクの実行状態を返す."""
-    from flask import current_app
+    from flask import current_app, session
+
+    # 所有者検証: セッションに記録されたtask_idのみアクセス可能
+    user_tasks = session.get("pending_tasks", [])
+    if task_id not in user_tasks:
+        return jsonify({"state": "FORBIDDEN", "result": None}), 403
 
     celery_app = getattr(current_app, "celery", None)
     if celery_app is None:
@@ -430,8 +451,13 @@ def task_status(task_id: str):
 
     if result.state == "SUCCESS":
         response["result"] = result.result
+        # 完了したタスクはセッションから除去
+        user_tasks.remove(task_id)
+        session["pending_tasks"] = user_tasks
     elif result.state == "FAILURE":
-        response["result"] = str(result.result)
+        response["result"] = "エラーが発生しました"
+        user_tasks.remove(task_id)
+        session["pending_tasks"] = user_tasks
     else:
         response["result"] = None
 

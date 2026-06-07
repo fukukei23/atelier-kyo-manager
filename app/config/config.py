@@ -91,6 +91,16 @@ class AppConfig:
     if STAGE == "prod" and SECRET_KEY == "dev-secret-key-change-in-production":
         raise RuntimeError("STAGE=prod requires SECRET_KEY environment variable to be set")
 
+    # Celery 本番設定
+    CELERY_BROKER_URL: str = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    CELERY_RESULT_BACKEND: str = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
+
+    if STAGE == "prod" and CELERY_BROKER_URL.startswith("redis://localhost"):
+        raise RuntimeError(
+            "STAGE=prod requires CELERY_BROKER_URL with authentication. "
+            "Use redis://:password@host:port/db format."
+        )
+
     # ---- サイト設定 ----
     SITES: dict[str, Any] = _load_layered_site_config(CONFIG_DIR)
 

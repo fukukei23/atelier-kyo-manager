@@ -32,7 +32,7 @@ def scrape_brand_prices(self, brand: str, sites: list[str] | None = None) -> dic
 
     except Exception as exc:
         logger.error("scrape_brand_prices error: %s", exc, exc_info=True)
-        return {"brand": brand, "saved": 0, "error": str(exc)}
+        return {"brand": brand, "saved": 0, "error": "scrape_error"}
 
 
 @celery.task(bind=True, name="scrape_sale_prices")
@@ -54,4 +54,4 @@ def scrape_sale_prices(self, brand: str, category: str = "bag") -> dict:
 
     except Exception as exc:
         logger.error("scrape_sale_prices error: %s", exc, exc_info=True)
-        return {"brand": brand, "saved": 0, "error": str(exc)}
+        return {"brand": brand, "saved": 0, "error": "scrape_error"}
