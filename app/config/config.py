@@ -95,11 +95,13 @@ class AppConfig:
     CELERY_BROKER_URL: str = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
     CELERY_RESULT_BACKEND: str = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
-    if STAGE == "prod" and CELERY_BROKER_URL.startswith("redis://localhost"):
-        raise RuntimeError(
-            "STAGE=prod requires CELERY_BROKER_URL with authentication. "
-            "Use redis://:password@host:port/db format."
-        )
+    if STAGE == "prod":
+        if not CELERY_BROKER_URL.startswith(("rediss://", "redis://:")):
+            raise RuntimeError(
+                "STAGE=prod requires TLS (rediss://) or password-authenticated Redis (redis://:password@host)."
+            )
+        if "localhost" in CELERY_BROKER_URL or "127.0.0.1" in CELERY_BROKER_URL:
+            raise RuntimeError("STAGE=prod cannot use localhost Redis.")
 
     # ---- サイト設定 ----
     SITES: dict[str, Any] = _load_layered_site_config(CONFIG_DIR)

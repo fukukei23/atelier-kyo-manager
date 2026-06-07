@@ -452,12 +452,10 @@ def task_status(task_id: str):
     if result.state == "SUCCESS":
         response["result"] = result.result
         # 完了したタスクはセッションから除去
-        user_tasks.remove(task_id)
-        session["pending_tasks"] = user_tasks
+        session["pending_tasks"] = [t for t in user_tasks if t != task_id]
     elif result.state == "FAILURE":
         response["result"] = "エラーが発生しました"
-        user_tasks.remove(task_id)
-        session["pending_tasks"] = user_tasks
+        session["pending_tasks"] = [t for t in user_tasks if t != task_id]
     else:
         response["result"] = None
 
