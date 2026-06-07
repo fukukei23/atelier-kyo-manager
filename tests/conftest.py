@@ -31,7 +31,11 @@ def _env(monkeypatch):
 def routes_app(_env):
     """ルートテスト用 Flask アプリ（in-memory SQLite）"""
     application = create_app()
-    application.config.update({"TESTING": True, "WTF_CSRF_ENABLED": False})
+    application.config.update({
+        "TESTING": True,
+        "WTF_CSRF_ENABLED": False,
+        "CELERY_ALWAYS_EAGER": True,
+    })
     with application.app_context():
         yield application
         db.session.remove()

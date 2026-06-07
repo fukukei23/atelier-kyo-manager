@@ -111,6 +111,12 @@ class AppConfig:
             "SQLALCHEMY_DATABASE_URI": cls.get_db_url(),
             "SQLALCHEMY_TRACK_MODIFICATIONS": cls.SQLALCHEMY_TRACK_MODIFICATIONS,
             "SLACK_WEBHOOK_URL": os.environ.get("SLACK_WEBHOOK_URL", ""),
+            "CELERY_BROKER_URL": os.environ.get(
+                "CELERY_BROKER_URL", "redis://localhost:6379/0"
+            ),
+            "CELERY_RESULT_BACKEND": os.environ.get(
+                "CELERY_RESULT_BACKEND", "redis://localhost:6379/0"
+            ),
         }
 
 

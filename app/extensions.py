@@ -27,4 +27,8 @@ migrate = Migrate()
 # CSRF 保護（Flask-WTF）
 csrf = CSRFProtect()
 
-__all__ = ["db", "migrate", "csrf"]
+__all__ = ["db", "migrate", "csrf", "celery_ext"]
+
+# Celery は app/core/celery_app.py で定義済み。
+# Flask連携は create_app() 内で init_celery(app) を呼ぶ。
+from app.core.celery_app import celery as celery_ext

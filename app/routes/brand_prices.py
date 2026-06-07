@@ -62,21 +62,27 @@ def brand_prices_scrape():
         flash("対応していないブランドです", "error")
         return redirect(url_for("main.brand_prices_dashboard", brand=brand))
 
+    # Celery タスクを投入（非同期）
     try:
-        scraper = BrandPriceScraper(headless=True)
-        results = scraper.scrape(brand=brand)
+        from app.tasks.scrape_tasks import scrape_brand_prices
 
-        if not results:
-            flash(f"{brand} の価格データを取得できませんでした（ブロックされた可能性）", "warning")
-            return redirect(url_for("main.brand_prices_dashboard", brand=brand))
-
-        saved = brand_price_service.save_scraped_prices(results)
-        flash(f"{brand} の価格データを {saved} 件取得しました", "success")
+        task = scrape_brand_prices.delay(brand)
+        return jsonify({"task_id": task.id, "brand": brand, "status": "started"})
     except Exception as e:
-        logger.error("Scraping error: %s", e, exc_info=True)
-        flash(f"スクレイピングエラー: {safe_error_msg(e, context='brand_scrape')}", "error")
-
-    return redirect(url_for("main.brand_prices_dashboard", brand=brand))
+        # Redis未起動等のフォールバック: 同期実行
+        logger.warning("Celery unavailable, falling back to sync: %s", e)
+        try:
+            scraper = BrandPriceScraper(headless=True)
+            results = scraper.scrape(brand=brand)
+            if not results:
+                flash(f"{brand} の価格データを取得できませんでした（ブロックされた可能性）", "warning")
+            else:
+                saved = brand_price_service.save_scraped_prices(results)
+                flash(f"{brand} の価格データを {saved} 件取得しました", "success")
+        except Exception as ex:
+            logger.error("Scraping error: %s", ex, exc_info=True)
+            flash(f"スクレイピングエラー: {safe_error_msg(ex, context='brand_scrape')}", "error")
+        return redirect(url_for("main.brand_prices_dashboard", brand=brand))
 
 
 @bp.post("/brand-prices/scrape-sale")
@@ -89,21 +95,28 @@ def brand_prices_scrape_sale():
         flash("対応していないブランドです", "error")
         return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
 
+    # Celery タスクを投入（非同期）
     try:
-        from app.services.sale_scraper import SaleScraper
-        scraper = SaleScraper()
-        results = scraper.scrape(brand)
+        from app.tasks.scrape_tasks import scrape_sale_prices
 
-        if not results:
-            flash(f"{brand} のセール価格を取得できませんでした", "warning")
-        else:
-            saved = brand_price_service.save_scraped_prices(results)
-            flash(f"{brand} のセール価格を {saved} 件取得しました (YOOX/SSENSE)", "success")
+        task = scrape_sale_prices.delay(brand, category)
+        return jsonify({"task_id": task.id, "brand": brand, "status": "started"})
     except Exception as e:
-        logger.error("Sale scrape error: %s", e, exc_info=True)
-        flash(f"セール価格取得エラー: {safe_error_msg(e, context='sale_scrape')}", "error")
-
-    return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+        # Redis未起動等のフォールバック: 同期実行
+        logger.warning("Celery unavailable, falling back to sync: %s", e)
+        try:
+            from app.services.sale_scraper import SaleScraper
+            scraper = SaleScraper()
+            results = scraper.scrape(brand)
+            if not results:
+                flash(f"{brand} のセール価格を取得できませんでした", "warning")
+            else:
+                saved = brand_price_service.save_scraped_prices(results)
+                flash(f"{brand} のセール価格を {saved} 件取得しました (YOOX/SSENSE)", "success")
+        except Exception as ex:
+            logger.error("Sale scrape error: %s", ex, exc_info=True)
+            flash(f"セール価格取得エラー: {safe_error_msg(ex, context='sale_scrape')}", "error")
+        return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
 
 
 @bp.post("/brand-prices/update-selling-price")
@@ -400,3 +413,26 @@ def api_buyma_search_single():
         "match_score": match["match_score"],
         "match_count": match["match_count"],
     })
+
+
+@bp.get("/api/tasks/<task_id>/status")
+@login_required
+def task_status(task_id: str):
+    """Celery タスクの実行状態を返す."""
+    from flask import current_app
+
+    celery_app = getattr(current_app, "celery", None)
+    if celery_app is None:
+        return jsonify({"state": "UNAVAILABLE", "result": None})
+
+    result = celery_app.AsyncResult(task_id)
+    response = {"state": result.state}
+
+    if result.state == "SUCCESS":
+        response["result"] = result.result
+    elif result.state == "FAILURE":
+        response["result"] = str(result.result)
+    else:
+        response["result"] = None
+
+    return jsonify(response)

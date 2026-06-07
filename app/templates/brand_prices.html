@@ -179,16 +179,67 @@
     {% endif %}
 </div>
 <script>
-document.getElementById('scrape-form')?.addEventListener('submit', function() {
-    document.getElementById('scrape-btn').disabled = true;
-    document.getElementById('scrape-btn').classList.add('opacity-50');
-    document.getElementById('scrape-loading').classList.remove('hidden');
-    document.getElementById('scrape-hint').classList.add('hidden');
-});
-document.getElementById('sale-scrape-form')?.addEventListener('submit', function() {
-    document.getElementById('sale-scrape-btn').disabled = true;
-    document.getElementById('sale-scrape-btn').classList.add('opacity-50');
-    document.getElementById('sale-scrape-loading').classList.remove('hidden');
-});
+/* Celery 非同期タスク: fetch → ポーリング → 完了時にリロード */
+function asyncScrape(formId, btnId, loadingId, hintId) {
+    const form = document.getElementById(formId);
+    const btn = document.getElementById(btnId);
+    const loading = document.getElementById(loadingId);
+    const hint = document.getElementById(hintId);
+    if (!form || !btn) return;
+
+    form.addEventListener('submit', function(e) {
+        e.preventDefault();
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+        if (loading) loading.classList.remove('hidden');
+        if (hint) hint.classList.add('hidden');
+
+        const formData = new FormData(form);
+        fetch(form.action, {
+            method: 'POST',
+            body: formData,
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.task_id) {
+                pollTask(data.task_id, btn, loading);
+            } else {
+                // フォールバック同期完了 → リロード
+                window.location.reload();
+            }
+        })
+        .catch(function() {
+            // エラー時はページリロード（flash表示）
+            window.location.reload();
+        });
+    });
+}
+
+function pollTask(taskId, btn, loading) {
+    var interval = setInterval(function() {
+        fetch('/api/tasks/' + taskId + '/status')
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            if (data.state === 'SUCCESS') {
+                clearInterval(interval);
+                if (loading) loading.textContent = '✅ 完了';
+                window.location.reload();
+            } else if (data.state === 'FAILURE') {
+                clearInterval(interval);
+                if (loading) loading.textContent = '❌ エラー';
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+            }
+            // PENDING/STARTED → ポーリング継続
+        })
+        .catch(function() {
+            clearInterval(interval);
+            window.location.reload();
+        });
+    }, 2000);
+}
+
+asyncScrape('scrape-form', 'scrape-btn', 'scrape-loading', 'scrape-hint');
+asyncScrape('sale-scrape-form', 'sale-scrape-btn', 'sale-scrape-loading', null);
 </script>
 {% endblock %}

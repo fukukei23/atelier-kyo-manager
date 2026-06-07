@@ -38,3 +38,20 @@ diagnostics: venv
 	@echo ">>> Run diagnostics..."
 	@$(PYTHON) scripts/run_moncler_drission_diagnostics.py $$DIAG_ARGS
 
+# --- Celery + Redis ---
+
+.PHONY: redis-start
+redis-start:
+	@bash scripts/start-redis.sh
+
+.PHONY: celery-worker
+celery-worker: venv
+	@echo ">>> Starting Celery worker..."
+	@. $(VENV_DIR)/bin/activate && celery -A app.core.celery_app worker --loglevel=info
+
+.PHONY: run-all
+run-all: redis-start
+	@echo ">>> Starting Celery worker + Flask..."
+	@. $(VENV_DIR)/bin/activate && celery -A app.core.celery_app worker --loglevel=info &
+	@sleep 1 && flask run
+

@@ -59,6 +59,12 @@ def create_app(config_name: str | None = None) -> Flask:
     # --- テンプレートフィルタ登録 ---
     _register_template_filters(app)
 
+    # --- Celery 初期化 ---
+    from .core.celery_app import make_celery
+
+    celery = make_celery(app)
+    app.celery = celery
+
     # --- CLI コマンド登録 ---
     from .commands import register_commands
     register_commands(app)
