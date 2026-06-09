@@ -106,6 +106,9 @@ class AppConfig:
     # ---- サイト設定 ----
     SITES: dict[str, Any] = _load_layered_site_config(CONFIG_DIR)
 
+    # ---- プロキシ設定（Webshare / Bright Data / 任意のプロバイダー対応） ----
+    PROXY_URL: str = os.environ.get("PROXY_URL", "")
+
     # ---- データベース設定 ----
     @staticmethod
     def get_db_url() -> str:

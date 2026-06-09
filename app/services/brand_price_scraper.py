@@ -271,12 +271,24 @@ def _load_proxies() -> list[dict]:
     return proxies
 
 
-def _fetch_with_cffi(url: str, timeout: int = 25) -> str | None:
+def _fetch_with_cffi(url: str, timeout: int = 25, proxy: str | None = None) -> str | None:
+    """Fetch URL via curl_cffi with optional proxy support.
+
+    proxy が明示的に渡された場合はそれを使用。
+    渡されない場合は AppConfig.PROXY_URL（環境変数 PROXY_URL）にフォールバック。
+    """
     from curl_cffi import requests as cffi_requests
+
+    proxy_url = proxy
+    if not proxy_url:
+        from app.config.config import AppConfig
+        proxy_url = AppConfig.PROXY_URL or None
+
+    proxies = {"http": proxy_url, "https": proxy_url} if proxy_url else None
     try:
         resp = cffi_requests.get(
             url, headers=_CHROME_HEADERS, impersonate="chrome124",
-            timeout=timeout, allow_redirects=True,
+            timeout=timeout, allow_redirects=True, proxies=proxies,
         )
         if resp.status_code < 400 and len(resp.text) > 1000:
             return resp.text
