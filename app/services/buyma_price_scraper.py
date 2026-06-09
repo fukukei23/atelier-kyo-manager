@@ -5,9 +5,19 @@ import re
 import threading
 import time
 import urllib.parse
-from difflib import SequenceMatcher
 
 logger = logging.getLogger(__name__)
+
+# Shared matching utilities (extracted to app/utils/product_matching.py)
+from app.utils.product_matching import (
+    NOISE_WORDS as _NOISE_WORDS,
+    COLOR_NORMALIZE as _COLOR_NORMALIZE,
+    MODEL_NUMBER_RE as _MODEL_NUMBER_RE,
+    extract_model_numbers as _extract_model_numbers,
+    extract_tokens as _extract_tokens,
+    normalize_color as _normalize_color,
+    match_score_buyma as _match_score,
+)
 
 _CHROME_HEADERS = {
     "User-Agent": (
@@ -30,17 +40,6 @@ _NEW_BLOCK_RE = re.compile(
     r'(?:price="(\d+)")?',
     re.DOTALL,
 )
-
-_NOISE_WORDS = {
-    "中古", "USED", "used", "新品", "未使用", "即発", "国内発送",
-    "送料込", "関税込", "送料・関税込", "送料・関税込み",
-    "直営店買付", "セール", "人気", "入手困難", "限定",
-    "レディース", "メンズ", "Unisex", "100%",
-    "☆", "★", "♪", "【", "】", "！", "！",
-    "全色", "全カラー", "カラバリあり",
-    "再入荷", "完売", "残りわずか", "在庫あり", "残少",
-    "あすつく", "翌日配送", "正規品", "本物保証",
-}
 
 _BRAND_ALIASES: dict[str, str] = {
     "BOTTEGA VENETA": "BOTTEGA VENETA",
@@ -69,23 +68,7 @@ CACHE_DAYS = 7
 SEARCH_THROTTLE = 2.0
 PAGE_LOAD_WAIT = 2.0
 
-_MODEL_NUMBER_RE = re.compile(r"\b([A-Z0-9]{5,12})\b")
 _SIZE_RE = re.compile(r"\b(FREE|ONE\s*SIZE|ONE SIZE|F|XS|S|M|L|XL|XXL|2XL|3XL|(\d{2,3})\s*cm)\b", re.IGNORECASE)
-
-_COLOR_NORMALIZE: dict[str, str] = {
-    "BLACK": "BLACK", "NERO": "BLACK", "黒": "BLACK", "ブラック": "BLACK", "NOIR": "BLACK",
-    "WHITE": "WHITE", "BIANCO": "WHITE", "白": "WHITE", "ホワイト": "WHITE",
-    "RED": "RED", "ROSSO": "RED", "赤": "RED", "レッド": "RED",
-    "BLUE": "BLUE", "BLU": "BLUE", "青": "BLUE", "ブルー": "BLUE",
-    "BEIGE": "BEIGE", "ベージュ": "BEIGE", "ECRU": "BEIGE",
-    "BROWN": "BROWN", "MARRONE": "BROWN", "茶": "BROWN", "ブラウン": "BROWN", "CARAMEL": "BROWN",
-    "GREEN": "GREEN", "VERDE": "GREEN", "緑": "GREEN", "グリーン": "GREEN",
-    "PINK": "PINK", "ROSA": "PINK", "ピンク": "PINK",
-    "GREY": "GREY", "GRAY": "GREY", "グレー": "GREY", "GRIGIO": "GREY",
-    "NAVY": "NAVY", "ネイビー": "NAVY", "MARINE": "NAVY",
-    "GOLD": "GOLD", "ゴールド": "GOLD", "ORO": "GOLD",
-    "SILVER": "SILVER", "シルバー": "SILVER", "ARGENTO": "SILVER",
-}
 
 
 def _build_search_query(product_name: str, brand: str) -> str:
@@ -110,74 +93,9 @@ def _normalize_brand(name: str) -> str:
     return upper
 
 
-def _extract_model_numbers(name: str) -> set[str]:
-    upper = name.upper()
-    numbers: set[str] = set()
-    for m in _MODEL_NUMBER_RE.finditer(upper):
-        token = m.group(1)
-        has_alpha = any(c.isalpha() for c in token)
-        has_digit = any(c.isdigit() for c in token)
-        if has_alpha and has_digit:
-            numbers.add(token)
-    return numbers
-
-
-def _extract_tokens(name: str) -> list[str]:
-    clean = name
-    for noise in _NOISE_WORDS:
-        clean = clean.replace(noise, " ")
-    clean = re.sub(r"[★☆♪【】!！・/／\s]+", " ", clean)
-    tokens = [t for t in clean.split() if len(t) >= 2]
-    return tokens
-
-
-def _normalize_color(name: str) -> str | None:
-    upper = name.upper()
-    for key, canonical in _COLOR_NORMALIZE.items():
-        if key in upper:
-            return canonical
-    return None
-
-
 def _extract_size(name: str) -> str | None:
     m = _SIZE_RE.search(name)
     return m.group(0).strip() if m else None
-
-
-def _match_score(official_name: str, buyma_name: str, brand: str) -> float:
-    buyma_upper = buyma_name.upper()
-    brand_upper = brand.upper()
-
-    if brand_upper not in buyma_upper:
-        return 0.0
-
-    official_models = _extract_model_numbers(official_name)
-    buyma_models = _extract_model_numbers(buyma_name)
-    model_bonus = 0.0
-    if official_models and buyma_models:
-        if official_models & buyma_models:
-            model_bonus = 0.4
-
-    official_color = _normalize_color(official_name)
-    buyma_color = _normalize_color(buyma_name)
-    color_bonus = 0.0
-    if official_color and buyma_color and official_color == buyma_color:
-        color_bonus = 0.1
-
-    official_tokens = _extract_tokens(official_name.upper())
-    buyma_tokens = set(_extract_tokens(buyma_upper))
-
-    if not official_tokens:
-        return min(1.0, model_bonus + color_bonus)
-
-    hits = sum(1 for t in official_tokens if t in buyma_tokens or t in buyma_upper)
-    token_score = hits / len(official_tokens)
-
-    seq_score = SequenceMatcher(
-        None, official_name.upper(), buyma_upper
-    ).ratio()
-
-    return min(1.0, 0.6 * token_score + 0.4 * seq_score + model_bonus + color_bonus)
 
 
 def _filter_outliers(prices: list[int]) -> list[int]:

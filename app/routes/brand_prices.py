@@ -11,6 +11,7 @@ from flask_login import login_required
 from app.core.timezone import _utcnow
 from app.services import brand_price_service
 from app.services.brand_price_scraper import SUPPORTED_BRANDS, SUPPORTED_SITES, BrandPriceScraper
+from app.services import price_comparison_service
 from app.services.buyma_price_scraper import (
     BRAND_THRESHOLDS,
     BUYMA_UNAVAILABLE_BRANDS,
@@ -460,3 +461,85 @@ def task_status(task_id: str):
         response["result"] = None
 
     return jsonify(response)
+
+
+# ---------------------------------------------------------------------------
+# Multi-source price comparison (product-centric)
+# ---------------------------------------------------------------------------
+
+
+@bp.get("/price-comparison")
+@login_required
+def price_comparison_search():
+    """商品中心のマルチサイト価格比較ページ。"""
+    brand = request.args.get("brand", "Gucci")
+    query = request.args.get("q", "").strip()
+    category = request.args.get("category", "wallet")
+
+    comparison = None
+    profit_data = None
+
+    if query:
+        comparison = price_comparison_service.compare_product(
+            brand=brand,
+            product_query=query,
+            category=category,
+        )
+        profit_data = price_comparison_service.calculate_comparison_profit(
+            comparison, category=category,
+        )
+
+    return render_template(
+        "price_comparison.html",
+        brand=brand,
+        query=query,
+        category=category,
+        supported_brands=SUPPORTED_BRANDS,
+        comparison=comparison,
+        profit_data=profit_data,
+    )
+
+
+@bp.get("/api/price-comparison/search")
+@login_required
+def api_price_comparison_search():
+    """AJAX商品検索API（autocomplete用）。"""
+    brand = request.args.get("brand", "")
+    query = request.args.get("q", "").strip()
+    if not brand or not query or len(query) < 2:
+        return jsonify({"results": []})
+    results = price_comparison_service.search_products(brand, query)
+    return jsonify({"results": results})
+
+
+@bp.post("/price-comparison/scrape-and-compare")
+@login_required
+def price_comparison_scrape_and_compare():
+    """全ソースをスクレイプ → 比較ページにリダイレクト。"""
+    brand = request.form.get("brand", "Gucci")
+    category = request.form.get("category", "wallet")
+    query = request.form.get("q", "")
+
+    # Celery非同期スクレイプがあれば利用、なければ同期
+    try:
+        from flask import current_app
+        celery_app = getattr(current_app, "celery", None)
+        if celery_app:
+            task = celery_app.send_task(
+                "app.tasks.scrape_brand_prices",
+                args=[brand],
+            )
+            flash(f"スクレイプ開始: {brand}（タスクID: {task.id}）", "info")
+            time.sleep(3)
+        else:
+            scraper = BrandPriceScraper()
+            items = scraper.scrape(brand)
+            brand_price_service.save_scraped_prices(items)
+            flash(f"スクレイプ完了: {brand}（{len(items)}件）", "success")
+    except Exception as e:
+        flash(f"スクレイプエラー: {safe_error_msg(e)}", "error")
+
+    return redirect(url_for(
+        "main.price_comparison_search",
+        brand=brand, q=query, category=category,
+    ))

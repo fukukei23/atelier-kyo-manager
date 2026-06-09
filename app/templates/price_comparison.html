@@ -1,0 +1,266 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-7xl mx-auto">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-3">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-white">価格比較</h1>
+        <span class="text-xs text-gray-400">複数サイト横断最安仕入れ検索</span>
+    </div>
+
+    <!-- 検索フォーム -->
+    <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-4 mb-6">
+        <form method="GET" action="{{ url_for('main.price_comparison_search') }}" class="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <label class="text-sm font-medium text-gray-600 dark:text-gray-300">ブランド:</label>
+            <select name="brand" id="brand-select" class="border rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                {% for b in supported_brands %}
+                <option value="{{ b }}" {% if b == brand %}selected{% endif %}>{{ b }}</option>
+                {% endfor %}
+            </select>
+            <label class="text-sm font-medium text-gray-600 dark:text-gray-300">商品名:</label>
+            <input
+                type="text"
+                name="q"
+                id="product-query"
+                value="{{ query }}"
+                placeholder="例: Continental Wallet GG Supreme"
+                class="border rounded-lg px-3 py-2 text-sm w-64 dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600"
+            />
+            <label class="text-sm font-medium text-gray-600 dark:text-gray-300">カテゴリ:</label>
+            <select name="category" class="border rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:text-gray-200 dark:border-gray-600">
+                <option value="wallet" {% if category == 'wallet' %}selected{% endif %}>財布</option>
+                <option value="bag" {% if category == 'bag' %}selected{% endif %}>バッグ</option>
+                <option value="shoes" {% if category == 'shoes' %}selected{% endif %}>靴</option>
+                <option value="accessory" {% if category == 'accessory' %}selected{% endif %}>アクセサリー</option>
+                <option value="clothing" {% if category == 'clothing' %}selected{% endif %}>衣類</option>
+            </select>
+            <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                検索
+            </button>
+        </form>
+
+        <!-- -autocomplete候補 -->
+        <div id="autocomplete-results" class="mt-2 text-xs text-gray-400 hidden"></div>
+    </div>
+
+    {% if query and comparison %}
+    <!-- 結果サマリー -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-4">
+            <div class="text-xs text-gray-400 mb-1">最安仕入れ</div>
+            <div class="text-xl font-bold text-green-600">
+                {% if comparison.cheapest_cost_jpy %}
+                    ¥{{ "{:,}".format(comparison.cheapest_cost_jpy | int) }}
+                {% else %}
+                    —
+                {% endif %}
+            </div>
+            {% if comparison.cheapest_quote %}
+            <div class="text-xs text-gray-400 mt-1">{{ comparison.cheapest_quote.source_site }}{% if comparison.cheapest_quote.is_sale %} (sale){% endif %}</div>
+            {% endif %}
+        </div>
+        <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-4">
+            <div class="text-xs text-gray-400 mb-1">BUYMA売価</div>
+            <div class="text-xl font-bold text-blue-600">
+                {% if comparison.buyma_price %}
+                    ¥{{ "{:,}".format(comparison.buyma_price | int) }}
+                {% else %}
+                    —
+                {% endif %}
+            </div>
+        </div>
+        <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-4">
+            <div class="text-xs text-gray-400 mb-1">期待利益</div>
+            <div class="text-xl font-bold {% if comparison.is_profitable %}text-green-600{% else %}text-red-500{% endif %}">
+                {% if comparison.profit_jpy %}
+                    ¥{{ "{:,}".format(comparison.profit_jpy | int) }}
+                {% else %}
+                    —
+                {% endif %}
+            </div>
+        </div>
+        <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-4">
+            <div class="text-xs text-gray-400 mb-1">利益率</div>
+            <div class="text-xl font-bold {% if comparison.is_profitable %}text-green-600{% else %}text-red-500{% endif %}">
+                {% if comparison.profit_rate %}
+                    {{ (comparison.profit_rate * 100) | round(1) }}%
+                {% else %}
+                    —
+                {% endif %}
+            </div>
+            <div class="text-xs mt-1">
+                {% if comparison.is_profitable %}
+                    <span class="text-green-500">✅ 採算OK</span>
+                {% else %}
+                    <span class="text-red-400">⚠ 利益不足</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if profit_data %}
+    <!-- ソース別詳細 -->
+    <div class="bg-white dark:bg-gray-900 rounded-lg shadow mb-6 overflow-hidden">
+        <div class="px-4 py-3 border-b dark:border-gray-700">
+            <h2 class="font-semibold text-gray-700 dark:text-gray-200">ソース別利益計算</h2>
+        </div>
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                    <th class="px-4 py-2 text-left text-gray-500">ソース</th>
+                    <th class="px-4 py-2 text-right text-gray-500">仕入れ原価</th>
+                    <th class="px-4 py-2 text-right text-gray-500">販売予定</th>
+                    <th class="px-4 py-2 text-right text-gray-500">利益</th>
+                    <th class="px-4 py-2 text-right text-gray-500">利益率</th>
+                    <th class="px-4 py-2 text-center text-gray-500">判定</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for source, data in profit_data.per_source.items() %}
+                <tr class="border-b dark:border-gray-700 {% if source == profit_data.best_source %}bg-green-50 dark:bg-green-900/20{% endif %}">
+                    <td class="px-4 py-2 font-medium">
+                        {{ source }}
+                        {% if source in ['yoox', 'ssense'] %}
+                            <span class="ml-1 text-xs bg-red-100 text-red-600 px-1 rounded">SALE</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-right">¥{{ "{:,}".format(data.cost_jpy | int) }}</td>
+                    <td class="px-4 py-2 text-right">¥{{ "{:,}".format(data.sell_jpy | int) }}</td>
+                    <td class="px-4 py-2 text-right font-medium {% if data.is_profitable %}text-green-600{% else %}text-red-400{% endif %}">
+                        ¥{{ "{:,}".format(data.profit | int) }}
+                    </td>
+                    <td class="px-4 py-2 text-right {% if data.is_profitable %}text-green-600{% else %}text-red-400{% endif %}">
+                        {{ (data.profit_rate * 100) | round(1) }}%
+                    </td>
+                    <td class="px-4 py-2 text-center">
+                        {% if data.is_profitable %}
+                            <span class="text-green-500">✅</span>
+                        {% else %}
+                            <span class="text-red-400">⚠️</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    <!-- 全ソース価格比較テーブル -->
+    <div class="bg-white dark:bg-gray-900 rounded-lg shadow overflow-hidden">
+        <div class="px-4 py-3 border-b dark:border-gray-700 flex justify-between items-center">
+            <h2 class="font-semibold text-gray-700 dark:text-gray-200">全ソース価格一覧</h2>
+            <form method="POST" action="{{ url_for('main.price_comparison_scrape_and_compare') }}">
+                <input type="hidden" name="brand" value="{{ brand }}">
+                <input type="hidden" name="q" value="{{ query }}">
+                <input type="hidden" name="category" value="{{ category }}">
+                <button type="submit" class="text-xs bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 px-3 py-1 rounded transition">
+                    🔄 全ソース再スクレイプ
+                </button>
+            </form>
+        </div>
+        <table class="w-full text-sm">
+            <thead class="bg-gray-50 dark:bg-gray-800">
+                <tr>
+                    <th class="px-4 py-2 text-left text-gray-500">ソース</th>
+                    <th class="px-4 py-2 text-left text-gray-500">商品名</th>
+                    <th class="px-4 py-2 text-right text-gray-500">現地価格</th>
+                    <th class="px-4 py-2 text-right text-gray-500">JPY換算</th>
+                    <th class="px-4 py-2 text-center text-gray-500">在庫</th>
+                    <th class="px-4 py-2 text-right text-gray-500">一致度</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for quote in comparison.quotes %}
+                <tr class="border-b dark:border-gray-700 {% if quote == comparison.cheapest_quote %}bg-green-50 dark:bg-green-900/20 font-medium{% endif %}">
+                    <td class="px-4 py-2">
+                        {{ quote.source_site }}
+                        {% if quote.is_sale %}
+                            <span class="ml-1 text-xs bg-red-100 text-red-600 px-1 rounded">SALE</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-xs text-gray-500">{{ quote.product_name[:60] }}{% if quote.product_name|length > 60 %}...{% endif %}</td>
+                    <td class="px-4 py-2 text-right">{{ quote.currency }} {{ "{:,.0f}".format(quote.price_original) }}</td>
+                    <td class="px-4 py-2 text-right font-medium">
+                        ¥{{ "{:,}".format(quote.price_jpy | int) }}
+                        {% if quote.actual_purchase_jpy %}
+                            <span class="text-xs text-green-600">（特価 ¥{{ "{:,}".format(quote.actual_purchase_jpy | int) }}）</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-center">
+                        {% if quote.in_stock %}
+                            <span class="text-green-500">●</span>
+                        {% else %}
+                            <span class="text-gray-300">○</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-2 text-right">
+                        <span class="px-2 py-0.5 rounded text-xs {% if quote.match_score >= 0.7 %}bg-green-100 text-green-700{% elif quote.match_score >= 0.5 %}bg-yellow-100 text-yellow-700{% else %}bg-gray-100 text-gray-500{% endif %}">
+                            {{ (quote.match_score * 100) | round(0) }}%
+                        </span>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not comparison.quotes %}
+                <tr>
+                    <td colspan="6" class="px-4 py-8 text-center text-gray-400">
+                        データがありません。<br>
+                        <span class="text-xs">🔄 「全ソース再スクレイプ」按钮を実行してください。</span>
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    {% elif query and not comparison %}
+    <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-8 text-center text-gray-400">
+        <p>「{{ query }}」に一致する商品が見つかりませんでした。</p>
+        <p class="text-sm mt-2">スクレイプ済みデータがあるか確認してください。</p>
+    </div>
+    {% else %}
+    <div class="bg-white dark:bg-gray-900 rounded-lg shadow p-8 text-center text-gray-400">
+        <p>ブランドと商品名を入力して検索してください。</p>
+        <p class="text-sm mt-2">例: Gucci / Continental Wallet GG Supreme</p>
+    </div>
+    {% endif %}
+</div>
+
+{% if query %}
+<!-- Autocomplete用スクリプト -->
+<script>
+const brandSelect = document.getElementById('brand-select');
+const queryInput = document.getElementById('product-query');
+const resultsDiv = document.getElementById('autocomplete-results');
+let debounceTimer;
+
+queryInput.addEventListener('input', () => {
+    clearTimeout(debounceTimer);
+    const q = queryInput.value.trim();
+    if (q.length < 2) {
+        resultsDiv.classList.add('hidden');
+        return;
+    }
+    debounceTimer = setTimeout(async () => {
+        const brand = brandSelect.value;
+        const resp = await fetch(`/api/price-comparison/search?brand=${encodeURIComponent(brand)}&q=${encodeURIComponent(q)}`);
+        const data = await resp.json();
+        if (data.results && data.results.length > 0) {
+            resultsDiv.textContent = '';
+            data.results.forEach(r => {
+                const span = document.createElement('span');
+                span.className = 'mr-2 cursor-pointer hover:text-blue-400';
+                span.textContent = r.product_name + ' (' + r.source_count + '件)';
+                span.addEventListener('click', () => {
+                    queryInput.value = r.product_name;
+                    queryInput.closest('form').submit();
+                });
+                resultsDiv.appendChild(span);
+            });
+            resultsDiv.classList.remove('hidden');
+        } else {
+            resultsDiv.classList.add('hidden');
+        }
+    }, 400);
+});
+</script>
+{% endif %}
+{% endblock %}
