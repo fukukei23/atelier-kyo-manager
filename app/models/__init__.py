@@ -8,6 +8,8 @@
 
 from .brand_price import BrandPrice
 from .buyma_price_history import BuymaPriceHistory
+from .price_monitor import PriceMonitor
+from .source_price_history import SourcePriceHistory
 from .customer_inquiry import CustomerInquiry
 from .faq_template import FaqTemplate
 from .listing_progress import ListingProgress
@@ -43,4 +45,6 @@ __all__ = [
     "CustomerInquiry",
     "BrandPrice",
     "BuymaPriceHistory",
+    "PriceMonitor",
+    "SourcePriceHistory",
 ]

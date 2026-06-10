@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}価格監視 — atelier-kyo-manager{% endblock %}
+
+{% block content %}
+<div class="max-w-7xl mx-auto px-4 py-6">
+    <!-- ヘッダー -->
+    <div class="flex items-center justify-between mb-6">
+        <h1 class="text-2xl font-bold text-gray-800 dark:text-gray-100">🔍 価格監視</h1>
+        <div class="flex gap-2">
+            <form method="POST" action="{{ url_for('main.price_monitor_refresh_all') }}">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm">
+                    🔄 全件更新
+                </button>
+            </form>
+            <button onclick="document.getElementById('add-form').classList.toggle('hidden')"
+                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm">
+                ＋ 監視追加
+            </button>
+        </div>
+    </div>
+
+    <!-- サマリーカード -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
+        <div class="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-blue-600">{{ active_count }}</div>
+            <div class="text-sm text-gray-600 dark:text-gray-300">監視中</div>
+        </div>
+        <div class="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-green-600">{{ profitable_count }}</div>
+            <div class="text-sm text-gray-600 dark:text-gray-300">利益あり</div>
+        </div>
+        <div class="bg-red-50 dark:bg-red-900/30 rounded-lg p-4 text-center">
+            <div class="text-2xl font-bold text-red-600">{{ unprofitable_count }}</div>
+            <div class="text-sm text-gray-600 dark:text-gray-300">要注意</div>
+        </div>
+    </div>
+
+    <!-- 追加フォーム -->
+    <div id="add-form" class="hidden bg-gray-50 dark:bg-gray-800 rounded-lg p-4 mb-6 border">
+        <h3 class="font-semibold mb-3 text-gray-700 dark:text-gray-200">監視対象を追加</h3>
+        <form method="POST" action="{{ url_for('main.price_monitor_add') }}">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">SSENSE商品URL</label>
+                    <input type="url" name="source_url" required
+                           class="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-200"
+                           placeholder="https://www.ssense.com/en-us/product/prada-eyewear/...">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">ブランド</label>
+                    <input type="text" name="brand" required
+                           class="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-200"
+                           placeholder="Prada" value="Prada">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">商品名</label>
+                    <input type="text" name="product_name"
+                           class="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-200"
+                           placeholder="Silver Shield Sunglasses">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">BUYMA販売価格（JPY）</label>
+                    <input type="number" name="buyma_selling_price" required step="1"
+                           class="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-200"
+                           placeholder="55000">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">カテゴリ</label>
+                    <select name="category" class="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-200">
+                        <option value="accessory" selected>アクセサリー（サングラス等）</option>
+                        <option value="bag">バッグ</option>
+                        <option value="wallet">財布</option>
+                        <option value="shoes">靴</option>
+                        <option value="clothing">衣類</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">通貨</label>
+                    <select name="currency" class="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-200">
+                        <option value="USD" selected>USD</option>
+                        <option value="EUR">EUR</option>
+                        <option value="JPY">JPY</option>
+                    </select>
+                </div>
+            </div>
+            {% if candidates %}
+            <div class="mt-3">
+                <label class="block text-sm text-gray-600 dark:text-gray-400 mb-1">または既存データから選択</label>
+                <select id="candidate-select" class="w-full border rounded px-3 py-2 text-sm dark:bg-gray-700 dark:text-gray-200"
+                        onchange="fillFromCandidate(this)">
+                    <option value="">— 手動入力 —</option>
+                    {% for c in candidates %}
+                    <option value="{{ c.id }}"
+                            data-url="{{ c.source_url or '' }}"
+                            data-brand="{{ c.brand }}"
+                            data-name="{{ c.product_name }}"
+                            data-price="{{ c.price_original or '' }}"
+                            data-currency="{{ c.currency }}">
+                        {{ c.brand }} — {{ c.product_name }} ({{ c.currency }}{{ c.price_original or '?' }})
+                    </option>
+                    {% endfor %}
+                </select>
+                <input type="hidden" name="brand_price_id" id="brand-price-id">
+            </div>
+            {% endif %}
+            <div class="mt-4">
+                <button type="submit" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg text-sm">
+                    追加
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <!-- 商品テーブル -->
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+        <table class="w-full text-sm">
+            <thead class="bg-gray-100 dark:bg-gray-700">
+                <tr>
+                    <th class="px-4 py-3 text-left">商品</th>
+                    <th class="px-4 py-3 text-right">仕入れ価格</th>
+                    <th class="px-4 py-3 text-right">BUYMA価格</th>
+                    <th class="px-4 py-3 text-right">利益</th>
+                    <th class="px-4 py-3 text-center">状態</th>
+                    <th class="px-4 py-3 text-left">最終チェック</th>
+                    <th class="px-4 py-3 text-center">操作</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y dark:divide-gray-700">
+                {% for m in monitors %}
+                <tr class="hover:bg-gray-50 dark:hover:bg-gray-700/50 {{ '' if m.is_active else 'opacity-50' }}">
+                    <td class="px-4 py-3">
+                        <a href="{{ m.source_url }}" target="_blank" class="text-blue-600 hover:underline">
+                            {{ m.product_name[:40] }}{% if m.product_name|length > 40 %}…{% endif %}
+                        </a>
+                        <div class="text-xs text-gray-500">{{ m.brand }}</div>
+                    </td>
+                    <td class="px-4 py-3 text-right font-mono">
+                        {% if m.current_source_price %}
+                            ${{ "%.0f"|format(m.current_source_price) }}
+                            <span class="text-xs text-gray-400">(¥{{ "{:,.0f}".format(m.current_source_price_jpy or 0) }})</span>
+                        {% else %}
+                            <span class="text-gray-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-right font-mono">
+                        <form method="POST" action="{{ url_for('main.price_monitor_update_selling_price', mid=m.id) }}"
+                              class="inline-flex items-center gap-1">
+                            ¥<input type="number" name="buyma_selling_price"
+                                    value="{{ m.buyma_selling_price }}"
+                                    class="w-20 border rounded px-1 py-0.5 text-right text-sm dark:bg-gray-700 dark:text-gray-200"
+                                    onchange="this.form.submit()">
+                        </form>
+                    </td>
+                    <td class="px-4 py-3 text-right font-mono">
+                        {% if m.latest_profit is not none %}
+                            <span class="{{ 'text-green-600' if m.latest_profit > 0 else 'text-red-600' }}">
+                                ¥{{ "{:,.0f}".format(m.latest_profit) }}
+                            </span>
+                            {% if m.latest_profit_rate is not none %}
+                                <span class="text-xs">({{ "%.1f%%"|format(m.latest_profit_rate * 100) }})</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-gray-400">—</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        {% if not m.is_active %}
+                            <span class="bg-gray-200 text-gray-600 px-2 py-0.5 rounded text-xs">停止中</span>
+                        {% elif m.is_profitable %}
+                            <span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs">✅ 利益あり</span>
+                        {% else %}
+                            <span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-xs">⚠️ 赤字</span>
+                        {% endif %}
+                    </td>
+                    <td class="px-4 py-3 text-xs text-gray-500">
+                        {% if m.last_checked_at %}
+                            {{ m.last_checked_at.strftime('%m/%d %H:%M') }}
+                        {% else %}
+                            未チェック
+                        {% endif %}
+                        <button onclick="showHistory({{ m.id }})" class="ml-1 text-blue-500 hover:text-blue-700" title="価格履歴">📈</button>
+                    </td>
+                    <td class="px-4 py-3 text-center">
+                        <div class="flex items-center justify-center gap-1">
+                            <form method="POST" action="{{ url_for('main.price_monitor_refresh', mid=m.id) }}">
+                                <button type="submit" class="text-blue-600 hover:text-blue-800 text-xs px-1" title="更新">🔄</button>
+                            </form>
+                            <form method="POST" action="{{ url_for('main.price_monitor_toggle', mid=m.id) }}">
+                                <input type="hidden" name="active" value="{{ '0' if m.is_active else '1' }}">
+                                <button type="submit" class="text-yellow-600 hover:text-yellow-800 text-xs px-1"
+                                        title="{{ '停止' if m.is_active else '再開' }}">
+                                    {{ '⏸' if m.is_active else '▶' }}
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('main.price_monitor_remove', mid=m.id) }}"
+                                  onsubmit="return confirm('削除してよろしいですか？')">
+                                <button type="submit" class="text-red-600 hover:text-red-800 text-xs px-1" title="削除">🗑</button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not monitors %}
+                <tr>
+                    <td colspan="7" class="px-4 py-8 text-center text-gray-400">
+                        監視対象がありません。「＋ 監視追加」で追加してください。
+                    </td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- 価格履歴モーダル -->
+<div id="history-modal" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+    <div class="bg-white dark:bg-gray-800 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="font-bold text-lg">📈 価格履歴</h3>
+            <button onclick="document.getElementById('history-modal').classList.add('hidden')"
+                    class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+        </div>
+        <div id="history-content" class="text-sm"></div>
+    </div>
+</div>
+
+<script>
+function fillFromCandidate(sel) {
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt.value) return;
+    const form = sel.closest('form');
+    form.querySelector('[name="source_url"]').value = opt.dataset.url;
+    form.querySelector('[name="brand"]').value = opt.dataset.brand;
+    form.querySelector('[name="product_name"]').value = opt.dataset.name;
+    form.querySelector('[name="currency"]').value = opt.dataset.currency;
+    document.getElementById('brand-price-id').value = opt.value;
+}
+
+function esc(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+function showHistory(monitorId) {
+    fetch(`/api/price-monitor/${monitorId}/history`)
+        .then(r => r.json())
+        .then(data => {
+            const content = document.getElementById('history-content');
+            if (!data.length) {
+                content.textContent = '履歴データがありません。';
+            } else {
+                let html = '<table class="w-full"><thead><tr>';
+                html += '<th class="text-left px-2 py-1">日時</th>';
+                html += '<th class="text-right px-2 py-1">価格($)</th>';
+                html += '<th class="text-right px-2 py-1">価格(¥)</th>';
+                html += '<th class="text-right px-2 py-1">利益</th>';
+                html += '<th class="text-center px-2 py-1">状態</th>';
+                html += '</tr></thead><tbody>';
+                data.reverse().forEach(r => {
+                    const date = r.recorded_at ? new Date(r.recorded_at).toLocaleString('ja-JP', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'}) : '—';
+                    const profitClass = r.is_profitable ? 'text-green-600' : 'text-red-600';
+                    const status = r.is_profitable ? '✅' : '⚠️';
+                    const changed = r.price_changed ? ' 🔁' : '';
+                    const srcPrice = r.source_price != null ? r.source_price : '—';
+                    const srcJpy = r.source_price_jpy != null ? r.source_price_jpy.toLocaleString() : '—';
+                    const profit = r.profit != null ? r.profit.toLocaleString() : '—';
+                    html += '<tr class="border-b dark:border-gray-700">';
+                    html += `<td class="px-2 py-1">${esc(date)}</td>`;
+                    html += `<td class="px-2 py-1 text-right">$${esc(String(srcPrice))}${esc(changed)}</td>`;
+                    html += `<td class="px-2 py-1 text-right">¥${esc(srcJpy)}</td>`;
+                    html += `<td class="px-2 py-1 text-right ${profitClass}">¥${esc(profit)}</td>`;
+                    html += `<td class="px-2 py-1 text-center">${status}</td>`;
+                    html += '</tr>';
+                });
+                html += '</tbody></table>';
+                content.innerHTML = html;
+            }
+            document.getElementById('history-modal').classList.remove('hidden');
+        });
+}
+</script>
+{% endblock %}

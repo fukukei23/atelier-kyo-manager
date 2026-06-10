@@ -49,9 +49,15 @@ celery-worker: venv
 	@echo ">>> Starting Celery worker..."
 	@. $(VENV_DIR)/bin/activate && celery -A app.core.celery_app worker --loglevel=info
 
+.PHONY: celery-beat
+celery-beat: venv
+	@echo ">>> Starting Celery beat..."
+	@. $(VENV_DIR)/bin/activate && celery -A app.core.celery_app beat --loglevel=info
+
 .PHONY: run-all
 run-all: redis-start
-	@echo ">>> Starting Celery worker + Flask..."
+	@echo ">>> Starting Celery worker + beat + Flask..."
 	@. $(VENV_DIR)/bin/activate && celery -A app.core.celery_app worker --loglevel=info &
+	@. $(VENV_DIR)/bin/activate && celery -A app.core.celery_app beat --loglevel=info &
 	@sleep 1 && flask run
 
