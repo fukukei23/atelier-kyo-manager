@@ -25,6 +25,24 @@ logger = logging.getLogger(__name__)
 SSENSE_SHIPPING_USD = 25.0
 # アラート再送間隔（時間）
 ALERT_INTERVAL_HOURS = 6
+# 許可する仕入れ先ドメイン（SSRF対策）
+ALLOWED_DOMAINS = {"ssense.com", "www.ssense.com", "yoox.com", "www.yoox.com", "farfetch.com", "www.farfetch.com"}
+
+
+def _validate_source_url(url: str) -> str:
+    """仕入れ先URLのバリデーション（SSRF対策: 許可ドメインのみ）。"""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    domain = (parsed.hostname or "").lower()
+    if domain not in ALLOWED_DOMAINS:
+        raise ValueError(f"許可されていないドメインです: {domain}")
+    return url
+
+
+def _safe_log(value: str) -> str:
+    """ログ出力用に制御文字を除去。"""
+    return value.replace("\n", "").replace("\r", "").replace("\t", " ")[:200]
 
 
 def add_monitor(
@@ -38,6 +56,9 @@ def add_monitor(
     current_source_price: float | None = None,
 ) -> PriceMonitor:
     """監視対象を追加。"""
+    # SSRF対策: 許可ドメインのみ
+    _validate_source_url(source_url)
+
     fx_table, _ = get_fx_table_jpy()
     rate = fx_table.get(currency, 1.0)
     price_jpy = (current_source_price or 0) * rate if current_source_price else 0
@@ -118,7 +139,7 @@ def check_single_price(monitor: PriceMonitor) -> dict:
 
         if not fetch_result.get("success"):
             result["error"] = fetch_result.get("error", "fetch failed")
-            logger.warning(f"[Monitor] Fetch failed for {monitor.source_url}: {result['error']}")
+            logger.warning("[Monitor] Fetch failed for %s: %s", _safe_log(monitor.source_url), result["error"])
             return result
 
         raw_price = fetch_result.get("raw_price") or fetch_result.get("price")
@@ -191,7 +212,7 @@ def check_single_price(monitor: PriceMonitor) -> dict:
 
     except Exception as e:
         result["error"] = str(e)
-        logger.error(f"[Monitor] Error checking {monitor.id}: {e}")
+        logger.error("[Monitor] Error checking %s: %s", monitor.id, e)
 
     return result
 

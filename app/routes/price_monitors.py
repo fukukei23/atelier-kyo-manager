@@ -3,14 +3,25 @@
 # ======================================================================
 from __future__ import annotations
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
-from flask_login import login_required
+from flask import abort, flash, jsonify, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
 
 from app.extensions import db
 from app.models.price_monitor import PriceMonitor
 from app.services import price_monitor_service
 
 from . import bp
+
+
+def _get_owned_monitor(mid: int) -> PriceMonitor:
+    """監視レコードを取得。単一ユーザー運用のため存在確認のみ（将来は所有者チェック追加）。"""
+    monitor = db.session.get(PriceMonitor, mid)
+    if not monitor:
+        abort(404)
+    # TODO: 多ユーザー化時に所有者チェック追加
+    # if monitor.created_by != current_user.id:
+    #     abort(403)
+    return monitor
 
 
 @bp.get("/price-monitor")
@@ -78,6 +89,7 @@ def price_monitor_add():
 @login_required
 def price_monitor_remove(mid: int):
     """監視対象を削除"""
+    _get_owned_monitor(mid)  # 存在確認（404）
     if price_monitor_service.remove_monitor(mid):
         flash("監視を削除しました。", "success")
     else:
@@ -89,6 +101,7 @@ def price_monitor_remove(mid: int):
 @login_required
 def price_monitor_toggle(mid: int):
     """監視の一時停止/再開"""
+    _get_owned_monitor(mid)  # 存在確認（404）
     active = request.form.get("active", "0") == "1"
     monitor = price_monitor_service.toggle_monitor(mid, active)
     if monitor:
@@ -103,10 +116,7 @@ def price_monitor_toggle(mid: int):
 @login_required
 def price_monitor_refresh(mid: int):
     """単品の価格チェック（手動）"""
-    monitor = db.session.get(PriceMonitor, mid)
-    if not monitor:
-        flash("監視が見つかりません。", "error")
-        return redirect(url_for("main.price_monitor_dashboard"))
+    monitor = _get_owned_monitor(mid)
 
     result = price_monitor_service.check_single_price(monitor)
     if result.get("error"):
@@ -136,6 +146,7 @@ def price_monitor_refresh_all():
 @login_required
 def price_monitor_update_selling_price(mid: int):
     """BUYMA販売価格を更新"""
+    _get_owned_monitor(mid)  # 存在確認（404）
     price_str = request.form.get("buyma_selling_price", "0")
     try:
         price = float(price_str)
@@ -155,5 +166,6 @@ def price_monitor_update_selling_price(mid: int):
 @login_required
 def api_price_history(mid: int):
     """価格履歴JSON API（チャート用）"""
+    _get_owned_monitor(mid)  # 存在確認（404）
     history = price_monitor_service.get_price_history(mid)
     return jsonify(history)
