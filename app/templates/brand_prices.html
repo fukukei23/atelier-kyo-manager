@@ -65,6 +65,17 @@
                 <span id="sale-scrape-loading" class="text-xs text-gray-400 ml-2 hidden">取得中...</span>
                 <span class="text-xs text-gray-400 ml-2">YOOX / SSENSE</span>
             </form>
+
+            <form method="POST" action="{{ url_for('main.brand_prices_run_pipeline') }}" id="pipeline-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="brand" value="{{ brand }}">
+                <input type="hidden" name="category" value="sunglasses">
+                <button type="submit" id="pipeline-btn" class="bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
+                    サングラス価格検証
+                </button>
+                <span id="pipeline-loading" class="text-xs text-gray-400 ml-2 hidden">検証中...</span>
+                <span class="text-xs text-gray-400 ml-2">SSENSE→BUYMA自動検証</span>
+            </form>
         </div>
     </div>
 
@@ -241,5 +252,6 @@ function pollTask(taskId, btn, loading) {
 
 asyncScrape('scrape-form', 'scrape-btn', 'scrape-loading', 'scrape-hint');
 asyncScrape('sale-scrape-form', 'sale-scrape-btn', 'sale-scrape-loading', null);
+asyncScrape('pipeline-form', 'pipeline-btn', 'pipeline-loading', null);
 </script>
 {% endblock %}

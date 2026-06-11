@@ -512,6 +512,95 @@ def api_price_comparison_search():
     return jsonify({"results": results})
 
 
+# ---------------------------------------------------------------------------
+# SSENSE + BUYMA Pipeline
+# ---------------------------------------------------------------------------
+
+
+@bp.post("/brand-prices/run-pipeline")
+@login_required
+def brand_prices_run_pipeline():
+    """SSENSE+BUYMA自動価格検証パイプライン実行。"""
+    brand = request.form.get("brand", "Gucci")
+    category = request.form.get("category", "sunglasses")
+
+    if brand not in SUPPORTED_BRANDS:
+        flash("対応していないブランドです", "error")
+        return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+    # Celery タスクを投入
+    try:
+        from app.tasks.scrape_tasks import run_ssense_buyma_pipeline
+
+        pending = session.get("pending_tasks", [])
+        if len(pending) >= 5:
+            flash("同時実行数の上限に達しています。少し待ってから再試行してください。", "warning")
+            return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+        task = run_ssense_buyma_pipeline.delay(brand, category)
+        pending.append(task.id)
+        session["pending_tasks"] = pending
+        return jsonify({"task_id": task.id, "brand": brand, "category": category, "status": "started"})
+    except Exception as e:
+        # フォールバック: 同期実行
+        logger.warning("Celery unavailable for pipeline, falling back to sync: %s", e)
+        try:
+            from app.services.ssense_buyma_pipeline import SsenseBuymaPipeline
+
+            pipeline = SsenseBuymaPipeline()
+            summary = pipeline.run(brand, category)
+            flash(
+                f"{brand} パイプライン完了: {summary.total_scraped}件取得、"
+                f"{summary.verified_profitable}件黒字（検証済み）",
+                "success",
+            )
+        except Exception as ex:
+            logger.error("Pipeline error: %s", ex, exc_info=True)
+            flash(f"パイプラインエラー: {safe_error_msg(ex, context='pipeline')}", "error")
+        return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+
+@bp.get("/api/brand-prices/pipeline-results")
+@login_required
+def api_pipeline_results():
+    """検証済み(BROWSER_VERIFIED)のBrandPriceレコードのみをJSON返却。"""
+    from app.extensions import db
+    from app.models.brand_price import BrandPrice
+
+    brand = request.args.get("brand", "Gucci")
+    category = request.args.get("category", "sunglasses")
+
+    rows = db.session.scalars(
+        db.select(BrandPrice)
+        .filter(
+            BrandPrice.brand == brand,
+            BrandPrice.purchase_price_source == "browser_verified",
+            BrandPrice.selling_price_source == "browser_verified",
+        )
+        .order_by(BrandPrice.created_at.desc())
+        .limit(50)
+    ).all()
+
+    results = []
+    for r in rows:
+        results.append({
+            "id": r.id,
+            "product_name": r.product_name,
+            "color": r.color,
+            "model_number": r.model_number,
+            "price_usd": r.price_original,
+            "price_jpy": r.price_jpy,
+            "buyma_price": r.buyma_price,
+            "buyma_matched_name": r.buyma_matched_name,
+            "buyma_match_score": r.buyma_match_score,
+            "source_url": r.source_url,
+            "purchase_verified": True,
+            "selling_verified": True,
+        })
+
+    return jsonify({"brand": brand, "category": category, "results": results, "total": len(results)})
+
+
 @bp.post("/price-comparison/scrape-and-compare")
 @login_required
 def price_comparison_scrape_and_compare():

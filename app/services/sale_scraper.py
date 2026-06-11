@@ -178,11 +178,11 @@ def _scrape_yoox(brand: str, item_limit: int = 10) -> list[dict]:
 # SSENSE scraper
 # ---------------------------------------------------------------------------
 
-def _scrape_ssense(brand: str, item_limit: int = 10) -> list[dict]:
+def _scrape_ssense(brand: str, item_limit: int = 10, category: str = "bags") -> list[dict]:
     """
-    SSENSE women's bags brand page → list of items with sale prices.
+    SSENSE women's brand page → list of items with sale prices.
 
-    URL: https://www.ssense.com/en-us/women/designers/{slug}/bags
+    URL: https://www.ssense.com/en-us/women/designers/{slug}/{category}
     SPA with server-rendered metadata arrays in <head>.
     Extracts from page metadata (fast, no JS needed) + URL slugs for product names.
     """
@@ -191,7 +191,7 @@ def _scrape_ssense(brand: str, item_limit: int = 10) -> list[dict]:
         logger.warning(f"[ssense] No slug for brand {brand}")
         return []
 
-    url = f"https://www.ssense.com/en-us/women/designers/{slug}/bags"
+    url = f"https://www.ssense.com/en-us/women/designers/{slug}/{category}"
 
     # Try curl_cffi first (metadata is server-rendered even in SPA)
     html = _fetch_with_cffi(url, timeout=30)
@@ -301,6 +301,98 @@ def _ssense_via_playwright(url: str) -> str | None:
         return None
 
 
+def scrape_ssense_pdp(product_url: str) -> dict | None:
+    """SSENSE商品ページ(PDP)から色・型番・フルネームを取得。
+
+    playwright-stealthでPDPを取得し、JSON-LD構造化データから
+    color, sku, nameを抽出する。パイプラインのPhase 2で使用。
+
+    Returns:
+        {"color": str, "model_number": str, "full_name": str} or None
+    """
+    if not product_url:
+        return None
+
+    # Ensure absolute URL
+    if product_url.startswith("/"):
+        product_url = "https://www.ssense.com" + product_url
+
+    html = _fetch_with_cffi(product_url, timeout=30)
+    if not html:
+        logger.warning(f"[ssense-pdp] curl_cffi failed for {product_url}, trying playwright")
+        html = _ssense_via_playwright(product_url)
+        if not html:
+            return None
+
+    # Extract JSON-LD structured data
+    jsonld_re = re.compile(
+        r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        re.DOTALL,
+    )
+
+    import json as _json
+
+    for m in jsonld_re.finditer(html):
+        try:
+            data = _json.loads(m.group(1))
+        except (ValueError, TypeError):
+            continue
+
+        # Handle single object or list
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            # Look for Product schema
+            schema_type = item.get("@type", "")
+            if isinstance(schema_type, list):
+                schema_type = schema_type[0] if schema_type else ""
+            if "Product" not in schema_type:
+                continue
+
+            result: dict[str, str | None] = {}
+
+            # Name
+            result["full_name"] = item.get("name")
+
+            # SKU / model number
+            result["model_number"] = item.get("sku") or item.get("model")
+
+            # Color — check multiple possible locations
+            color = item.get("color")
+            if not color:
+                # Check offers → color
+                offers = item.get("offers", {})
+                if isinstance(offers, dict):
+                    color = offers.get("color")
+            if not color:
+                # Check in additionalProperty
+                for prop in item.get("additionalProperty", []):
+                    if isinstance(prop, dict) and prop.get("name", "").lower() == "color":
+                        color = prop.get("value")
+                        break
+            result["color"] = color
+
+            if result.get("full_name") or result.get("model_number"):
+                logger.info(
+                    "[ssense-pdp] %s → color=%s, model=%s",
+                    product_url, result.get("color"), result.get("model_number"),
+                )
+                return result
+
+    # Fallback: extract from meta tags
+    color_meta = re.search(r'<meta[^>]*property=["\']product:color["\'][^>]*content=["\']([^"\']+)', html)
+    name_meta = re.search(r'<meta[^>]*property=["\']og:title["\'][^>]*content=["\']([^"\']+)', html)
+
+    if color_meta or name_meta:
+        return {
+            "color": color_meta.group(1) if color_meta else None,
+            "model_number": None,
+            "full_name": name_meta.group(1) if name_meta else None,
+        }
+
+    logger.warning("[ssense-pdp] No structured data found for %s", product_url)
+    return None
+
+
 def _ssense_parse_html_fallback(html: str, brand: str, url: str, item_limit: int) -> list[dict]:
     """Fallback: parse SSENSE HTML directly when metadata JSON unavailable."""
     results: list[dict] = []
@@ -358,6 +450,7 @@ class SaleScraper:
         brand: str,
         sites: list[str] | None = None,
         item_limit: int = 10,
+        category: str = "bags",
     ) -> list[dict]:
         if sites is None:
             sites = SALE_SITES
@@ -368,7 +461,7 @@ class SaleScraper:
             results.extend(_scrape_yoox(brand, item_limit))
 
         if "ssense" in sites:
-            results.extend(_scrape_ssense(brand, item_limit))
+            results.extend(_scrape_ssense(brand, item_limit, category=category))
 
         logger.info(f"[SaleScraper] {brand}: {len(results)} total sale items")
         return results

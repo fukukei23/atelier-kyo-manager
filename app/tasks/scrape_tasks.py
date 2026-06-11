@@ -43,7 +43,7 @@ def scrape_sale_prices(self, brand: str, category: str = "bag") -> dict:
         from app.services import brand_price_service
 
         scraper = SaleScraper()
-        results = scraper.scrape(brand)
+        results = scraper.scrape(brand, category=category)
 
         if not results:
             return {"brand": brand, "saved": 0, "error": "no_results"}
@@ -55,3 +55,32 @@ def scrape_sale_prices(self, brand: str, category: str = "bag") -> dict:
     except Exception as exc:
         logger.error("scrape_sale_prices error: %s", exc, exc_info=True)
         return {"brand": brand, "saved": 0, "error": "scrape_error"}
+
+
+@celery.task(bind=True, name="run_ssense_buyma_pipeline")
+def run_ssense_buyma_pipeline(self, brand: str, category: str = "sunglasses") -> dict:
+    """SSENSE→BUYMA自動価格検証パイプライン。"""
+    try:
+        from app.services.ssense_buyma_pipeline import SsenseBuymaPipeline
+
+        pipeline = SsenseBuymaPipeline()
+        summary = pipeline.run(brand, category)
+        logger.info(
+            "pipeline: %s/%s → scraped=%d, buyma=%d, profitable=%d",
+            brand,
+            category,
+            summary.total_scraped,
+            summary.buyma_matched,
+            summary.verified_profitable,
+        )
+        return {
+            "brand": brand,
+            "total_scraped": summary.total_scraped,
+            "buyma_matched": summary.buyma_matched,
+            "verified_profitable": summary.verified_profitable,
+            "errors": summary.errors,
+        }
+
+    except Exception as exc:
+        logger.error("pipeline error: %s", exc, exc_info=True)
+        return {"brand": brand, "error": str(exc)}

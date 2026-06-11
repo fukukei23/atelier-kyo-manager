@@ -31,6 +31,11 @@ class BrandPrice(db.Model):
     # 実際の仕入れ価格（セール・アウトレット等の実際購入価格。未設定時はprice_jpyを使用）
     actual_purchase_jpy = db.Column(Float, nullable=True)
     actual_purchase_source = db.Column(String(32), nullable=True)  # "manual", "yoox", "ssense", etc.
+    # 価格データ信頼性（PriceSource enum値を文字列で保存）
+    color = db.Column(String(128), nullable=True)
+    model_number = db.Column(String(64), nullable=True)
+    purchase_price_source = db.Column(String(32), nullable=True, default="unknown")
+    selling_price_source = db.Column(String(32), nullable=True, default="unknown")
     scraped_at = db.Column(DateTime, default=_utcnow)
     created_at = db.Column(DateTime, default=_utcnow)
     updated_at = db.Column(
