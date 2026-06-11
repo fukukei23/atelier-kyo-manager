@@ -138,6 +138,39 @@ RegionRecommendation, RepeatCustomer, ShipmentNotification, StockCheck
 - Webhook受信は `warehouse_webhook.py` で処理
 - LLM呼び出しは `utils/ai_llm_controller.py` で一元管理
 
+## ⚠️ 価格調査の鉄則（推測・架空データ禁止）
+
+価格調査・利益計算において、**推測データは厳禁**。以下を必ず守ること。
+
+### 4つの確認義務
+
+1. **仕入価格** → ブラウザ/スクレイパで実際のページから取得（`PriceSource.BROWSER_VERIFIED`）
+2. **BUYMA価格** → BUYMA検索で実際の出品価格を確認（辞書引き・キーワード推測は禁止）
+3. **商品名・色・型番** → 仕入先とBUYMAの両方で実在確認（存在しない色・モデルを推測禁止）
+4. **利益計算** → 1〜3が全て「確認済み」のデータのみで実行
+
+### データ信頼性のランク
+
+| PriceSource | 信頼度 | 利益計算 | 例 |
+|---|---|---|---|
+| `BROWSER_VERIFIED` | ✅ 高 | 使用可能 | Playwright/スクレイパで取得 |
+| `MANUAL_INPUT` | ✅ 高 | 使用可能 | 人間が手動入力 |
+| `API_VERIFIED` | ✅ 高 | 使用可能 | 公式API等から取得 |
+| `KEYWORD_GUESS` | ❌ 禁止 | **PriceIntegrityError** | キーワードマッチング推測 |
+| `UNKNOWN` | ❌ 禁止 | **PriceIntegrityError** | 出所不明 |
+
+### 過去の失敗事例（参考）
+
+- **BUYMA価格推測**: 「Fendi Lettering」をキーワード検索→¥71,000と推定→実際は¥45,600〜¥57,360（¥13,000〜25,000の過大評価）
+- **架空SKU生成**: 「Havana」「Lettering Slim」等の存在しない色・モデルを推測で生成→SSENSE/BUYMAに実在せず
+- **結果**: 推測ベースで「黒字6SKU」と誤判定→実際は全滅
+
+### コードでの強制（`app/core/pricing/schemas.py`）
+
+- `PricingInput.validate_sources()` が `KEYWORD_GUESS` / `UNKNOWN` を検出すると `PriceIntegrityError` を投げる
+- `calculator.py::calculate_pricing()` が計算前に必ず検証を実行
+- 後方互換のため `skip_source_validation=True` も用意（レガシーテストのみ使用可）
+
 ## 作業記録ルール
 
 - プロジェクト固有の変更履歴は `docs/変更履歴.md` に記録すること

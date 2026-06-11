@@ -225,6 +225,12 @@ class TestLoadPricingConfig:
 # calculator.py — calculate_pricing integration
 # =====================================================================
 class TestCalculatePricing:
+    """計算ロジックのテスト — ソース検証はスキップ（検証テストは test_price_integrity.py）。"""
+
+    @staticmethod
+    def _calc(inp, **kwargs):
+        return calculate_pricing(inp, skip_source_validation=True, **kwargs)
+
     def test_basic_domestic(self):
         inp = PricingInput(
             purchase_price=50000,
@@ -232,7 +238,7 @@ class TestCalculatePricing:
             shipping_cost=2000,
             item_category="bag",
         )
-        result = calculate_pricing(inp, source_type="domestic")
+        result = self._calc(inp, source_type="domestic")
         assert result.revenue == 80000
         assert result.profit > 0
         assert 0 < result.profit_rate < 1
@@ -245,7 +251,7 @@ class TestCalculatePricing:
             shipping_cost=2000,
             item_category="bag",
         )
-        result = calculate_pricing(inp, source_type="overseas")
+        result = self._calc(inp, source_type="overseas")
         assert result.revenue == 80000
         assert result.profit > 0
 
@@ -257,7 +263,7 @@ class TestCalculatePricing:
             exchange_rate=160.0,
             shipping_cost=2000,
         )
-        result = calculate_pricing(inp)
+        result = self._calc(inp)
         assert result.purchase_price_jpy == 300 * 160
         assert result.total_cost > 0
 
@@ -267,7 +273,7 @@ class TestCalculatePricing:
             selling_price=80000,
             customs_duty=5000,  # manual override
         )
-        result = calculate_pricing(inp)
+        result = self._calc(inp)
         assert result.auto_customs_duty == 0.0
         assert result.total_cost > 50000  # includes customs
 
@@ -277,7 +283,7 @@ class TestCalculatePricing:
             selling_price=80000,
             item_category="bag",
         )
-        result = calculate_pricing(inp)
+        result = self._calc(inp)
         assert result.auto_customs_duty > 0
         assert result.customs_rate_used == 0.11  # bag rate
 
@@ -286,7 +292,7 @@ class TestCalculatePricing:
             purchase_price=50000,
             selling_price=0,
         )
-        result = calculate_pricing(inp)
+        result = self._calc(inp)
         assert result.profit_rate == 0.0
 
     def test_warehouse_shipping_included(self):
@@ -296,7 +302,7 @@ class TestCalculatePricing:
             shipping_cost=2000,
             warehouse_shipping_cost=3000,
         )
-        result = calculate_pricing(inp)
+        result = self._calc(inp)
         assert result.total_shipping_cost == 5000
 
     def test_procurement_and_transaction_fees(self):
@@ -306,7 +312,7 @@ class TestCalculatePricing:
             procurement_fee=2000,
             transaction_fee=500,
         )
-        result = calculate_pricing(inp)
+        result = self._calc(inp)
         assert result.total_cost > 50000 + 2000 + 500
 
     def test_result_is_rounded(self):
@@ -315,7 +321,7 @@ class TestCalculatePricing:
             selling_price=77777,
             item_category="leather",
         )
-        result = calculate_pricing(inp)
+        result = self._calc(inp)
         # revenue should be exactly 77777 (integer)
         assert result.revenue == 77777
         # profit_rate should have 4 decimal places
@@ -327,5 +333,5 @@ class TestCalculatePricing:
             selling_price=150000,
             item_material="leather",
         )
-        result = calculate_pricing(inp)
+        result = self._calc(inp)
         assert result.customs_rate_used == 0.12

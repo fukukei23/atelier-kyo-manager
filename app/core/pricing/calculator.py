@@ -8,13 +8,20 @@ def calculate_pricing(
     inp: PricingInput,
     config: PricingConfig | None = None,
     source_type: str = "domestic",
+    *,
+    skip_source_validation: bool = False,
 ) -> PricingResult:
     """
     利益計算のコアロジック。
     Flask/CLI/API からはこの関数だけを呼ぶ。
 
     source_type: "domestic" or "overseas" — 成約手数料率の判定に使用
+    skip_source_validation: True の場合、データソース検証をスキップ（後方互換用）
     """
+    # 0. データソース信頼性チェック — 推測データでの計算を防止
+    if not skip_source_validation:
+        inp.validate_sources()
+
     cfg = config or load_pricing_config()
 
     # 1. 為替変換: original_currency != "JPY" の場合に purchase_price を JPY 換算

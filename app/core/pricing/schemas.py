@@ -1,11 +1,44 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Literal
 
 
 def nz(value: float | int | None) -> float:
     """None を 0 に変換するヘルパー（価格計算用）。"""
     return value if value is not None else 0.0
+
+
+class PriceSource(str, Enum):
+    """価格データの取得元 — 信頼度に応じて計可/不可を判定。"""
+
+    BROWSER_VERIFIED = "browser_verified"  # ブラウザ/スクレイパで実際のページから取得
+    MANUAL_INPUT = "manual_input"          # 人間が手動入力
+    API_VERIFIED = "api_verified"          # 公式API等から取得
+    KEYWORD_GUESS = "keyword_guess"        # キーワードマッチングによる推測（禁止）
+    UNKNOWN = "unknown"                    # 出所不明（禁止）
+
+
+@dataclass
+class PriceData:
+    """価格データは必ず出所を明示する。推測データは利益計算に使えない。"""
+
+    price: float
+    source: PriceSource = PriceSource.UNKNOWN
+    label: str = ""  # 例: "SSENSE $261", "BUYMA Black Lettering ¥45,600"
+
+    def is_reliable(self) -> bool:
+        """利益計算に使える信頼性かどうか。"""
+        return self.source in (
+            PriceSource.BROWSER_VERIFIED,
+            PriceSource.MANUAL_INPUT,
+            PriceSource.API_VERIFIED,
+        )
+
+
+class PriceIntegrityError(ValueError):
+    """推測/未確認データでの利益計算を防止する例外。"""
 
 
 @dataclass
@@ -25,6 +58,26 @@ class PricingInput:
     exchange_rate: float = 1.0  # 適用為替レート（1単位あたりJPY）
     item_category: str = ""  # 品目カテゴリ（関税率自動決定用）
     item_material: str = ""  # 素材（関税率自動決定用）
+
+    # --- データ信頼性チェック ---
+    purchase_price_source: PriceSource = PriceSource.UNKNOWN
+    selling_price_source: PriceSource = PriceSource.UNKNOWN
+
+    def validate_sources(self) -> None:
+        """推測/未確認データで計算しようとしたら例外を投げる。"""
+        errors: list[str] = []
+        if not PriceData(self.purchase_price, self.purchase_price_source).is_reliable():
+            errors.append(
+                f"仕入価格のデータソースが信頼できません: {self.purchase_price_source.value}。"
+                "ブラウザ/スクレイパで実際の価格を確認してください。"
+            )
+        if not PriceData(self.selling_price, self.selling_price_source).is_reliable():
+            errors.append(
+                f"販売価格のデータソースが信頼できません: {self.selling_price_source.value}。"
+                "BUYMAで実際の出品価格を確認してください。"
+            )
+        if errors:
+            raise PriceIntegrityError("\n".join(errors))
 
 
 @dataclass
