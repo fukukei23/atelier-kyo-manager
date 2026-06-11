@@ -11,6 +11,10 @@ from flask_login import login_required
 from app.core.timezone import _utcnow
 from app.services import brand_price_service
 from app.services.brand_price_scraper import SUPPORTED_BRANDS, SUPPORTED_SITES, BrandPriceScraper
+
+SUPPORTED_PIPELINE_CATEGORIES = frozenset({
+    "bags", "sunglasses", "wallet", "shoes", "accessory", "clothing",
+})
 from app.services import price_comparison_service
 from app.services.buyma_price_scraper import (
     BRAND_THRESHOLDS,
@@ -526,6 +530,10 @@ def brand_prices_run_pipeline():
 
     if brand not in SUPPORTED_BRANDS:
         flash("対応していないブランドです", "error")
+        return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
+
+    if category not in SUPPORTED_PIPELINE_CATEGORIES:
+        flash("対応していないカテゴリです", "error")
         return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
 
     # Celery タスクを投入

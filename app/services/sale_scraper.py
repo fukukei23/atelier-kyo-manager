@@ -31,6 +31,15 @@ logger = logging.getLogger(__name__)
 SALE_SITES = ["yoox", "ssense"]
 
 # ---------------------------------------------------------------------------
+# Valid categories for SSENSE URL construction (prevent path injection)
+# ---------------------------------------------------------------------------
+
+VALID_CATEGORIES = frozenset({
+    "bags", "sunglasses", "wallet", "shoes", "accessory",
+    "clothing", "jewelry", "watches", "hats", "scarves",
+})
+
+# ---------------------------------------------------------------------------
 # Brand slug mappings
 # ---------------------------------------------------------------------------
 
@@ -189,6 +198,10 @@ def _scrape_ssense(brand: str, item_limit: int = 10, category: str = "bags") -> 
     slug = _SSENSE_SLUGS.get(brand)
     if not slug:
         logger.warning(f"[ssense] No slug for brand {brand}")
+        return []
+
+    if category not in VALID_CATEGORIES:
+        logger.warning(f"[ssense] Invalid category: {category!r}")
         return []
 
     url = f"https://www.ssense.com/en-us/women/designers/{slug}/{category}"
