@@ -1,0 +1,12 @@
+{
+  "interval_sec": 900,
+  "rounds": 96,
+  "out_dir": "results",
+  "_comment": "price_ceiling は各キーワードの相場をオークフリー等で調べ、手数料送料を引いても利益が出る上限を人が設定する。相場より明確に安い出品だけを候補にするための足切り。",
+  "watches": [
+    { "keyword": "SEL55F18Z", "price_ceiling": 48000 },
+    { "keyword": "SIGMA 30mm F1.4 DC DN", "price_ceiling": 22000 },
+    { "keyword": "スーパーファミコン 本体 箱説付", "price_ceiling": 4000 },
+    { "keyword": "ゲームボーイアドバンスSP 本体", "price_ceiling": 5000 }
+  ]
+}
