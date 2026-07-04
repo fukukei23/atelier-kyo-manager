@@ -1,4 +1,6 @@
 results/
 results_smoke/
+results_run*.bak/
 monitor_config.json
 monitor.log
+monitor_run*.log.bak
