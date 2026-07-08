@@ -1,3 +1,12 @@
+# 改行コード正規化（監査⑨・sentaku L1+L2 採用案 A）
+# - 既定: LF（WSL/Linux/Python 実行を主とするため）
+# - 例外: Windows実行ファイル（bat/ps1/cmd）は CRLF を維持
+* text=auto eol=lf
+*.bat text eol=crlf
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+
+# LFS（既存ルール・変更しない）
 *.zip filter=lfs diff=lfs merge=lfs -text
 *.pdf filter=lfs diff=lfs merge=lfs -text
 *.png filter=lfs diff=lfs merge=lfs -text
