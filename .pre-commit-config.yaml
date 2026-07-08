@@ -58,3 +58,23 @@ repos:
             ^exports_atelier/.* |
             ^\.venv/.* | ^venv/.* | ^\.venv_backup/.*
           )
+
+  # 4) CRLF/LF line endings verify (監査⑨・CRLF//mnt/c リスク検査の防御層)
+      # .gitattributes で * text=auto eol=lf + .bat/.ps1/.cmd eol=crlf を宣言。
+      # テキスト系拡張子に CRLF が混入したら commit をブロック（.py/.sh/.md/.json 等）
+      # バイナリと Windows 実行ファイルは検査対象外（後者は CRLF 正）
+  - repo: local
+    hooks:
+      - id: forbid-crlf-in-text-files
+        name: forbid CRLF in text files (.bat/.ps1/.cmd + binaries を除く)
+        entry: python scripts/check_line_endings.py
+        language: python
+        pass_filenames: true
+        exclude: |
+          (?x)(
+            ^.*\.(bat|ps1|cmd)$ |                                # CRLF 正
+            ^.*\.(docx|xlsx|pptx|doc|xls|ppt|pdf|zip)$ |          # Office/PDF/ZIP 系バイナリ
+            ^.*\.(png|jpg|jpeg|gif|mp4|mov|webm|onnx)$ |          # 画像/動画/モデル
+            ^\.venv/.* | ^venv/.* | ^\.venv_backup/.* |
+            ^migrations/.* | ^export/.* | ^exports_atelier/.*
+          )

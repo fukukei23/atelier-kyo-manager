@@ -6,6 +6,25 @@
 *.ps1 text eol=crlf
 *.cmd text eol=crlf
 
+# バイナリ系（pre-commit が text として扱わないよう -text を付与）
+# .docx/.xlsx は Office Open XML = ZIP コンテナで内部に CRLF 含むのが正常
+*.docx binary
+*.xlsx binary
+*.doc  binary
+*.xls  binary
+*.ppt  binary
+*.pptx binary
+*.zip  binary
+*.pdf  binary
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.mp4  binary
+*.mov  binary
+*.webm binary
+*.onnx binary
+
 # LFS（既存ルール・変更しない）
 *.zip filter=lfs diff=lfs merge=lfs -text
 *.pdf filter=lfs diff=lfs merge=lfs -text
