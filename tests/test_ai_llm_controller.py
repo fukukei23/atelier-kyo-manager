@@ -4,15 +4,12 @@ ai_llm_controller のテスト — キャッシュ・コスト・リトライ・
 
 from __future__ import annotations
 
-import json
-import time
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.models.result_models import GenerateResult
-from app.utils.ai_llm_controller import AILlmController, MODEL_COST, TASK_TO_MODEL_FAMILY
-
+from app.utils.ai_llm_controller import MODEL_COST, TASK_TO_MODEL_FAMILY, AILlmController
 
 # ==============================
 # _cache_key のテスト
@@ -375,6 +372,7 @@ class TestSaveChatHistory:
 
         with patch.dict("sys.modules", {"app": None, "app.models": None}):
             from app.utils.chat_history_saver import save_chat_history
+
             save_chat_history("hello", result)
 
     @patch("app.utils.chat_history_saver.datetime")
@@ -398,6 +396,7 @@ class TestSaveChatHistory:
             },
         ):
             from app.utils.chat_history_saver import save_chat_history
+
             save_chat_history("hello", result)
 
         assert mock_db.session.add.call_count == 2
@@ -419,6 +418,7 @@ class TestSaveChatHistory:
             },
         ):
             from app.utils.chat_history_saver import save_chat_history
+
             save_chat_history("hello", result)
 
         mock_db.session.rollback.assert_called_once()
@@ -446,6 +446,7 @@ class TestSaveChatHistory:
             },
         ):
             from app.utils.chat_history_saver import save_chat_history
+
             save_chat_history("hello", result)
 
         assert created[1]._kwargs.get("tokens") == 150

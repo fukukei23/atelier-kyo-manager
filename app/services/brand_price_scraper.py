@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import random
@@ -17,16 +18,31 @@ PROXY_POOL_PATH = Path(__file__).resolve().parents[1] / "config" / "proxy_pool.j
 
 SUPPORTED_SITES = [
     "farfetch",
-    "gucci_official", "prada_official", "valentino_official",
+    "gucci_official",
+    "prada_official",
+    "valentino_official",
     "ferragamo_official",
-    "loewe_official", "balenciaga_official", "bottegaveneta_official",
-    "versace_official", "marni_official", "chloe_official", "celine_official",
+    "loewe_official",
+    "balenciaga_official",
+    "bottegaveneta_official",
+    "versace_official",
+    "marni_official",
+    "chloe_official",
+    "celine_official",
 ]
 
 SUPPORTED_BRANDS = [
-    "Gucci", "Prada", "Valentino", "Ferragamo",
-    "Loewe", "Balenciaga", "Bottega Veneta",
-    "Versace", "Marni", "Chloe", "Celine",
+    "Gucci",
+    "Prada",
+    "Valentino",
+    "Ferragamo",
+    "Loewe",
+    "Balenciaga",
+    "Bottega Veneta",
+    "Versace",
+    "Marni",
+    "Chloe",
+    "Celine",
 ]
 
 _FARFETCH_BRAND_SLUGS: dict[str, str] = {
@@ -91,7 +107,7 @@ _CFFI_PATTERNS: dict[str, str] = {
     "Gucci": r'aria-label="([^"]+?),\s*€\s*([\d.]+)"',
     "Prada": r'aria-label="\s*([^"]+?)\s*€\s*([\d.]+)',
     "Valentino": r'data-canonical-url="([^"]+)"[^>]*?data-price="([\d.]+)"',
-    "Loewe": r'>([^<]{5,60}?)<.*?¥([\d,]+)',
+    "Loewe": r">([^<]{5,60}?)<.*?¥([\d,]+)",
     "Balenciaga": r'itemprop="price"\s+content="(\d+)"',
 }
 
@@ -254,13 +270,13 @@ def _load_proxies() -> list[dict]:
     with open(PROXY_POOL_PATH, encoding="utf-8") as f:
         pool = json.load(f)
     proxies: list[dict] = []
-    for key, entries in pool.items():
+    for _key, entries in pool.items():
         if isinstance(entries, list):
             for e in entries:
                 if e.get("active", True) and e.get("server"):
                     proxies.append(e)
         elif isinstance(entries, dict):
-            for sub_key, sub_entries in entries.items():
+            for _sub_key, sub_entries in entries.items():
                 if isinstance(sub_entries, list):
                     for e in sub_entries:
                         if e.get("active", True) and e.get("server"):
@@ -270,10 +286,14 @@ def _load_proxies() -> list[dict]:
 
 def _fetch_with_cffi(url: str, timeout: int = 25) -> str | None:
     from curl_cffi import requests as cffi_requests
+
     try:
         resp = cffi_requests.get(
-            url, headers=_CHROME_HEADERS, impersonate="chrome124",
-            timeout=timeout, allow_redirects=True,
+            url,
+            headers=_CHROME_HEADERS,
+            impersonate="chrome124",
+            timeout=timeout,
+            allow_redirects=True,
         )
         if resp.status_code < 400 and len(resp.text) > 1000:
             return resp.text
@@ -286,12 +306,15 @@ def _fetch_with_cffi(url: str, timeout: int = 25) -> str | None:
     return None
 
 
-def _make_item(brand: str, product_name: str, price: float, source_site: str, source_url: str, currency: str = "JPY") -> dict:
+def _make_item(
+    brand: str, product_name: str, price: float, source_site: str, source_url: str, currency: str = "JPY"
+) -> dict:
     price_jpy = price
     exchange_rate = 1.0
 
     if currency != "JPY":
         from app.utils.fx_utils import get_fx_table_jpy
+
         fx_table, _ = get_fx_table_jpy()
         rate = fx_table.get(currency)
         if rate:
@@ -357,15 +380,11 @@ class BrandPriceScraper:
     def _close_browser(self):
         for resource in [self.context, self.browser]:
             if resource:
-                try:
+                with contextlib.suppress(Exception):
                     resource.close()
-                except Exception:
-                    pass
         if self.pw:
-            try:
+            with contextlib.suppress(Exception):
                 self.pw.stop()
-            except Exception:
-                pass
         self.page = None
         self.context = None
         self.browser = None
@@ -428,10 +447,16 @@ class BrandPriceScraper:
             logger.info(f"[farfetch] Found {len(cards)} products for {brand}")
 
             for card in cards[:item_limit]:
-                results.append(_make_item(
-                    brand, card["name"], float(card["price"]),
-                    "farfetch", card["url"], currency="JPY",
-                ))
+                results.append(
+                    _make_item(
+                        brand,
+                        card["name"],
+                        float(card["price"]),
+                        "farfetch",
+                        card["url"],
+                        currency="JPY",
+                    )
+                )
 
             logger.info(f"[farfetch] Extracted {len(results)} products for {brand}")
         except Exception as e:
@@ -467,25 +492,33 @@ class BrandPriceScraper:
                     price_pos = html.find(f'content="{match}"')
                     if price_pos == -1:
                         continue
-                    ctx = html[max(0, price_pos - 800):price_pos]
-                    name_match = re.findall(r'<h\d[^>]*>\s*([^<]+?)\s*</h\d>', ctx)
+                    ctx = html[max(0, price_pos - 800) : price_pos]
+                    name_match = re.findall(r"<h\d[^>]*>\s*([^<]+?)\s*</h\d>", ctx)
                     name = name_match[-1].strip() if name_match else f"Balenciaga Item {match}"
-                    results.append(_make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY")))
+                    results.append(
+                        _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
+                    )
                 elif brand == "Loewe":
                     name, price_str = match
                     price = float(price_str.replace(",", ""))
                     if len(name) > 60 or "css-" in name or "{" in name:
                         continue
-                    results.append(_make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY")))
+                    results.append(
+                        _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
+                    )
                 elif brand == "Valentino":
                     name, price_str = match
                     price = float(price_str)
-                    results.append(_make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY")))
+                    results.append(
+                        _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
+                    )
                 else:
                     name, price_str = match
                     # EUR uses dot as thousands separator (€ 2.450 = 2450)
                     price = float(price_str.replace(".", "").replace(",", ""))
-                    results.append(_make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY")))
+                    results.append(
+                        _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
+                    )
 
         except Exception as e:
             logger.error(f"[{site_key}] Extraction failed: {e}")
@@ -532,10 +565,16 @@ class BrandPriceScraper:
                 logger.info(f"[{site_key}] Found {len(products)} products for {brand}")
 
                 for product in products[:item_limit]:
-                    results.append(_make_item(
-                        brand, product["name"], float(product["price"]),
-                        site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"),
-                    ))
+                    results.append(
+                        _make_item(
+                            brand,
+                            product["name"],
+                            float(product["price"]),
+                            site_key,
+                            url,
+                            currency=_CURRENCY_MAP.get(brand, "JPY"),
+                        )
+                    )
 
                 ctx.close()
                 browser.close()
@@ -549,9 +588,7 @@ class BrandPriceScraper:
     # ------------------------------------------------------------------
     # Main entry point
     # ------------------------------------------------------------------
-    def scrape(
-        self, brand: str, sites: list[str] | None = None, item_limit: int = 10
-    ) -> list[dict]:
+    def scrape(self, brand: str, sites: list[str] | None = None, item_limit: int = 10) -> list[dict]:
         if sites is None:
             sites = SUPPORTED_SITES
 

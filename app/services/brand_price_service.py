@@ -28,7 +28,9 @@ def save_scraped_prices(items: list[dict]) -> int:
             exchange_rate=item["exchange_rate"],
             in_stock=item.get("in_stock", True),
             size_available=item.get("size_available", ""),
-            scraped_at=datetime.fromisoformat(item["scraped_at"]) if isinstance(item.get("scraped_at"), str) else item.get("scraped_at", datetime.utcnow()),
+            scraped_at=datetime.fromisoformat(item["scraped_at"])
+            if isinstance(item.get("scraped_at"), str)
+            else item.get("scraped_at", datetime.utcnow()),
         )
         db.session.add(bp)
         saved += 1
@@ -49,17 +51,21 @@ def get_price_comparison(brand: str) -> list[dict]:
         .subquery()
     )
 
-    rows = db.session.execute(
-        db.select(BrandPrice)
-        .join(
-            subq,
-            (BrandPrice.product_name == subq.c.product_name)
-            & (BrandPrice.source_site == subq.c.source_site)
-            & (BrandPrice.scraped_at == subq.c.latest),
+    rows = (
+        db.session.execute(
+            db.select(BrandPrice)
+            .join(
+                subq,
+                (BrandPrice.product_name == subq.c.product_name)
+                & (BrandPrice.source_site == subq.c.source_site)
+                & (BrandPrice.scraped_at == subq.c.latest),
+            )
+            .filter(BrandPrice.brand == brand)
+            .order_by(BrandPrice.product_name, BrandPrice.price_jpy)
         )
-        .filter(BrandPrice.brand == brand)
-        .order_by(BrandPrice.product_name, BrandPrice.price_jpy)
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     grouped: dict[str, list[BrandPrice]] = {}
     for r in rows:
@@ -67,7 +73,13 @@ def get_price_comparison(brand: str) -> list[dict]:
 
     result = []
     for name, prices in grouped.items():
-        entry = {"product_name": name, "sites": {}, "cheapest_site": None, "cheapest_jpy": None, "cheapest_price_id": None}
+        entry = {
+            "product_name": name,
+            "sites": {},
+            "cheapest_site": None,
+            "cheapest_jpy": None,
+            "cheapest_price_id": None,
+        }
         for p in prices:
             entry["sites"][p.source_site] = {
                 "price_jpy": p.price_jpy,
@@ -102,25 +114,19 @@ def get_cheapest_source(brand: str) -> dict[str, dict]:
 
 def cleanup_old_records(keep_days: int = 90) -> int:
     cutoff = datetime.utcnow() - timedelta(days=keep_days)
-    count = db.session.execute(
-        db.delete(BrandPrice).where(BrandPrice.scraped_at < cutoff)
-    ).rowcount
+    count = db.session.execute(db.delete(BrandPrice).where(BrandPrice.scraped_at < cutoff)).rowcount
     db.session.commit()
     logger.info(f"Cleaned up {count} old brand price records (older than {keep_days} days)")
     return count
 
 
 def get_available_brands() -> list[str]:
-    rows = db.session.execute(
-        db.select(BrandPrice.brand).distinct().order_by(BrandPrice.brand)
-    ).scalars().all()
+    rows = db.session.execute(db.select(BrandPrice.brand).distinct().order_by(BrandPrice.brand)).scalars().all()
     return list(rows)
 
 
 def get_last_scraped_at(brand: str) -> datetime | None:
-    row = db.session.scalar(
-        db.select(func.max(BrandPrice.scraped_at)).filter(BrandPrice.brand == brand)
-    )
+    row = db.session.scalar(db.select(func.max(BrandPrice.scraped_at)).filter(BrandPrice.brand == brand))
     return row
 
 
@@ -164,7 +170,7 @@ def add_profit_calculation(
         item["shipping_cost"] = shipping
         item["total_cost"] = round(result.total_cost, 2)
         item["customs_duty"] = round(result.auto_customs_duty, 2)
-        item["customs_rate"] = round(result.customs_rate_used, 4),
+        item["customs_rate"] = (round(result.customs_rate_used, 4),)
         item["profit"] = round(result.profit, 2)
         item["profit_rate"] = round(result.profit_rate, 4)
         item["is_profitable"] = result.profit > max(10_000, result.total_cost * 0.05)

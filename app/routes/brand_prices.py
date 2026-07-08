@@ -111,10 +111,12 @@ def brand_prices_add_to_pipeline():
         return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
 
     existing = db.session.scalar(
-        db.select(Product).filter(
+        db.select(Product)
+        .filter(
             Product.brand == record.brand,
             Product.name == record.product_name,
-        ).limit(1)
+        )
+        .limit(1)
     )
     if existing:
         flash(f"「{record.product_name}」は既に出品候補に存在します", "warning")
@@ -161,9 +163,7 @@ def brand_prices_search_buyma():
 
     comparison = brand_price_service.get_price_comparison(brand)
     products = [
-        {"product_name": item["product_name"], "brand": brand}
-        for item in comparison
-        if item.get("cheapest_jpy")
+        {"product_name": item["product_name"], "brand": brand} for item in comparison if item.get("cheapest_jpy")
     ]
 
     if not products:
@@ -181,12 +181,16 @@ def brand_prices_search_buyma():
 
     updated = 0
     for name, match in buyma_results.items():
-        rows = db.session.execute(
-            db.select(BrandPrice).filter(
-                BrandPrice.brand == brand,
-                BrandPrice.product_name == name,
+        rows = (
+            db.session.execute(
+                db.select(BrandPrice).filter(
+                    BrandPrice.brand == brand,
+                    BrandPrice.product_name == name,
+                )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
 
         for row in rows:
             row.buyma_price = match["buyma_price"]
@@ -196,8 +200,7 @@ def brand_prices_search_buyma():
     db.session.commit()
 
     flash(
-        f"BUYMA価格: {updated}/{len(products)}商品マッチ "
-        f"(最低価格を自動反映)",
+        f"BUYMA価格: {updated}/{len(products)}商品マッチ (最低価格を自動反映)",
         "success",
     )
     return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))

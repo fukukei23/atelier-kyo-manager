@@ -83,24 +83,18 @@ class TestAuthEmptyValidation:
 class TestAuthInvalidCredentials:
     def test_wrong_password_returns_401(self, client, create_user):
         create_user()
-        resp = client.post(
-            "/auth/login", data={"username": "testuser", "password": "wrong"}
-        )
+        resp = client.post("/auth/login", data={"username": "testuser", "password": "wrong"})
         assert resp.status_code == 401
 
     def test_nonexistent_user_returns_401(self, client):
-        resp = client.post(
-            "/auth/login", data={"username": "nobody", "password": "pass"}
-        )
+        resp = client.post("/auth/login", data={"username": "nobody", "password": "pass"})
         assert resp.status_code == 401
 
 
 class TestAuthInactiveUser:
     def test_inactive_user_returns_403(self, client, create_user):
         create_user(is_active=False)
-        resp = client.post(
-            "/auth/login", data={"username": "testuser", "password": "testpass"}
-        )
+        resp = client.post("/auth/login", data={"username": "testuser", "password": "testpass"})
         assert resp.status_code == 403
 
 

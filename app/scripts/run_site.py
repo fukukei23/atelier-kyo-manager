@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Site runner script for BrowserUseAgent with site alias support."""
+
 from __future__ import annotations
 
 import argparse
@@ -33,6 +34,7 @@ logger: logging.Logger = logging.getLogger(__name__)
 
 
 # ── Types ────────────────────────────────────────────────
+
 
 class ProxyMode(str, Enum):
     AUTO = "auto"
@@ -101,14 +103,16 @@ Examples:
 
     proxy = p.add_mutually_exclusive_group()
     proxy.add_argument("--proxy-mode", choices=[m.value for m in ProxyMode], default=ProxyMode.AUTO.value)
-    proxy.add_argument("--use-proxy", action="store_true", dest="proxy_mode_on",
-                       help="[Deprecated] Use --proxy-mode on")
+    proxy.add_argument(
+        "--use-proxy", action="store_true", dest="proxy_mode_on", help="[Deprecated] Use --proxy-mode on"
+    )
 
     p.add_argument("--human-like", action="store_true", help="Human-like cursor/scroll")
     return p.parse_args()
 
 
 # ── Setup helpers ───────────────────────────────────────
+
 
 def _setup_instance_dirs(site_name: str) -> Path:
     instance_dir = ROOT / "instance" / site_name.lower().replace("_", "-")
@@ -120,12 +124,20 @@ def _setup_instance_dirs(site_name: str) -> Path:
     if not last_run_json.exists():
         from datetime import datetime, timezone
 
-        last_run_json.write_text(json.dumps({
-            "site": site_name,
-            "strategy_version": f"{site_name.lower().replace('_', '-')}-latest",
-            "last_run_at": None, "last_run_id": None, "last_status": None,
-            "created_at": datetime.now(timezone.utc).isoformat(),
-        }, indent=2), encoding="utf-8")
+        last_run_json.write_text(
+            json.dumps(
+                {
+                    "site": site_name,
+                    "strategy_version": f"{site_name.lower().replace('_', '-')}-latest",
+                    "last_run_at": None,
+                    "last_run_id": None,
+                    "last_status": None,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
     return instance_dir
 
 
@@ -168,6 +180,7 @@ def _resolve_proxy(args: argparse.Namespace) -> bool | None:
 
 # ── Dry-run validation ─────────────────────────────────
 
+
 def _check_import_available(label: str, module_path: str, attr: str, required: bool = False) -> bool:
     try:
         mod = __import__(module_path, fromlist=[attr])
@@ -176,7 +189,10 @@ def _check_import_available(label: str, module_path: str, attr: str, required: b
         return True
     except (ImportError, AttributeError) as e:
         (logger.error if required else logger.warning)(
-            "[run_site]   %s: %s - %s", label, "FAILED" if required else "not available", e,
+            "[run_site]   %s: %s - %s",
+            label,
+            "FAILED" if required else "not available",
+            e,
         )
         return not required
 
@@ -203,12 +219,17 @@ def _validate_dry_run(site_name: str, site_config: dict[str, Any], target_url: s
 
 # ── Result handling ────────────────────────────────────
 
+
 def _result_to_dict(result: Any) -> dict[str, Any]:
     if hasattr(result, "to_dict"):
         return result.to_dict()
     if hasattr(result, "__dict__"):
         return {k: v for k, v in result.__dict__.items() if not k.startswith("_")}
-    return {"ok": getattr(result, "ok", False), "site": getattr(result, "site", ""), "query": getattr(result, "query", "")}
+    return {
+        "ok": getattr(result, "ok", False),
+        "site": getattr(result, "site", ""),
+        "query": getattr(result, "query", ""),
+    }
 
 
 def _save_result(run_ctx: RunContext, result: Any) -> None:
@@ -232,15 +253,20 @@ def _save_result(run_ctx: RunContext, result: Any) -> None:
 
 
 async def _handle_timeout(
-    run_ctx: RunContext, agent: BrowserUseAgent, timeout_sec: int,
-    site_config: dict[str, Any], pending: set[asyncio.Task[Any]],
+    run_ctx: RunContext,
+    agent: BrowserUseAgent,
+    timeout_sec: int,
+    site_config: dict[str, Any],
+    pending: set[asyncio.Task[Any]],
 ) -> DiscoveryResult:
     logger.error("[run_site] Timeout after %ds", timeout_sec)
     try:
         await write_fail_snapshot(
-            run_ctx, getattr(agent, "_page", None),
+            run_ctx,
+            getattr(agent, "_page", None),
             getattr(getattr(agent, "_page", None), "url", None),
-            TimeoutError(f"Timeout after {timeout_sec}s"), site_config,
+            TimeoutError(f"Timeout after {timeout_sec}s"),
+            site_config,
         )
     except Exception as e:
         logger.error("[run_site] write_fail_snapshot failed: %s", e)
@@ -255,10 +281,14 @@ async def _handle_timeout(
 
 # ── Main ───────────────────────────────────────────────
 
+
 async def main() -> int:
     args = parse_args()
-    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
-                        handlers=[logging.StreamHandler()])
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s - %(message)s",
+        handlers=[logging.StreamHandler()],
+    )
 
     site_name = resolve_site_name(args.site)
     logger.info("[run_site] '%s' -> '%s'", args.site, site_name)
@@ -299,8 +329,10 @@ async def main() -> int:
 
     proxy = _resolve_proxy(args)
     runtime_kwargs: dict[str, Any] = {
-        "headless": not args.headful, "timeout_sec": args.timeout,
-        "enable_video": args.enable_video, "site": site_name,
+        "headless": not args.headful,
+        "timeout_sec": args.timeout,
+        "enable_video": args.enable_video,
+        "site": site_name,
         "enable_human_like": args.human_like,
     }
     if proxy is not None:
@@ -309,8 +341,15 @@ async def main() -> int:
     agent = BrowserUseAgent(runtime_kwargs=runtime_kwargs, config_provider=config_provider)
     timeout_sec = args.timeout + 60
     run_task = asyncio.create_task(
-        agent.run(site=site_name, query=args.query, site_config=site_config,
-                  run_context=run_ctx, target_url=target_url, likely_plp=True))
+        agent.run(
+            site=site_name,
+            query=args.query,
+            site_config=site_config,
+            run_context=run_ctx,
+            target_url=target_url,
+            likely_plp=True,
+        )
+    )
 
     done, pending = await asyncio.wait({run_task}, timeout=timeout_sec)
     if not done:

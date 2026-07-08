@@ -4,6 +4,7 @@ Moncler PLP→PDP リンク抽出
 CR-ATELIER-002: Moncler公式サイト専用のPLP→PDPリンク抽出・バリデーション。
 extractor.py から分離。
 """
+
 from __future__ import annotations
 
 import contextlib
@@ -225,9 +226,7 @@ async def extract_moncler_pdp_links(
         except Exception as e:
             logger.debug(f"[PLP→PDP][Moncler] Failed to save Telemetry: {e}")
 
-    logger.info(
-        f"[PLP→PDP][Moncler] Collected {len(urls)} PDP links (from {raw_elements_count} raw elements)"
-    )
+    logger.info(f"[PLP→PDP][Moncler] Collected {len(urls)} PDP links (from {raw_elements_count} raw elements)")
 
     layers_used: list[str] = []
     if layer_stats.get("primary_raw", 0) > 0 or layer_stats.get("primary_accepted", 0) > 0:

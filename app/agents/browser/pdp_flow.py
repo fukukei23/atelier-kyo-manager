@@ -45,9 +45,15 @@ class PdpFlowMixin:
         logger.info("[Mode] PDP (detail)")
         prepare_hook = self._build_pdp_prepare_hook(site_config=site_config, settings=settings, run_context=run_context)
         return await self.extraction_service.extract_single_pdp(
-            page=page, context=self._context, site=site, query=query,
-            settings=settings, run_context=run_context, site_config=site_config,
-            target_url=page.url, prepare_page=prepare_hook,
+            page=page,
+            context=self._context,
+            site=site,
+            query=query,
+            settings=settings,
+            run_context=run_context,
+            site_config=site_config,
+            target_url=page.url,
+            prepare_page=prepare_hook,
         )
 
     async def _read_price_or_none(self, page: Page) -> str | None:
@@ -78,6 +84,7 @@ class PdpFlowMixin:
 
     def _normalize_abs_url(self, base_url: str, href: str) -> str:
         from app.agents.browser.navigation_helpers import normalize_abs_url
+
         return normalize_abs_url(base_url, href)
 
     async def _collect_pdp_links(
@@ -184,6 +191,7 @@ class PdpFlowMixin:
 
     async def _run_deep_extraction_phase2(self, page: Page, site_config: dict) -> list[str]:
         from app.agents.browser.deep_extraction import run_deep_extraction_phase2
+
         return await run_deep_extraction_phase2(page, site_config, self.safe_wait_selector)
 
     async def _click_and_capture_navigation(
@@ -198,9 +206,14 @@ class PdpFlowMixin:
     ) -> Page | None:
         """Detect navigation after click — delegates to shared helper."""
         from app.agents.browser.nav_fallbacks import click_and_capture_nav
+
         return await click_and_capture_nav(
-            click_coro, page, context,
-            url_regex=url_regex, wait_state=wait_state, timeout_ms=timeout_ms,
+            click_coro,
+            page,
+            context,
+            url_regex=url_regex,
+            wait_state=wait_state,
+            timeout_ms=timeout_ms,
         )
 
     async def _click_first_card_or_link(

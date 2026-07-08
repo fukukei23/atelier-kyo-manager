@@ -3,7 +3,6 @@
 #  役割:
 #    AILlmControllerがDeepSeekと正常に通信できるかをテストする。
 # ----------------------------------------------------------------
-import os
 
 import pytest
 from dotenv import load_dotenv

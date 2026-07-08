@@ -4,21 +4,17 @@ TelemetryClient — BrowserUseAgent / NavigationDriver から利用される Tel
 telemetry.py から分離。TelemetryService のラッパーとして機能し、よりシンプルなインターフェースを提供する。
 データクラス（RunPhase, FailureContext, TelemetryContext）もここに配置。
 """
+
 from __future__ import annotations
 
 import contextlib
-import inspect
-import json
 import logging
-import time
 from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from playwright.async_api import Page
-
-    from app.core.run_context import RunContext
+    pass
 
 
 class RunPhase(str, Enum):
@@ -73,6 +69,7 @@ class TelemetryClient:
     def service(self):
         if self._service is None:
             from app.agents.browser.telemetry import TelemetryService
+
             self._service = TelemetryService(run_context=self.run_context)
         return self._service
 
@@ -101,7 +98,10 @@ class TelemetryClient:
     ) -> None:
         try:
             await self.service.record_plp_state(
-                page=page, name=name, selectors=selectors, site_config=site_config,
+                page=page,
+                name=name,
+                selectors=selectors,
+                site_config=site_config,
             )
         except Exception as e:
             self.logger.warning(f"[TelemetryClient] Failed to record PLP state '{name}': {e}", exc_info=True)
@@ -127,5 +127,8 @@ class TelemetryClient:
                 final_url = page.url
 
         await self.service.write_fail_snapshot(
-            page=page, final_url=final_url, error=error, site_config=site_config,
+            page=page,
+            final_url=final_url,
+            error=error,
+            site_config=site_config,
         )

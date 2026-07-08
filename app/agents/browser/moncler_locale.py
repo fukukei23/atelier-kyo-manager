@@ -5,7 +5,6 @@ from __future__ import annotations
 import contextlib
 import logging
 import re
-from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
 from playwright.async_api import Page
@@ -76,4 +75,5 @@ class MonclerLocaleMixin:
 
     def _looks_like_trap_or_legal(self, url: str) -> bool:
         from app.agents.browser.locale_manager import LocaleMixin
+
         return LocaleMixin._looks_like_trap_or_legal(self, url)

@@ -465,11 +465,25 @@ async def extract_title_price(page) -> dict[str, Any]:
 
     # 通貨推定（辞書マッチ）
     _CURRENCY_PREFIXES: list[tuple[str, str]] = [
-        ("NZ$", "NZD"), ("NT$", "TWD"), ("MX$", "MXN"), ("HK$", "HKD"),
-        ("S$", "SGD"), ("C$", "CAD"), ("CA$", "CAD"), ("A$", "AUD"),
-        ("R$", "BRL"), ("AR$", "ARS"), ("CHF", "CHF"), ("Fr", "CHF"),
-        ("kr", "SEK"), ("zł", "PLN"), ("Ft", "HUF"), ("Kč", "CZK"),
-        ("د.إ", "AED"), ("﷼", "SAR"), ("ر.س", "SAR"),
+        ("NZ$", "NZD"),
+        ("NT$", "TWD"),
+        ("MX$", "MXN"),
+        ("HK$", "HKD"),
+        ("S$", "SGD"),
+        ("C$", "CAD"),
+        ("CA$", "CAD"),
+        ("A$", "AUD"),
+        ("R$", "BRL"),
+        ("AR$", "ARS"),
+        ("CHF", "CHF"),
+        ("Fr", "CHF"),
+        ("kr", "SEK"),
+        ("zł", "PLN"),
+        ("Ft", "HUF"),
+        ("Kč", "CZK"),
+        ("د.إ", "AED"),
+        ("﷼", "SAR"),
+        ("ر.س", "SAR"),
     ]
     if price_text:
         stripped = price_text.strip()

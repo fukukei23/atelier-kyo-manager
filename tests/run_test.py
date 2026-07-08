@@ -4,7 +4,6 @@
 # 役割: リジリエント版 ai_image_crawler.py の動作をテストするための実行スクリプト。
 
 import logging
-import os
 import pprint
 
 from flask import Flask

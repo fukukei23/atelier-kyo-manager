@@ -7,8 +7,6 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 
 class TestHandleForward2meEvent:
     """handle_forward2me_event のルーティング検証"""

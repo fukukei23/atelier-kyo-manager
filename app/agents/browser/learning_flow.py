@@ -48,20 +48,22 @@ class LearningMixin:
             self.logger.info(f"[LEARN] Discovered selectors: {json.dumps(discovered_selectors, indent=2)}")
         except Exception as e:
             self.logger.error(f"[LEARN] Selector discovery failed: {e}", exc_info=True)
-            return await self._handle_run_failure(
-                e, site, "(learning)", site_config, run_context, page
-            )
+            return await self._handle_run_failure(e, site, "(learning)", site_config, run_context, page)
         try:
             await self._save_learned_selectors(site, discovered_selectors, run_context)
         except Exception as e:
             self.logger.error(f"[LEARN] Failed to save learned selectors: {e}", exc_info=True)
             return DiscoveryResult(
-                ok=False, site=site, query="(learning)",
+                ok=False,
+                site=site,
+                query="(learning)",
                 message=f"Failed to save: {e}",
                 evidence={"learned_selectors": discovered_selectors},
             )
         return DiscoveryResult(
-            ok=True, site=site, query="(learning)",
+            ok=True,
+            site=site,
+            query="(learning)",
             message="Successfully learned and saved.",
             evidence={"learned_selectors": discovered_selectors},
         )

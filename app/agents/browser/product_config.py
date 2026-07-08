@@ -30,32 +30,40 @@ class PdpConfigResolver:
             "title": pdp_cfg.get("title") or DEFAULT_TITLE_SELECTORS,
             "price": pdp_cfg.get("price") or DEFAULT_PRICE_SELECTORS,
             "list_price": pdp_cfg.get("list_price") or [],
-            "currency": pdp_cfg.get("currency") or [
+            "currency": pdp_cfg.get("currency")
+            or [
                 "meta[property='product:price:currency']",
                 "meta[itemprop='priceCurrency']",
             ],
-            "images": _normalize_list_config(pdp_cfg.get("images")) or [
+            "images": _normalize_list_config(pdp_cfg.get("images"))
+            or [
                 ".product-images img",
                 ".product-gallery img",
                 "[data-testid*='image'] img",
                 "img[itemprop='image']",
             ],
-            "sizes": pdp_cfg.get("size") or pdp_cfg.get("sizes") or [
+            "sizes": pdp_cfg.get("size")
+            or pdp_cfg.get("sizes")
+            or [
                 ".size-selector option",
                 "button[data-size]",
                 "[role='radiogroup'] [role='radio']",
             ],
-            "colors": pdp_cfg.get("color") or pdp_cfg.get("colors") or [
+            "colors": pdp_cfg.get("color")
+            or pdp_cfg.get("colors")
+            or [
                 ".color-selector .swatch",
                 "button[data-color]",
                 "[data-testid*='color']",
             ],
-            "description": pdp_cfg.get("description") or [
+            "description": pdp_cfg.get("description")
+            or [
                 ".product-description",
                 "[itemprop='description']",
                 "meta[property='og:description']",
             ],
-            "brand": pdp_cfg.get("brand") or [
+            "brand": pdp_cfg.get("brand")
+            or [
                 "meta[property='og:site_name']",
                 "[itemprop='brand']",
                 ".product-brand",
@@ -64,7 +72,8 @@ class PdpConfigResolver:
             "availability": _normalize_list_config(pdp_cfg.get("availability")) or [],
             "breadcrumbs": pdp_cfg.get("breadcrumbs") or [],
             "size_button": pdp_cfg.get("size_button") or DEFAULT_SIZE_BUTTON_SELECTORS,
-            "size_select_policy": pdp_cfg.get("size_select_policy") or {
+            "size_select_policy": pdp_cfg.get("size_select_policy")
+            or {
                 "mode": "off",
                 "prefer_labels": [],
                 "price_wait_ms": 4000,
@@ -72,29 +81,40 @@ class PdpConfigResolver:
             "visible_price_selectors": pdp_cfg.get("visible_price_selectors") or DEFAULT_PRICE_SELECTORS,
             "image_attr": _get_dict_field(pdp_cfg.get("images"), "image_attr") or pdp_cfg.get("image_attr", "src"),
             "image_base_url": _get_dict_field(pdp_cfg.get("images"), "base_url") or pdp_cfg.get("image_base_url"),
-            "raw_html_capture": pdp_cfg.get("raw_html_capture", {
-                "enabled": True,
-                "filename": "pdp_raw.html",
-            }),
-            "json_ld": pdp_cfg.get("json_ld", {
-                "enabled": True,
-                "paths": {
-                    "price": ["offers.price", "offers[0].price"],
-                    "currency": ["offers.priceCurrency", "offers[0].priceCurrency"],
-                    "title": ["name"],
-                    "description": ["description"],
+            "raw_html_capture": pdp_cfg.get(
+                "raw_html_capture",
+                {
+                    "enabled": True,
+                    "filename": "pdp_raw.html",
                 },
-            }),
-            "meta_fallback": pdp_cfg.get("meta_fallback", {
-                "enabled": True,
-                "selectors": [
-                    "meta[property='og:price:amount']",
-                    "meta[name='twitter:data1']",
-                ],
-            }),
+            ),
+            "json_ld": pdp_cfg.get(
+                "json_ld",
+                {
+                    "enabled": True,
+                    "paths": {
+                        "price": ["offers.price", "offers[0].price"],
+                        "currency": ["offers.priceCurrency", "offers[0].priceCurrency"],
+                        "title": ["name"],
+                        "description": ["description"],
+                    },
+                },
+            ),
+            "meta_fallback": pdp_cfg.get(
+                "meta_fallback",
+                {
+                    "enabled": True,
+                    "selectors": [
+                        "meta[property='og:price:amount']",
+                        "meta[name='twitter:data1']",
+                    ],
+                },
+            ),
             "availability_patterns": _get_availability_patterns(
-                pdp_cfg.get("availability"), pdp_cfg.get("availability_patterns"),
-            ) or ["out of stock", "在庫なし"],
+                pdp_cfg.get("availability"),
+                pdp_cfg.get("availability_patterns"),
+            )
+            or ["out of stock", "在庫なし"],
         }
 
         return self._pdp_config
@@ -118,9 +138,15 @@ class PdpConfigResolver:
             "decimal_separator": normalize_rules.get("decimal_separator", "."),
             "currency_fallback": normalize_rules.get("currency_fallback", "JPY"),
             "price_pattern": normalize_rules.get("price_pattern", r"[\d.,]+"),
-            "currency_symbols": normalize_rules.get("currency_symbols", {
-                "¥": "JPY", "$": "USD", "€": "EUR", "£": "GBP",
-            }),
+            "currency_symbols": normalize_rules.get(
+                "currency_symbols",
+                {
+                    "¥": "JPY",
+                    "$": "USD",
+                    "€": "EUR",
+                    "£": "GBP",
+                },
+            ),
         }
 
         return self._price_rules

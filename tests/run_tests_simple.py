@@ -3,7 +3,6 @@
 簡単なテスト実行スクリプト
 """
 
-import os
 import sys
 
 

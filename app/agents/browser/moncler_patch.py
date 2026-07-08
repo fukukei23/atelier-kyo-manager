@@ -1,4 +1,5 @@
 """Moncler URL normalization and trap/legal page detection."""
+
 from __future__ import annotations
 
 import contextlib
@@ -14,9 +15,18 @@ logger = logging.getLogger(__name__)
 _LOCALE_SEG_RE = re.compile(r"^[a-z]{2}-[a-z]{2}$", re.IGNORECASE)
 
 _LEGAL_KEYWORDS = (
-    "/cookie-policy", "/cookies", "/privacy", "/legal", "/help",
-    "/customer-service", "/customer_service", "/support", "/account",
-    "/login", "/accessibility-statement", "/client-service/",
+    "/cookie-policy",
+    "/cookies",
+    "/privacy",
+    "/legal",
+    "/help",
+    "/customer-service",
+    "/customer_service",
+    "/support",
+    "/account",
+    "/login",
+    "/accessibility-statement",
+    "/client-service/",
 )
 
 _LOCALE_GATE_PATHS = frozenset({"/en-int", "/en-int/", "/en-gb", "/en-gb/", "/en-us", "/en-us/"})

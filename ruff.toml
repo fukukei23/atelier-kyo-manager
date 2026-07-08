@@ -35,6 +35,11 @@ ignore = [
 fixable = ["ALL"]
 unfixable = []
 
+[lint.per-file-ignores]
+"__init__.py" = ["F401"]   # パッケージpublic API再エクスポート（削除禁止）
+"tests/test_issue_73_notification_service.py" = ["F841"]   # 通知送信の副作用検証・戻り値未使用（assert強化は別Issue）
+"tests/test_product_extractor.py" = ["F841"]   # コンストラクタ例外非発生検証・戻り値未使用
+
 [lint.isort]
 known-first-party = ["app"]
 

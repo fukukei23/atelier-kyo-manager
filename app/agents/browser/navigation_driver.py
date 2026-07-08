@@ -16,10 +16,7 @@ Mixin 構成:
 
 from __future__ import annotations
 
-import asyncio
-import contextlib
 import logging
-import time
 from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
@@ -27,7 +24,6 @@ from playwright.async_api import Page
 
 # データクラス・型を nav_types から re-export
 from app.agents.browser.nav_types import (
-    _LOCALE_SEG_RE,
     LinkCandidate,
     NavigationContext,
     NavigationOutcome,
@@ -40,35 +36,25 @@ if TYPE_CHECKING:
     from app.agents.browser.telemetry import TelemetryClient
 
 from app.agents.browser.extractor import (
-    VISIBLE_PRICE_SELECTORS,
     extract_moncler_pdp_links,  # noqa: F401
-    looks_like_product_url,
 )
+from app.agents.browser.locale_manager import LocaleMixin
 
-from app.agents.browser.navigation_helpers import (
-    normalize_abs_url as nav_normalize_abs_url,
-)
-from app.agents.browser.navigation_helpers import (
-    normalize_url as nav_normalize_url,
-)
+# Mixin imports
+from app.agents.browser.moncler_nav import MonclerNavMixin
+from app.agents.browser.nav_fallbacks import FallbackMixin
+from app.agents.browser.nav_pdp_collector import NavPdpCollectorMixin
+from app.agents.browser.nav_plp_materializer import NavPlpMaterializerMixin
 
 # URL検証 pure functions を url_rules から import
 from app.agents.browser.url_rules import (
     check_origin_allowed,
-    classify_candidate,
     extract_etld_plus_one,
     extract_origin,
     is_same_site,
     normalize_candidate_url,
     validate_candidate_url,
 )
-
-# Mixin imports
-from app.agents.browser.moncler_nav import MonclerNavMixin
-from app.agents.browser.locale_manager import LocaleMixin
-from app.agents.browser.nav_fallbacks import FallbackMixin
-from app.agents.browser.nav_pdp_collector import NavPdpCollectorMixin
-from app.agents.browser.nav_plp_materializer import NavPlpMaterializerMixin
 
 logger = logging.getLogger(__name__)
 
@@ -139,6 +125,7 @@ class NavigationDriver(
         if self.trap_checker:
             trap_check_fn = self.trap_checker
         else:
+
             def trap_check_with_config(url: str) -> bool:
                 return self._looks_like_trap_or_legal(url, ctx.site_config)
 
@@ -151,7 +138,7 @@ class NavigationDriver(
                     outcome.trap_reason = f"initial_url={url}"
                     logger.warning("[NavigationDriver] trap-like url detected: %s", url)
 
-                    attempted_recover = True
+                    attempted_recover = True  # noqa: F841  # plp_flow.py対称のrecover追跡変数・参照未実装で保持
                     recovered = await self.recover_plp(ctx)
                     outcome.recovered = recovered
                     if recovered:

@@ -21,7 +21,7 @@ from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
 
 from playwright.async_api import Page
 
-from app.agents.browser.nav_types import NavigationContext, _LOCALE_SEG_RE
+from app.agents.browser.nav_types import _LOCALE_SEG_RE, NavigationContext
 
 logger = logging.getLogger(__name__)
 
@@ -59,9 +59,7 @@ class LocaleGuardMixin:
 
         async def on_response(response):
             if response.status in [404, 410]:
-                http_errors.append(
-                    {"url": response.url, "status": response.status, "timestamp": time.time()}
-                )
+                http_errors.append({"url": response.url, "status": response.status, "timestamp": time.time()})
 
         page.on("response", on_response)
         current_url = page.url or ""
@@ -100,27 +98,34 @@ class LocaleGuardMixin:
             diagnostics["final_url"] = current_url
             diagnostics["final_stable"] = final_stable
             diagnostics["http_errors"] = http_errors
-            diagnostics["attempts"] = [{
-                "attempt": 0, "url_before": current_url, "url_after": current_url,
-                "stable_after": final_stable, "stability_diagnostics": final_diag,
-                "note": "Locale already stable, no correction needed",
-            }]
+            diagnostics["attempts"] = [
+                {
+                    "attempt": 0,
+                    "url_before": current_url,
+                    "url_after": current_url,
+                    "stable_after": final_stable,
+                    "stability_diagnostics": final_diag,
+                    "note": "Locale already stable, no correction needed",
+                }
+            ]
             self._save_diagnostics(diagnostics, run_context)
             return
 
-        logger.warning(
-            f"[LocaleGuard] Locale mismatch: path_ok={path_ok}, country_ok={country_ok}, URL={current_url}"
-        )
+        logger.warning(f"[LocaleGuard] Locale mismatch: path_ok={path_ok}, country_ok={country_ok}, URL={current_url}")
 
-        corrected_url = self._resolve_corrected_url(
-            current_url, site_config, target_locale, target_country
-        )
+        corrected_url = self._resolve_corrected_url(current_url, site_config, target_locale, target_country)
 
         try:
             for attempt_count in range(1, max_attempts + 1):
                 attempt_info = await self._attempt_locale_correction(
-                    page, ctx, location_modal_cfg, run_context,
-                    attempt_count, corrected_url, target_locale, target_country,
+                    page,
+                    ctx,
+                    location_modal_cfg,
+                    run_context,
+                    attempt_count,
+                    corrected_url,
+                    target_locale,
+                    target_country,
                     stability_check_delay_ms,
                 )
                 diagnostics["attempts"].append(attempt_info)
@@ -138,9 +143,7 @@ class LocaleGuardMixin:
                     break
 
                 if attempt_count < max_attempts:
-                    corrected_url = self._build_corrected_url(
-                        current_check, target_locale, target_country
-                    )
+                    corrected_url = self._build_corrected_url(current_check, target_locale, target_country)
                     if corrected_url != current_check:
                         logger.warning(f"[LocaleGuard] Attempt {attempt_count}: Navigating to: {corrected_url}")
                         try:
@@ -205,7 +208,11 @@ class LocaleGuardMixin:
             return None
 
     def _resolve_corrected_url(
-        self, current_url: str, site_config: dict, target_locale: str, target_country: str,
+        self,
+        current_url: str,
+        site_config: dict,
+        target_locale: str,
+        target_country: str,
     ) -> str | None:
         corrected_url = None
         if self.strategy and hasattr(self.strategy, "_HARD_PLP_URL"):  # type: ignore[attr-defined]
@@ -291,7 +298,11 @@ class LocaleGuardMixin:
         return attempt_info
 
     async def _detect_and_handle_modal(
-        self, page: Page, location_modal_cfg: dict, run_context: Any, attempt_count: int,
+        self,
+        page: Page,
+        location_modal_cfg: dict,
+        run_context: Any,
+        attempt_count: int,
     ) -> dict[str, Any]:
         result: dict[str, Any] = {"modal_detected": False, "modal_handled": False}
         detection_selectors = location_modal_cfg.get("detection_selectors", [])

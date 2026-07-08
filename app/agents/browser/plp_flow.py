@@ -4,18 +4,12 @@ from __future__ import annotations
 
 import contextlib
 import logging
-import re
 from typing import Any
 
 from playwright.async_api import BrowserContext, Page
 
-from app.agents.browser.extractor import (
-    VISIBLE_PRICE_SELECTORS,
-    looks_like_product_url,
-)
 from app.agents.browser.navigation_driver import (
     _dedupe_keep_order,
-    is_same_origin,
 )
 from app.core.run_context import RunContext
 from app.models.result_models import DiscoveryResult
@@ -83,7 +77,8 @@ class PlpFlowMixin:
             await save_dom(run_context, page, "plp_dom_initial_materialized")
             pdp_cfg_a = (site_config.get("selectors") or {}).get("pdp", {}) or {}
             await count_selectors(
-                run_context, page,
+                run_context,
+                page,
                 (pdp_cfg_a.get("pdp_link_selectors") or []) + (pdp_cfg_a.get("plp_container_selectors") or []),
                 name="selector_counts_plp_initial",
             )
@@ -116,7 +111,8 @@ class PlpFlowMixin:
                         await save_dom(run_context, page, "plp_dom_search_fallback")
                         pdp_cfg_a2 = (site_config.get("selectors") or {}).get("pdp", {}) or {}
                         await count_selectors(
-                            run_context, page,
+                            run_context,
+                            page,
                             (pdp_cfg_a2.get("pdp_link_selectors") or [])
                             + (pdp_cfg_a2.get("plp_container_selectors") or []),
                             name="selector_counts_after_search_fallback",
@@ -143,10 +139,17 @@ class PlpFlowMixin:
                 site_config=site_config, settings=settings, run_context=run_context
             )
             return await self.extraction_service.extract_from_pdp_list(
-                page=page, context=context, site=site, query=query,
-                pdp_links=pdp_links, site_config=site_config,
-                settings=settings, run_context=run_context,
-                start_t=start_t, budget_ms=budget_ms, prepare_page=prepare_hook,
+                page=page,
+                context=context,
+                site=site,
+                query=query,
+                pdp_links=pdp_links,
+                site_config=site_config,
+                settings=settings,
+                run_context=run_context,
+                start_t=start_t,
+                budget_ms=budget_ms,
+                prepare_page=prepare_hook,
             )
         raise ValueError("All PDP attempts failed after all recovery attempts.")
 
@@ -312,6 +315,7 @@ class PlpFlowMixin:
                     await el.click(timeout=3000)
                     opened = True
                     import asyncio
+
                     await asyncio.sleep(0.2)
                     await self.safe_wait_selector(
                         page, "[role='search'], [data-overlay], dialog[open]", timeout_ms=5000, state="visible"

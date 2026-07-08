@@ -35,10 +35,14 @@ class SuccessStageMixin:
 
         try:
             artifacts = collect_run_artifacts(
-                result=result, run_context=run_context, nav_outcome=nav_outcome, page=page,
+                result=result,
+                run_context=run_context,
+                nav_outcome=nav_outcome,
+                page=page,
             )
             success_stage, criteria = compute_success_stage(
-                run_artifacts=artifacts, run_context=run_context,
+                run_artifacts=artifacts,
+                run_context=run_context,
             )
             if result.evidence is None:
                 result.evidence = {}

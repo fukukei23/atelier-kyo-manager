@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from app.agents.browser.selector_prompt_builder import (
     build_selector_repair_prompt,
     extract_failed_selector_from_error,
@@ -106,8 +104,16 @@ class TestBuildSelectorRepairPrompt:
         defaults = {
             "site": "example.com",
             "page_type": "pdp",
-            "failure_context": {"error_type": "timeout", "error_message": "selector: .title not found", "error_class": "TimeoutError"},
-            "failure_analysis": {"summary": "Selector not found", "root_causes": ["DOM changed"], "suggested_fixes": ["Try data-testid"]},
+            "failure_context": {
+                "error_type": "timeout",
+                "error_message": "selector: .title not found",
+                "error_class": "TimeoutError",
+            },
+            "failure_analysis": {
+                "summary": "Selector not found",
+                "root_causes": ["DOM changed"],
+                "suggested_fixes": ["Try data-testid"],
+            },
             "dom_snapshot_html": "<div><h1 class='title'>Product</h1></div>",
             "current_selectors": {"title": ".title"},
         }

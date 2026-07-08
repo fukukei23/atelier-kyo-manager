@@ -11,8 +11,6 @@ Tests for uncovered paths:
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
 
 from app.core.pricing.rules import PricingConfig, load_pricing_config
 
@@ -39,14 +37,16 @@ class TestLoadPricingConfigValidJson:
     def test_valid_json_overrides_defaults(self, tmp_path):
         config_file = tmp_path / "pricing.json"
         config_file.write_text(
-            json.dumps({
-                "buyma_platform_fee_rate": 0.08,
-                "buyma_effective_fee_rate": 0.15,
-                "additional_fee_rate": 0.02,
-                "domestic_commission_rate": 0.05,
-                "overseas_commission_rate": 0.06,
-                "transfer_fee": 300,
-            }),
+            json.dumps(
+                {
+                    "buyma_platform_fee_rate": 0.08,
+                    "buyma_effective_fee_rate": 0.15,
+                    "additional_fee_rate": 0.02,
+                    "domestic_commission_rate": 0.05,
+                    "overseas_commission_rate": 0.06,
+                    "transfer_fee": 300,
+                }
+            ),
             encoding="utf-8",
         )
         result = load_pricing_config(str(config_file))
@@ -79,10 +79,12 @@ class TestLoadPricingConfigBackwardCompat:
     def test_effective_rate_takes_priority_over_legacy(self, tmp_path):
         config_file = tmp_path / "both.json"
         config_file.write_text(
-            json.dumps({
-                "buyma_fee_rate": 0.20,
-                "buyma_effective_fee_rate": 0.16,
-            }),
+            json.dumps(
+                {
+                    "buyma_fee_rate": 0.20,
+                    "buyma_effective_fee_rate": 0.16,
+                }
+            ),
             encoding="utf-8",
         )
         result = load_pricing_config(str(config_file))

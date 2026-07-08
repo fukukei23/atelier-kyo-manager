@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import logging
 import re
 from re import Pattern
@@ -133,7 +132,12 @@ class PlpNavigationMixin:
     ) -> Page | None:
         """Detect navigation after tile click — delegates to shared helper."""
         from app.agents.browser.nav_fallbacks import click_and_capture_nav
+
         return await click_and_capture_nav(
-            click_coro, self.page, self.context,
-            url_regex=url_regex, wait_state=wait_state, timeout_ms=timeout_ms,
+            click_coro,
+            self.page,
+            self.context,
+            url_regex=url_regex,
+            wait_state=wait_state,
+            timeout_ms=timeout_ms,
         )

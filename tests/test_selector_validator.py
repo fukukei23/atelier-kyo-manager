@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from app.agents.browser.selector_validator import extract_json_from_text, normalize_proposal
 
 

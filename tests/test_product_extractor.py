@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.agents.browser.product_extractor import ProductExtractor, ProductInfo
-from app.agents.browser.product_normalizer import normalize_price_text, normalize_price_to_float
+from app.agents.browser.product_normalizer import normalize_price_text
 from app.core.run_context import RunContext
 
 

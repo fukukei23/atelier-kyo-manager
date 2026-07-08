@@ -11,7 +11,6 @@ Version: 1.1.0 (TelemetryClient/dataclasses extracted to telemetry_client.py)
 
 from __future__ import annotations
 
-import contextlib
 import inspect
 import json
 import logging

@@ -1,4 +1,5 @@
 """Moncler固有ナビゲーション Mixin — NavigationDriver に多重継承される。"""
+
 from __future__ import annotations
 
 import contextlib
@@ -12,8 +13,8 @@ from playwright.async_api import Error as PlaywrightError
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
-from app.agents.browser.nav_types import NavigationContext
 from app.agents.browser.extractor import looks_like_product_url
+from app.agents.browser.nav_types import NavigationContext
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -36,8 +37,12 @@ _MONCLER_SELECTORS: tuple[str, ...] = (
 )
 
 _BLOCKED_DOMAINS: tuple[str, ...] = (
-    "onetrust.com", "monclergroup.com", "facebook.com",
-    "twitter.com", "instagram.com", "pinterest.com",
+    "onetrust.com",
+    "monclergroup.com",
+    "facebook.com",
+    "twitter.com",
+    "instagram.com",
+    "pinterest.com",
 )
 _TRAP_PATTERNS: tuple[str, ...] = (r"/404", r"/not-found", r"/search\?", r"/legal/", r"/client-service")
 _PDP_RX: re.Pattern[str] = re.compile(r"/products?/", re.IGNORECASE)
@@ -62,7 +67,6 @@ async def _extract_href(node: Any) -> str | None:
 
 
 class MonclerNavMixin:
-
     page: Page
 
     # ── PDP collection ──────────────────────────────────
@@ -92,7 +96,11 @@ class MonclerNavMixin:
         return found
 
     async def _try_selector(
-        self, page: Page, selector: str, target_url: str, found: set[str],
+        self,
+        page: Page,
+        selector: str,
+        target_url: str,
+        found: set[str],
     ) -> tuple[int, int]:
         matched, rejected = 0, 0
         try:
@@ -179,12 +187,14 @@ class MonclerNavMixin:
     # ── Self-healing ────────────────────────────────────
 
     async def _trigger_moncler_self_healing(
-        self, ctx: NavigationContext, failure_reason: str, outcome_dict: dict[str, Any],
+        self,
+        ctx: NavigationContext,
+        failure_reason: str,
+        outcome_dict: dict[str, Any],
     ) -> None:
         try:
-            from app.agents.moncler_patch_builder import process_moncler_self_healing_results
-            from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
             from app.agents.healing.self_healing_agent import SelfHealingAgent
+            from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
 
             dom_path: str | None = None
             if ctx.run_context:
@@ -195,10 +205,19 @@ class MonclerNavMixin:
             selectors_current = ctx.site_config.get("selectors", {})
 
             self_healing_result = await self._run_self_healing(
-                SelfHealingAgent, failure_reason, dom_path, outcome_dict, selectors_current, run_id,
+                SelfHealingAgent,
+                failure_reason,
+                dom_path,
+                outcome_dict,
+                selectors_current,
+                run_id,
             )
             discovery_result = await self._run_selector_discovery(
-                SelectorDiscoveryAgent, dom_path, selectors_current, outcome_dict, run_id,
+                SelectorDiscoveryAgent,
+                dom_path,
+                selectors_current,
+                outcome_dict,
+                run_id,
             )
 
             if ctx.run_context and (self_healing_result or discovery_result):
@@ -208,8 +227,13 @@ class MonclerNavMixin:
             logger.warning("[SelfHealing][Moncler] Failed: %s", e, exc_info=True)
 
     async def _run_self_healing(
-        self, agent_cls: type, failure_reason: str, dom_path: str | None,
-        outcome_dict: dict[str, Any], selectors: dict[str, Any], run_id: str | None,
+        self,
+        agent_cls: type,
+        failure_reason: str,
+        dom_path: str | None,
+        outcome_dict: dict[str, Any],
+        selectors: dict[str, Any],
+        run_id: str | None,
     ) -> dict[str, Any] | None:
         try:
             agent = agent_cls()
@@ -235,8 +259,12 @@ class MonclerNavMixin:
             return None
 
     async def _run_selector_discovery(
-        self, agent_cls: type, dom_path: str | None,
-        selectors: dict[str, Any], outcome_dict: dict[str, Any], run_id: str | None,
+        self,
+        agent_cls: type,
+        dom_path: str | None,
+        selectors: dict[str, Any],
+        outcome_dict: dict[str, Any],
+        run_id: str | None,
     ) -> dict[str, Any] | None:
         try:
             agent = agent_cls()
@@ -259,8 +287,11 @@ class MonclerNavMixin:
             return None
 
     async def _save_healing_results(
-        self, ctx: NavigationContext, outcome_dict: dict[str, Any],
-        self_healing_result: dict[str, Any] | None, discovery_result: dict[str, Any] | None,
+        self,
+        ctx: NavigationContext,
+        outcome_dict: dict[str, Any],
+        self_healing_result: dict[str, Any] | None,
+        discovery_result: dict[str, Any] | None,
     ) -> None:
         from app.agents.moncler_patch_builder import process_moncler_self_healing_results
 
@@ -278,17 +309,21 @@ class MonclerNavMixin:
                 "trap_detected": outcome_dict.get("trap_detected", False),
             }
             saved: dict[str, Any] = await process_moncler_self_healing_results(
-                run_context=ctx.run_context, run_id=run_id, site=site,
+                run_context=ctx.run_context,
+                run_id=run_id,
+                site=site,
                 current_url=self.page.url or ctx.entry_url or "",
                 moncler_outcome=moncler_outcome,
                 self_healing_result=self_healing_result,
                 selector_discovery_result=discovery_result,
-                current_site_config=ctx.site_config, generate_markdown=True,
+                current_site_config=ctx.site_config,
+                generate_markdown=True,
             )
             if saved:
                 logger.info(
                     "[PatchBuilder][Moncler] analysis=%s patch=%s",
-                    saved.get("analysis"), saved.get("patch_candidate"),
+                    saved.get("analysis"),
+                    saved.get("patch_candidate"),
                 )
         except Exception as e:
             logger.warning("[PatchBuilder][Moncler] Failed: %s", e, exc_info=True)

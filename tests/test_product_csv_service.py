@@ -7,8 +7,6 @@ import io
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.services.product_csv_service import (
     CANDIDATE_HEADERS,
     EXPORT_HEADERS,
@@ -61,7 +59,6 @@ class TestRowToProduct:
     @patch("app.services.product_csv_service._row_to_product")
     def test_basic_row_conversion(self, mock_fn):
         """Test that _row_to_product creates a Product with correct fields."""
-        from app.models import Product
 
         row = {
             "name": "Jacket",

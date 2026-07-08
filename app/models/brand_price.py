@@ -26,23 +26,16 @@ class BrandPrice(db.Model):
     buyma_price_source = db.Column(String(32), nullable=True, default="auto_calculated")
     scraped_at = db.Column(DateTime, default=datetime.utcnow)
     created_at = db.Column(DateTime, default=datetime.utcnow)
-    updated_at = db.Column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    updated_at = db.Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     @classmethod
     def get_by_brand(cls, brand: str) -> list[BrandPrice]:
-        return db.session.scalars(
-            db.select(cls).filter(cls.brand == brand).order_by(cls.price_jpy)
-        ).all()
+        return db.session.scalars(db.select(cls).filter(cls.brand == brand).order_by(cls.price_jpy)).all()
 
     @classmethod
     def get_latest_by_brand_site(cls, brand: str, site: str) -> BrandPrice | None:
         return db.session.scalar(
-            db.select(cls)
-            .filter(cls.brand == brand, cls.source_site == site)
-            .order_by(cls.scraped_at.desc())
-            .limit(1)
+            db.select(cls).filter(cls.brand == brand, cls.source_site == site).order_by(cls.scraped_at.desc()).limit(1)
         )
 
     def __repr__(self) -> str:

@@ -97,8 +97,10 @@ class TestConfigGetSecretsPriority:
         import app.config.config_loader as mod
 
         # Directly test the .env parsing logic by patching exists/read_text
-        with patch.object(mod.Path, "exists", return_value=True), \
-             patch.object(mod.Path, "read_text", return_value=env_content):
+        with (
+            patch.object(mod.Path, "exists", return_value=True),
+            patch.object(mod.Path, "read_text", return_value=env_content),
+        ):
             result = Config.get("KEY")
             assert result == "val"
 
@@ -118,9 +120,11 @@ class TestConfigGetSecretsPriority:
         """Cover lines 67-68: .env read exception falls through to OS env."""
         from app.config.config_loader import Config
 
-        with patch.object(Path, "exists", return_value=True), \
-             patch.object(Path, "read_text", side_effect=PermissionError("denied")), \
-             patch.dict(os.environ, {"KEY": "from_os"}, clear=False):
+        with (
+            patch.object(Path, "exists", return_value=True),
+            patch.object(Path, "read_text", side_effect=PermissionError("denied")),
+            patch.dict(os.environ, {"KEY": "from_os"}, clear=False),
+        ):
             result = Config.get("KEY")
             assert result == "from_os"
 
