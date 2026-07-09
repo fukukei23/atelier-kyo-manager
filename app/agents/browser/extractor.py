@@ -11,6 +11,9 @@ from typing import Any
 
 from playwright.async_api import BrowserContext, Page
 
+from app.agents.browser.moncler_plp_link_extractor import (
+    extract_moncler_pdp_links,  # noqa: F401  # re-export（718507c ruff fix で誤削除・復元）
+)
 from app.agents.browser.product_extractor import ProductExtractor
 from app.agents.browser.session_manager import EXTERNAL_BLOCKLIST_HOSTS
 from app.core.run_context import RunContext
