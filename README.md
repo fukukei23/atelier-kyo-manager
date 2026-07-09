@@ -5,7 +5,7 @@ A personal resale management system for BUYMA x Buyandship. Automates product li
 BUYMA x Buyandshipを利用した転売管理システム（個人用）。出品パイプライン、注文ステートマシン、顧客対応AIチャットボット、LLMルーティングを統合したFlaskアプリケーション。
 
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-2%2C070%20passing-green)]()
+[![Tests](https://img.shields.io/badge/tests-2%2C155-green)]()
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ---
@@ -37,7 +37,7 @@ BUYMA x Buyandshipを利用した転売管理システム（個人用）。出�
   </tr>
   <tr>
     <td>Playwrightで海外サイト価格自動取得</td>
-    <td>2,070テスト全通過（カバレッジ78.5%）</td>
+    <td>2,155テスト（カバレッジはCI完全緑化後に再計測）</td>
   </tr>
 </table>
 
@@ -112,7 +112,7 @@ Flask App Factory (create_app)
 | スクレイピング | Playwright / Selenium |
 | 画像処理 | Pillow / OpenCV / rembg |
 | LLM | OpenAI API / Gemini API / Local LLM |
-| テスト | pytest (2,070 tests) |
+| テスト | pytest (2,155 tests) |
 
 ---
 
@@ -152,7 +152,7 @@ flask run              # 開発サーバー起動
 
 | 指標 | 値 |
 |------|-----|
-| テスト数 | 2,070 テストケース（pytest） |
+| テスト数 | 2,155 テストケース（pytest） |
 | モジュール数 | routes 14 + services 8 + models 16 + utils 20+ |
 | LLMプロバイダー | OpenAI / Gemini / Local LLM |
 | データベース | SQLite + Flask-Migrate |
