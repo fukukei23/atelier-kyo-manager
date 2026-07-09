@@ -39,5 +39,5 @@ jobs:
           set -o pipefail
           echo "## Test Results" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          python -m pytest tests/ -q --tb=short 2>&1 | tee -a $GITHUB_STEP_SUMMARY
+          python -m pytest tests/ --cov=app --cov-report=term -q --tb=short 2>&1 | tee -a $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
