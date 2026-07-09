@@ -1,4 +1,5 @@
 """LLM controller: unified interface for Gemini / OpenAI / DeepSeek / local models."""
+
 from __future__ import annotations
 
 import hashlib
@@ -26,21 +27,28 @@ logger = logging.getLogger(__name__)
 # ---------- Optional imports ----------
 try:
     from opentelemetry import trace
+
     tracer = trace.get_tracer("ai_llm_controller")
 except ImportError:
+
     class _NoopTracer:
         def start_as_current_span(self, name):
             return self
+
         def __enter__(self):
             return self
+
         def __exit__(self, *a):
             pass
+
         def set_attribute(self, *a):
             pass
+
     tracer = _NoopTracer()
 
 try:
     import diskcache
+
     _CACHE_DIR = Path(__file__).resolve().parents[2] / "instance" / "llm_cache"
     _CACHE = diskcache.Cache(_CACHE_DIR, size_limit=LLM_CACHE_SIZE_LIMIT)
 except Exception:
@@ -83,12 +91,14 @@ def _load_config() -> dict[str, Any]:
     config_dict: dict[str, Any] = {}
     try:
         from flask import current_app
+
         config_dict.update(dict(current_app.config))
         return config_dict
     except Exception:
         pass
     try:
         from app.config.config import AppConfig
+
         for k in dir(AppConfig):
             if not k.startswith("_") and not callable(getattr(AppConfig, k)):
                 config_dict[k] = getattr(AppConfig, k)
@@ -96,6 +106,7 @@ def _load_config() -> dict[str, Any]:
         pass
     try:
         from app.config.secrets import Secrets
+
         for k in dir(Secrets):
             if not k.startswith("_") and not callable(getattr(Secrets, k)):
                 val = getattr(Secrets, k)
@@ -104,9 +115,15 @@ def _load_config() -> dict[str, Any]:
     except Exception:
         pass
     _ENV_KEYS = [
-        "OPENAI_API_KEY", "GEMINI_API_KEY", "DEEPSEEK_API_KEY",
-        "DEEPSEEK_API_BASE", "LLM_ORDER_*", "CRAWLER_*",
-        "FLASK_APP", "STAGE", "BUYANDSHIP_*",
+        "OPENAI_API_KEY",
+        "GEMINI_API_KEY",
+        "DEEPSEEK_API_KEY",
+        "DEEPSEEK_API_BASE",
+        "LLM_ORDER_*",
+        "CRAWLER_*",
+        "FLASK_APP",
+        "STAGE",
+        "BUYANDSHIP_*",
     ]
     for k in _ENV_KEYS:
         # Support wildcard prefix matching (e.g. "LLM_ORDER_*")
@@ -188,6 +205,7 @@ class AILlmController:
                 _CACHE.set(cache_key, result.to_dict(), expire=LLM_CACHE_TTL_SECONDS)
 
             from app.utils.chat_history_saver import save_chat_history
+
             save_chat_history(prompt, result)
 
             return result
@@ -208,9 +226,8 @@ class AILlmController:
     ) -> GenerateResult:
         families = [family, "openai", "deepseek", "local"] if family != "local" else ["local"]
         for attempt, fam in enumerate(families, 1):
-            if fam == "local" and self._local_llama is None:
-                if not LOCAL_MODEL_PATH.exists():
-                    continue
+            if fam == "local" and self._local_llama is None and not LOCAL_MODEL_PATH.exists():
+                continue
             try:
                 logger.info(f"Attempt {attempt} with {fam}")
                 if stream and fam != "local":
@@ -246,13 +263,17 @@ class AILlmController:
         usage = {"input": len(prompt) // 4, "output": len(response.text) // 4}
         return response.text, usage
 
-    def _call_openai_compat(self, fam: str, prompt: str, tools: list[dict[str, Any]] | None) -> tuple[str, dict[str, int]]:
+    def _call_openai_compat(
+        self, fam: str, prompt: str, tools: list[dict[str, Any]] | None
+    ) -> tuple[str, dict[str, int]]:
         client = self.deepseek_client if fam == "deepseek" else self.openai_client
         if not client:
             raise RuntimeError(f"{fam} client not configured")
         model = DEEPSEEK_MODEL if fam == "deepseek" else OPENAI_MODEL
         cmpl = client.chat.completions.create(
-            model=model, messages=[{"role": "user", "content": prompt}], tools=tools or [],
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            tools=tools or [],
         )
         txt = cmpl.choices[0].message.content or ""
         usage = cmpl.usage.model_dump() if cmpl.usage else {}
@@ -262,6 +283,7 @@ class AILlmController:
         if self._local_llama is None:
             try:
                 from llama_cpp import Llama
+
                 if LOCAL_MODEL_PATH.exists():
                     self._local_llama = Llama(model_path=str(LOCAL_MODEL_PATH), n_ctx=LLM_LOCAL_CTX_SIZE)
             except Exception:
@@ -278,7 +300,9 @@ class AILlmController:
         if fam == "openai" and self.openai_client:
             text = ""
             for chunk in self.openai_client.chat.completions.create(
-                model=OPENAI_MODEL, messages=[{"role": "user", "content": prompt}], stream=True,
+                model=OPENAI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                stream=True,
             ):
                 delta = chunk.choices[0].delta.content or ""
                 text += delta
@@ -303,7 +327,10 @@ class AILlmController:
         if self._local_nlp is None:
             try:
                 from transformers import pipeline
-                self._local_nlp = pipeline("sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english")
+
+                self._local_nlp = pipeline(
+                    "sentiment-analysis", model="distilbert-base-uncased-finetuned-sst-2-english"
+                )
             except Exception:
                 return "NEUTRAL"
         try:

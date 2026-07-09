@@ -79,11 +79,13 @@ class TestPlpTrapMixin:
         m.page.goto = AsyncMock()
         m.page.reload = AsyncMock()
         m.page.wait_for_timeout = AsyncMock()
-        trap_config = {"recovery_actions": [
-            {"action": "go_back", "max_attempts": 1},
-            {"action": "goto_target", "max_attempts": 1},
-            {"action": "reload", "max_attempts": 1},
-        ]}
+        trap_config = {
+            "recovery_actions": [
+                {"action": "go_back", "max_attempts": 1},
+                {"action": "goto_target", "max_attempts": 1},
+                {"action": "reload", "max_attempts": 1},
+            ]
+        }
         m._is_trap_page = MagicMock(return_value=True)
         with patch("app.agents.browser.navigation_driver.NavigationDriver") as MockNav:
             mock_nav = MagicMock()

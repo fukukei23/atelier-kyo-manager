@@ -173,6 +173,7 @@ async def perform_vrt(
     logger: Any,
 ) -> None:
     from pathlib import Path as _P
+
     from playwright.async_api import Error as PlaywrightError
 
     try:

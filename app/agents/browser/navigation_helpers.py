@@ -126,9 +126,6 @@ def is_wrong_locale(url: str, site_config: dict[str, Any]) -> bool:
         preferred_locale = site_config.get("navigation", {}).get("locale", {}).get("preferred", "en-int")
 
         # Check if path contains a different locale than preferred
-        if f"/{preferred_locale}/" not in path and re.search(r"/en-[a-z]{2}/", path, re.IGNORECASE):
-            return True
-
-        return False
+        return bool(f"/{preferred_locale}/" not in path and re.search(r"/en-[a-z]{2}/", path, re.IGNORECASE))
     except Exception:
         return False

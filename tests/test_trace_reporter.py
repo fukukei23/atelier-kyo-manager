@@ -1,12 +1,7 @@
 """Tests for app/utils/trace_reporter.py - helper functions only"""
 
 import io
-import json
 import zipfile
-from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
 
 from app.utils.trace_reporter import (
     _event_time_ms,
@@ -208,6 +203,7 @@ class TestSummarize:
 
 # ── _load_jsonl ───────────────────────────────────────────────────────────────
 
+
 class TestLoadJsonl:
     def test_missing_file_returns_empty(self):
         buf = _make_zip({})
@@ -252,16 +248,19 @@ class TestLoadJsonl:
         assert result == [{"found": True}]
 
     def test_returns_first_non_empty(self):
-        buf = _make_zip({
-            "first.jsonl": '{"x": 1}\n',
-            "second.jsonl": '{"y": 2}\n',
-        })
+        buf = _make_zip(
+            {
+                "first.jsonl": '{"x": 1}\n',
+                "second.jsonl": '{"y": 2}\n',
+            }
+        )
         with zipfile.ZipFile(buf) as zf:
             result = _load_jsonl(zf, "first.jsonl", "second.jsonl")
         assert result == [{"x": 1}]
 
 
 # ── _find_all ─────────────────────────────────────────────────────────────────
+
 
 class TestFindAll:
     def test_finds_files_by_extension(self):

@@ -9,6 +9,7 @@ Usage:
     from app.services.price_comparison_service import compare_product, search_products
     result = compare_product(brand="Gucci", product_query="Continental Wallet GG Supreme")
 """
+
 from __future__ import annotations
 
 import logging
@@ -38,6 +39,7 @@ DEFAULT_SHIPPING_JPY = 2500
 @dataclass
 class SourceQuote:
     """Single price quote from one source site."""
+
     brand_price_id: int
     source_site: str
     source_url: str
@@ -62,6 +64,7 @@ class SourceQuote:
 @dataclass
 class ProductComparison:
     """Unified comparison result for one product across all sources."""
+
     query: str  # original user query
     brand: str
     category: str | None = None
@@ -112,6 +115,7 @@ class ProductComparison:
 # Core comparison functions
 # ---------------------------------------------------------------------------
 
+
 def compare_product(
     brand: str,
     product_query: str,
@@ -136,11 +140,13 @@ def compare_product(
     comparison = ProductComparison(query=product_query, brand=brand, category=category)
 
     # 1. Query all BrandPrice records for this brand
-    all_prices = db.session.execute(
-        db.select(BrandPrice)
-        .filter(BrandPrice.brand == brand)
-        .order_by(BrandPrice.scraped_at.desc())
-    ).scalars().all()
+    all_prices = (
+        db.session.execute(
+            db.select(BrandPrice).filter(BrandPrice.brand == brand).order_by(BrandPrice.scraped_at.desc())
+        )
+        .scalars()
+        .all()
+    )
 
     # Deduplicate: keep latest per (product_name, source_site) combo
     seen: dict[tuple[str, str], BrandPrice] = {}
@@ -239,6 +245,7 @@ def search_products(
 # BUYMA enrichment
 # ---------------------------------------------------------------------------
 
+
 def enrich_with_buyma(comparison: ProductComparison) -> ProductComparison:
     """
     Search BUYMA for the comparison's query and attach selling price + metadata.
@@ -268,6 +275,7 @@ def enrich_with_buyma(comparison: ProductComparison) -> ProductComparison:
 # ---------------------------------------------------------------------------
 # Profit calculation
 # ---------------------------------------------------------------------------
+
 
 def calculate_comparison_profit(
     comparison: ProductComparison,

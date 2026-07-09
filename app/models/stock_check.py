@@ -48,4 +48,3 @@ class StockCheck(db.Model):
         if self.current_price is not None and self.previous_price is not None and self.previous_price != 0:
             return ((self.current_price - self.previous_price) / self.previous_price) * 100
         return None
-

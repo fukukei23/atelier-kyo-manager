@@ -24,7 +24,6 @@ from app.services.brand_price_scraper import (
     _make_item,
 )
 from app.services.brand_price_scraper import BrandPriceScraper as _StealthScraper
-from app.services.brand_price_scraper import _utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -34,10 +33,20 @@ SALE_SITES = ["yoox", "ssense"]
 # Valid categories for SSENSE URL construction (prevent path injection)
 # ---------------------------------------------------------------------------
 
-VALID_CATEGORIES = frozenset({
-    "bags", "sunglasses", "wallet", "shoes", "accessory",
-    "clothing", "jewelry", "watches", "hats", "scarves",
-})
+VALID_CATEGORIES = frozenset(
+    {
+        "bags",
+        "sunglasses",
+        "wallet",
+        "shoes",
+        "accessory",
+        "clothing",
+        "jewelry",
+        "watches",
+        "hats",
+        "scarves",
+    }
+)
 
 # ---------------------------------------------------------------------------
 # Brand slug mappings
@@ -76,11 +85,25 @@ _SSENSE_SLUGS: dict[str, str] = {
 # ---------------------------------------------------------------------------
 
 _BAG_KEYWORDS = {
-    "handbag", "shoulder bag", "shoulderbags", "tote bag",
-    "totes", "cross-body bag", "crossbody", "satchel",
-    "clutch", "pouch", "mini bag", "chain bag", "bucket bag",
-    "backpack", "travel bag", "messenger bag", "wallet",
-    "bag", "bags",
+    "handbag",
+    "shoulder bag",
+    "shoulderbags",
+    "tote bag",
+    "totes",
+    "cross-body bag",
+    "crossbody",
+    "satchel",
+    "clutch",
+    "pouch",
+    "mini bag",
+    "chain bag",
+    "bucket bag",
+    "backpack",
+    "travel bag",
+    "messenger bag",
+    "wallet",
+    "bag",
+    "bags",
 }
 
 
@@ -98,6 +121,7 @@ def _is_bag(keyword: str) -> bool:
 # ---------------------------------------------------------------------------
 # YOOX scraper
 # ---------------------------------------------------------------------------
+
 
 def _scrape_yoox(brand: str, item_limit: int = 10) -> list[dict]:
     """
@@ -124,13 +148,13 @@ def _scrape_yoox(brand: str, item_limit: int = 10) -> list[dict]:
 
     # YOOX item codes are embedded in image URLs
     # Pattern: /images/items/45/45886656NN_14_f.jpg → item code 45886656NN
-    item_code_re = re.compile(r'/items/\d+/([A-Za-z0-9]+)_\d+_\w+\.jpg')
+    item_code_re = re.compile(r"/items/\d+/([A-Za-z0-9]+)_\d+_\w+\.jpg")
     # Price pattern: $ 2,001 (-36%)  or  $ 2,001
-    price_re = re.compile(r'\$\s*([\d,]+)\s*(?:\(([-\d]+)%\))?')
+    price_re = re.compile(r"\$\s*([\d,]+)\s*(?:\(([-\d]+)%\))?")
     # Category name: appears before the item-code block
     # YOOX HTML: <span class="brand">GUCCI</span> ... <span>Handbags</span> ... price
     category_re = re.compile(
-        r'<span[^>]*>\s*([A-Za-z][A-Za-z\s]{0,30}?(?:bag|handbag|tote|clutch|pouch|wallet|satchel)[A-Za-z\s]{0,30}?)\s*</span>',
+        r"<span[^>]*>\s*([A-Za-z][A-Za-z\s]{0,30}?(?:bag|handbag|tote|clutch|pouch|wallet|satchel)[A-Za-z\s]{0,30}?)\s*</span>",
         re.IGNORECASE,
     )
 
@@ -145,7 +169,7 @@ def _scrape_yoox(brand: str, item_limit: int = 10) -> list[dict]:
 
         # Find surrounding context (500 chars before the match)
         start = max(0, m.start() - 500)
-        context = html[start:m.end() + 200]
+        context = html[start : m.end() + 200]
 
         # Extract category from context
         category_match = category_re.search(context)
@@ -187,6 +211,7 @@ def _scrape_yoox(brand: str, item_limit: int = 10) -> list[dict]:
 # SSENSE scraper
 # ---------------------------------------------------------------------------
 
+
 def _scrape_ssense(brand: str, item_limit: int = 10, category: str = "bags") -> list[dict]:
     """
     SSENSE women's brand page → list of items with sale prices.
@@ -220,7 +245,7 @@ def _scrape_ssense(brand: str, item_limit: int = 10, category: str = "bags") -> 
     # SSENSE embeds product data as parallel arrays in metadata
     # Pattern: metadata = {url: [...], price: [...], sku: [...]}
     metadata_re = re.compile(
-        r'metadata\s*=\s*(\{.*?\});',
+        r"metadata\s*=\s*(\{.*?\});",
         re.DOTALL,
     )
     m = metadata_re.search(html)
@@ -230,6 +255,7 @@ def _scrape_ssense(brand: str, item_limit: int = 10, category: str = "bags") -> 
 
     try:
         import json
+
         metadata = json.loads(m.group(1))
     except Exception:
         logger.warning("[ssense] Failed to parse metadata JSON")
@@ -245,10 +271,7 @@ def _scrape_ssense(brand: str, item_limit: int = 10, category: str = "bags") -> 
         try:
             p_raw = prices_raw[i]
             # Price can be int/float or dict {"amount": ...}
-            if isinstance(p_raw, dict):
-                price = float(p_raw.get("amount", 0))
-            else:
-                price = float(p_raw)
+            price = float(p_raw.get("amount", 0)) if isinstance(p_raw, dict) else float(p_raw)
         except (ValueError, TypeError, IndexError):
             continue
 
@@ -261,7 +284,7 @@ def _scrape_ssense(brand: str, item_limit: int = 10, category: str = "bags") -> 
 
         # Extract name from URL slug
         # e.g. /women/product/gucci/red-rebelle-bag/3426109
-        slug_match = re.search(r'/product/[^/]+/([^/]+)/\d+$', product_url)
+        slug_match = re.search(r"/product/[^/]+/([^/]+)/\d+$", product_url)
         if slug_match:
             product_slug = slug_match.group(1)
             product_name = _slug_to_name(product_slug)
@@ -387,7 +410,9 @@ def scrape_ssense_pdp(product_url: str) -> dict | None:
             if result.get("full_name") or result.get("model_number"):
                 logger.info(
                     "[ssense-pdp] %s → color=%s, model=%s",
-                    product_url, result.get("color"), result.get("model_number"),
+                    product_url,
+                    result.get("color"),
+                    result.get("model_number"),
                 )
                 return result
 
@@ -416,7 +441,7 @@ def _ssense_parse_html_fallback(html: str, brand: str, url: str, item_limit: int
         r'href="(/en-us/women/product/[^"]+)"[^>]*>.*?<span[^>]*>\$?([\d,]+)',
         re.DOTALL,
     )
-    price_re = re.compile(r'\$?([\d,]+)')
+    re.compile(r"\$?([\d,]+)")
 
     seen: set[str] = set()
     for m in product_link_re.finditer(html):
@@ -427,11 +452,8 @@ def _ssense_parse_html_fallback(html: str, brand: str, url: str, item_limit: int
         except ValueError:
             continue
 
-        slug_match = re.search(r'/product/[^/]+/([^/]+)/\d+$', product_url)
-        if slug_match:
-            product_name = _slug_to_name(slug_match.group(1))
-        else:
-            product_name = "Unknown"
+        slug_match = re.search(r"/product/[^/]+/([^/]+)/\d+$", product_url)
+        product_name = _slug_to_name(slug_match.group(1)) if slug_match else "Unknown"
 
         if product_name in seen:
             continue
@@ -451,6 +473,7 @@ def _ssense_parse_html_fallback(html: str, brand: str, url: str, item_limit: int
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
 
 class SaleScraper:
     """YOOX + SSENSE sale price scraper.

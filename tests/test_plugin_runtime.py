@@ -24,9 +24,11 @@ class TestLoadPluginsForSite:
         with patch("app.agents.plugin_runtime.importlib.import_module", return_value=mock_module):
             mock_iter.return_value = ["app.agents.plugins.test_plugin"]
             # Need to mock issubclass to return True for our mock
-            with patch("app.agents.plugin_runtime.isinstance"), \
-                 patch("app.agents.plugin_runtime.issubclass", return_value=True), \
-                 patch("app.agents.plugin_runtime.getattr"):
+            with (
+                patch("app.agents.plugin_runtime.isinstance"),
+                patch("app.agents.plugin_runtime.issubclass", return_value=True),
+                patch("app.agents.plugin_runtime.getattr"),
+            ):
                 # First getattr: dir iteration returns "MyPlugin"
                 # We need a different approach
                 pass

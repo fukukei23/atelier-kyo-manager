@@ -1,11 +1,11 @@
 """Tests for app/extractors/product_info_extractor.py — utility functions"""
-import pytest
+
 from app.extractors.product_info_extractor import (
-    _normalize_and_to_int,
-    _first_yen_from_text,
-    _norm_currency,
     CURRENCY_SYMBOLS,
     VALID_PARSING_KEYS,
+    _first_yen_from_text,
+    _norm_currency,
+    _normalize_and_to_int,
 )
 
 

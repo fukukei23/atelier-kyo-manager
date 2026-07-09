@@ -11,7 +11,6 @@ Version: 1.1.0 (TelemetryClient/dataclasses extracted to telemetry_client.py)
 
 from __future__ import annotations
 
-import contextlib
 import inspect
 import json
 import logging
@@ -419,8 +418,6 @@ class TelemetryService:
         try:
             # timestamp がなければ自動生成
             if "timestamp" not in outcome:
-                from datetime import datetime
-
                 outcome["timestamp"] = _utcnow().isoformat() + "Z"
 
             # キー名は設計書に準拠

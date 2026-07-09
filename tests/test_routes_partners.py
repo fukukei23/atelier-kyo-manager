@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.extensions import db
 
 
@@ -34,6 +32,7 @@ class TestPartnerRoutes:
         assert r.status_code == 302
         with routes_app.app_context():
             from app.models.partner import Partner
+
             p = Partner.query.filter_by(name="TestPartner").first()
             assert p is not None
             assert p.email == "p@example.com"
@@ -45,6 +44,7 @@ class TestPartnerRoutes:
     def test_partner_edit_200(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.partner import Partner
+
             p = Partner(name="EditTarget", email="old@example.com")
             db.session.add(p)
             db.session.commit()
@@ -55,6 +55,7 @@ class TestPartnerRoutes:
     def test_partner_edit_submit(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.partner import Partner
+
             p = Partner(name="BeforeEdit")
             db.session.add(p)
             db.session.commit()
@@ -67,12 +68,14 @@ class TestPartnerRoutes:
         assert r.status_code == 302
         with routes_app.app_context():
             from app.models.partner import Partner
+
             updated = db.session.get(Partner, pid)
             assert updated.name == "AfterEdit"
 
     def test_partner_edit_missing_name(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.partner import Partner
+
             p = Partner(name="NoNameEdit")
             db.session.add(p)
             db.session.commit()
@@ -83,6 +86,7 @@ class TestPartnerRoutes:
     def test_partner_delete(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.partner import Partner
+
             p = Partner(name="DeleteTarget")
             db.session.add(p)
             db.session.commit()
@@ -91,6 +95,7 @@ class TestPartnerRoutes:
         assert r.status_code == 200
         with routes_app.app_context():
             from app.models.partner import Partner
+
             assert db.session.get(Partner, pid) is None
 
 
@@ -118,6 +123,7 @@ class TestCustomerRoutes:
         assert r.status_code == 200
         with routes_app.app_context():
             from app.models.repeat_customer import RepeatCustomer
+
             c = RepeatCustomer.query.filter_by(customer_name="TestCustomer").first()
             assert c is not None
             assert c.total_orders == 3
@@ -143,6 +149,7 @@ class TestCustomerRoutes:
     def test_customer_edit_200(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.repeat_customer import RepeatCustomer
+
             c = RepeatCustomer(customer_name="EditCust", total_orders=1, total_spent=1000)
             c.segment = c.calc_segment()
             db.session.add(c)
@@ -154,6 +161,7 @@ class TestCustomerRoutes:
     def test_customer_edit_submit(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.repeat_customer import RepeatCustomer
+
             c = RepeatCustomer(customer_name="EditCust2", total_orders=1, total_spent=1000)
             c.segment = c.calc_segment()
             db.session.add(c)
@@ -169,6 +177,7 @@ class TestCustomerRoutes:
     def test_customer_delete(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.repeat_customer import RepeatCustomer
+
             c = RepeatCustomer(customer_name="DeleteCust", total_orders=0, total_spent=0)
             db.session.add(c)
             db.session.commit()

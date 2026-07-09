@@ -7,7 +7,6 @@ PriceMonitorモデルの商品URLを定期チェックし、
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
 
 from app.config.cost_table import get_buyandship_shipping
 from app.core.pricing.calculator import calculate_pricing
@@ -190,15 +189,17 @@ def check_single_price(monitor: PriceMonitor) -> dict:
         db.session.add(history)
         db.session.commit()
 
-        result.update({
-            "price_changed": price_changed,
-            "old_price": old_price,
-            "new_price": price,
-            "new_price_jpy": round(price_jpy),
-            "is_profitable": monitor.is_profitable,
-            "profit": monitor.latest_profit,
-            "profit_rate": monitor.latest_profit_rate,
-        })
+        result.update(
+            {
+                "price_changed": price_changed,
+                "old_price": old_price,
+                "new_price": price,
+                "new_price_jpy": round(price_jpy),
+                "is_profitable": monitor.is_profitable,
+                "profit": monitor.latest_profit,
+                "profit_rate": monitor.latest_profit_rate,
+            }
+        )
 
         # 利益なしアラート（利益あり→なしに変化した時）
         if was_profitable and not monitor.is_profitable:
@@ -254,25 +255,27 @@ def get_dashboard_data() -> list[dict]:
         status = "paused"
         if m.is_active:
             status = "profitable" if m.is_profitable else "unprofitable"
-        data.append({
-            "id": m.id,
-            "brand": m.brand,
-            "product_name": m.product_name,
-            "source_url": m.source_url,
-            "category": m.category,
-            "current_source_price": m.current_source_price,
-            "current_source_price_jpy": m.current_source_price_jpy,
-            "currency": m.currency,
-            "buyma_selling_price": m.buyma_selling_price,
-            "is_profitable": m.is_profitable,
-            "latest_profit": m.latest_profit,
-            "latest_profit_rate": m.latest_profit_rate,
-            "is_active": m.is_active,
-            "status": status,
-            "last_checked_at": m.last_checked_at,
-            "last_price_changed_at": m.last_price_changed_at,
-            "check_interval_hours": m.check_interval_hours,
-        })
+        data.append(
+            {
+                "id": m.id,
+                "brand": m.brand,
+                "product_name": m.product_name,
+                "source_url": m.source_url,
+                "category": m.category,
+                "current_source_price": m.current_source_price,
+                "current_source_price_jpy": m.current_source_price_jpy,
+                "currency": m.currency,
+                "buyma_selling_price": m.buyma_selling_price,
+                "is_profitable": m.is_profitable,
+                "latest_profit": m.latest_profit,
+                "latest_profit_rate": m.latest_profit_rate,
+                "is_active": m.is_active,
+                "status": status,
+                "last_checked_at": m.last_checked_at,
+                "last_price_changed_at": m.last_price_changed_at,
+                "check_interval_hours": m.check_interval_hours,
+            }
+        )
     return data
 
 
@@ -316,16 +319,18 @@ def get_ssense_candidates() -> list[dict]:
         if key in seen:
             continue
         seen.add(key)
-        candidates.append({
-            "id": r.id,
-            "brand": r.brand,
-            "product_name": r.product_name,
-            "source_url": r.source_url,
-            "price_original": r.price_original,
-            "currency": r.currency,
-            "price_jpy": r.price_jpy,
-            "actual_purchase_jpy": r.actual_purchase_jpy,
-        })
+        candidates.append(
+            {
+                "id": r.id,
+                "brand": r.brand,
+                "product_name": r.product_name,
+                "source_url": r.source_url,
+                "price_original": r.price_original,
+                "currency": r.currency,
+                "price_jpy": r.price_jpy,
+                "actual_purchase_jpy": r.actual_purchase_jpy,
+            }
+        )
     return candidates
 
 

@@ -1,14 +1,13 @@
 """Tests for app/utils/sourcing_pipeline.py - Issue #89"""
+
 import json
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
-
 from app.utils.sourcing_pipeline import main, run_pipeline
 
-
 # ── run_pipeline ─────────────────────────────────────────────────────────────
+
 
 class TestRunPipeline:
     def test_file_not_found_writes_invalid(self, tmp_path):
@@ -64,8 +63,11 @@ class TestRunPipeline:
         mock_profit_result = {"status": "valid", "profit": 10000, "profit_rate": 0.2}
         mock_tier_result = {"tier": "B", "reason": "利益率20%"}
 
-        with patch("app.utils.sourcing_pipeline.validate_sourcing_input") as mock_val,              patch("app.utils.sourcing_pipeline.calculate_profitability") as mock_calc,              patch("app.utils.sourcing_pipeline.judge_tier") as mock_tier:
-
+        with (
+            patch("app.utils.sourcing_pipeline.validate_sourcing_input") as mock_val,
+            patch("app.utils.sourcing_pipeline.calculate_profitability") as mock_calc,
+            patch("app.utils.sourcing_pipeline.judge_tier") as mock_tier,
+        ):
             mock_val.return_value = {"normalized": input_data}
             mock_calc.return_value = mock_profit_result
             mock_tier.return_value = mock_tier_result
@@ -90,8 +92,11 @@ class TestRunPipeline:
         mock_profit = {"status": "valid", "profit": 5000}
         mock_tier = {"tier": "A", "reason": "高利益率"}
 
-        with patch("app.utils.sourcing_pipeline.validate_sourcing_input") as mv,              patch("app.utils.sourcing_pipeline.calculate_profitability", return_value=mock_profit),              patch("app.utils.sourcing_pipeline.judge_tier", return_value=mock_tier):
-
+        with (
+            patch("app.utils.sourcing_pipeline.validate_sourcing_input") as mv,
+            patch("app.utils.sourcing_pipeline.calculate_profitability", return_value=mock_profit),
+            patch("app.utils.sourcing_pipeline.judge_tier", return_value=mock_tier),
+        ):
             mv.return_value = {"normalized": input_data}
             run_pipeline(input_path, profit_out, tier_out)
 
@@ -117,6 +122,7 @@ class TestRunPipeline:
 
 
 # ── main ──────────────────────────────────────────────────────────────────────
+
 
 class TestMain:
     def test_main_calls_run_pipeline(self):

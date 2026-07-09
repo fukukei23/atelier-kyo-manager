@@ -1,55 +1,63 @@
 from __future__ import annotations
 
-import asyncio
-import contextlib
-import json
 import logging
-import re
 import time
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qsl, quote_plus, urlencode, urlparse, urlunparse
 
 from playwright.async_api import BrowserContext, Page
 
 from app.agents.browser.agent_failure import FailureHandlerMixin
 from app.agents.browser.extractor import (
-    VISIBLE_PRICE_SELECTORS,
     BrowserExtractionService,
-    looks_like_product_url,
 )
 from app.agents.browser.learning_flow import LearningMixin
 from app.agents.browser.moncler_locale import MonclerLocaleMixin
 from app.agents.browser.navigation_driver import (
     NavigationContext,
     NavigationDriver,
-    _dedupe_keep_order,
-    is_same_origin,
 )
 from app.agents.browser.pdp_flow import PdpFlowMixin
 from app.agents.browser.plp_flow import PlpFlowMixin
 from app.agents.browser.repair_orchestrator import RepairOrchestratorMixin
 from app.agents.browser.session_lifecycle import SessionLifecycleMixin
 from app.agents.browser.session_manager import SessionManager
-from app.agents.browser.ui_helpers import (
-    accept_cookies_if_present as ui_accept_cookies_if_present,
-    click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
-    dismiss_geo_modal as ui_dismiss_geo_modal,
-    human_like_mouse_move as ui_human_like_mouse_move,
-    human_like_pause as ui_human_like_pause,
-    human_like_scroll as ui_human_like_scroll,
-    kill_overlays as ui_kill_overlays,
-    pause_for_operator as ui_pause_for_operator,
-    safe_wait_selector as ui_safe_wait_selector,
-)
 from app.agents.browser.settings import (
     resolve_run_settings as settings_resolve_run_settings,
+)
+from app.agents.browser.settings import (
     time_left_ms as settings_time_left_ms,
+)
+from app.agents.browser.ui_helpers import (
+    accept_cookies_if_present as ui_accept_cookies_if_present,
+)
+from app.agents.browser.ui_helpers import (
+    click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
+)
+from app.agents.browser.ui_helpers import (
+    dismiss_geo_modal as ui_dismiss_geo_modal,
+)
+from app.agents.browser.ui_helpers import (
+    human_like_mouse_move as ui_human_like_mouse_move,
+)
+from app.agents.browser.ui_helpers import (
+    human_like_pause as ui_human_like_pause,
+)
+from app.agents.browser.ui_helpers import (
+    human_like_scroll as ui_human_like_scroll,
+)
+from app.agents.browser.ui_helpers import (
+    kill_overlays as ui_kill_overlays,
+)
+from app.agents.browser.ui_helpers import (
+    pause_for_operator as ui_pause_for_operator,
+)
+from app.agents.browser.ui_helpers import (
+    safe_wait_selector as ui_safe_wait_selector,
 )
 from app.agents.selector_discovery_agent import SelectorDiscoveryAgent
 from app.core.run_context import RunContext
 from app.models.result_models import DiscoveryResult
-from app.utils.observability import count_selectors, save_dom, save_raw_hrefs, write_fail_snapshot
 
 try:
     from app.agents.browser_use_moncler_patch import moncler_plp_recovery
@@ -147,23 +155,30 @@ class BrowserUseAgent(
 
     async def _setup_init_scripts(self, context: BrowserContext):
         from app.agents.browser.stealth import setup_stealth_init_scripts
+
         await setup_stealth_init_scripts(context)
 
     # --- Browser Context Setup ---
     def _build_context_options(self, settings: dict[str, Any], run_context: RunContext) -> dict[str, Any]:
         from app.agents.browser.session_config import build_context_options
+
         return build_context_options(settings, run_context.get_path, self.logger)
 
     async def _setup_routes(self, context: BrowserContext, settings: dict[str, Any]):
         from app.agents.browser.route_setup import setup_routes
+
         await setup_routes(context, settings, self._normalize_to_en_int_url, self.logger)
 
     def _get_session_file(self, site: str, site_config: dict[str, Any]) -> Path:
         from app.agents.browser.session_config import get_session_file
+
         return get_session_file(site, site_config)
 
-    async def _apply_saved_session(self, context: BrowserContext, page: Page, site: str, site_config: dict[str, Any]) -> None:
+    async def _apply_saved_session(
+        self, context: BrowserContext, page: Page, site: str, site_config: dict[str, Any]
+    ) -> None:
         from app.agents.browser.session_config import apply_saved_session, get_session_file
+
         sess_file = get_session_file(site, site_config)
         await apply_saved_session(context, sess_file, self.logger)
 
@@ -224,9 +239,13 @@ class BrowserUseAgent(
                     raise ValueError("SessionManager failed to provision a Playwright page.")
 
                 page = await self._bootstrap_session_page(
-                    page=page, site=site, site_config=site_config,
-                    run_context=run_context, settings=settings,
-                    target_url=nav_url, likely_plp=likely_plp,
+                    page=page,
+                    site=site,
+                    site_config=site_config,
+                    run_context=run_context,
+                    settings=settings,
+                    target_url=nav_url,
+                    likely_plp=likely_plp,
                 )
 
                 if plugin:
@@ -291,14 +310,24 @@ class BrowserUseAgent(
                                 )
 
                     nav_ctx = NavigationContext(
-                        site=site, query=query, site_config=site_config,
-                        settings=settings, run_context=run_context,
-                        start_t=start_t, budget_ms=budget_ms, entry_url=nav_url,
+                        site=site,
+                        query=query,
+                        site_config=site_config,
+                        settings=settings,
+                        run_context=run_context,
+                        start_t=start_t,
+                        budget_ms=budget_ms,
+                        entry_url=nav_url,
                     )
                     navigation_driver = NavigationDriver(
                         page=page,
                         ensure_plp_materialized=lambda pg, scfg, stg, s_t, b_ms: self._ensure_plp_materialized(
-                            pg, scfg, stg, start_t=s_t, budget_ms=b_ms, target_url=nav_url,
+                            pg,
+                            scfg,
+                            stg,
+                            start_t=s_t,
+                            budget_ms=b_ms,
+                            target_url=nav_url,
                         ),
                         trap_checker=None,
                         telemetry=None,
@@ -313,9 +342,16 @@ class BrowserUseAgent(
                     skip_materialize = bool(getattr(nav_outcome, "plp_materialized", False))
 
                     return await self._run_plp_flow(
-                        page, context, site, query, site_config,
-                        settings, run_context, target_url=nav_url,
-                        start_t=start_t, budget_ms=budget_ms,
+                        page,
+                        context,
+                        site,
+                        query,
+                        site_config,
+                        settings,
+                        run_context,
+                        target_url=nav_url,
+                        start_t=start_t,
+                        budget_ms=budget_ms,
                         skip_materialize=skip_materialize,
                     )
 

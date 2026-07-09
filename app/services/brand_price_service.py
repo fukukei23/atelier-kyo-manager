@@ -5,10 +5,10 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import func
 
-from app.core.timezone import _utcnow
 from app.config.cost_table import DEFAULT_MARKUP_RATE, get_buyandship_shipping
 from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.schemas import PricingInput
+from app.core.timezone import _utcnow
 from app.extensions import db
 from app.models.brand_price import BrandPrice
 
@@ -19,11 +19,13 @@ def save_scraped_prices(items: list[dict]) -> int:
     saved = 0
     for item in items:
         existing = db.session.scalar(
-            db.select(BrandPrice).filter(
+            db.select(BrandPrice)
+            .filter(
                 BrandPrice.brand == item["brand"],
                 BrandPrice.product_name == item.get("product_name", ""),
                 BrandPrice.source_site == item["source_site"],
-            ).limit(1)
+            )
+            .limit(1)
         )
         if existing:
             existing.price_original = item["price_original"]
@@ -32,7 +34,11 @@ def save_scraped_prices(items: list[dict]) -> int:
             existing.exchange_rate = item["exchange_rate"]
             existing.in_stock = item.get("in_stock", True)
             existing.size_available = item.get("size_available", "")
-            existing.scraped_at = datetime.fromisoformat(item["scraped_at"]) if isinstance(item.get("scraped_at"), str) else item.get("scraped_at", _utcnow())
+            existing.scraped_at = (
+                datetime.fromisoformat(item["scraped_at"])
+                if isinstance(item.get("scraped_at"), str)
+                else item.get("scraped_at", _utcnow())
+            )
             if item.get("actual_purchase_jpy"):
                 existing.actual_purchase_jpy = item["actual_purchase_jpy"]
                 existing.actual_purchase_source = item.get("actual_purchase_source")
@@ -51,7 +57,9 @@ def save_scraped_prices(items: list[dict]) -> int:
             size_available=item.get("size_available", ""),
             actual_purchase_jpy=item.get("actual_purchase_jpy"),
             actual_purchase_source=item.get("actual_purchase_source"),
-            scraped_at=datetime.fromisoformat(item["scraped_at"]) if isinstance(item.get("scraped_at"), str) else item.get("scraped_at", _utcnow()),
+            scraped_at=datetime.fromisoformat(item["scraped_at"])
+            if isinstance(item.get("scraped_at"), str)
+            else item.get("scraped_at", _utcnow()),
         )
         db.session.add(bp)
         saved += 1
@@ -72,17 +80,21 @@ def get_price_comparison(brand: str) -> list[dict]:
         .subquery()
     )
 
-    rows = db.session.execute(
-        db.select(BrandPrice)
-        .join(
-            subq,
-            (BrandPrice.product_name == subq.c.product_name)
-            & (BrandPrice.source_site == subq.c.source_site)
-            & (BrandPrice.scraped_at == subq.c.latest),
+    rows = (
+        db.session.execute(
+            db.select(BrandPrice)
+            .join(
+                subq,
+                (BrandPrice.product_name == subq.c.product_name)
+                & (BrandPrice.source_site == subq.c.source_site)
+                & (BrandPrice.scraped_at == subq.c.latest),
+            )
+            .filter(BrandPrice.brand == brand)
+            .order_by(BrandPrice.product_name, BrandPrice.price_jpy)
         )
-        .filter(BrandPrice.brand == brand)
-        .order_by(BrandPrice.product_name, BrandPrice.price_jpy)
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     grouped: dict[str, list[BrandPrice]] = {}
     for r in rows:
@@ -90,7 +102,13 @@ def get_price_comparison(brand: str) -> list[dict]:
 
     result = []
     for name, prices in grouped.items():
-        entry = {"product_name": name, "sites": {}, "cheapest_site": None, "cheapest_jpy": None, "cheapest_price_id": None}
+        entry = {
+            "product_name": name,
+            "sites": {},
+            "cheapest_site": None,
+            "cheapest_jpy": None,
+            "cheapest_price_id": None,
+        }
         for p in prices:
             entry["sites"][p.source_site] = {
                 "price_jpy": p.price_jpy,
@@ -139,18 +157,14 @@ def get_cheapest_source(brand: str) -> dict[str, dict]:
 
 def cleanup_old_records(keep_days: int = 90) -> int:
     cutoff = _utcnow() - timedelta(days=keep_days)
-    count = db.session.execute(
-        db.delete(BrandPrice).where(BrandPrice.scraped_at < cutoff)
-    ).rowcount
+    count = db.session.execute(db.delete(BrandPrice).where(BrandPrice.scraped_at < cutoff)).rowcount
     db.session.commit()
     logger.info(f"Cleaned up {count} old brand price records (older than {keep_days} days)")
     return count
 
 
 def get_available_brands() -> list[str]:
-    rows = db.session.execute(
-        db.select(BrandPrice.brand).distinct().order_by(BrandPrice.brand)
-    ).scalars().all()
+    rows = db.session.execute(db.select(BrandPrice.brand).distinct().order_by(BrandPrice.brand)).scalars().all()
     return list(rows)
 
 
@@ -171,9 +185,7 @@ def cleanup_buyma_cache(max_age_days: int = 30) -> int:
 
 
 def get_last_scraped_at(brand: str) -> datetime | None:
-    row = db.session.scalar(
-        db.select(func.max(BrandPrice.scraped_at)).filter(BrandPrice.brand == brand)
-    )
+    row = db.session.scalar(db.select(func.max(BrandPrice.scraped_at)).filter(BrandPrice.brand == brand))
     return row
 
 

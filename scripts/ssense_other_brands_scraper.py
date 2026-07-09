@@ -5,7 +5,6 @@ SSENSE他ブランドサングラス利益分析スクリプト
 """
 
 import csv
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -335,33 +334,50 @@ def main():
             profitable = [r for r in brand_results if r["is_profitable"]]
             profit_rates = [r["profit_rate"] for r in brand_results]
 
-            brand_summary.append({
-                "brand": brand,
-                "total": len(brand_results),
-                "profitable": len(profitable),
-                "max_rate": max(profit_rates) if profit_rates else 0,
-                "avg_rate": sum(profit_rates) / len(profit_rates) if profit_rates else 0,
-                "min_profit": min(r["profit"] for r in brand_results),
-                "max_profit": max(r["profit"] for r in brand_results),
-            })
+            brand_summary.append(
+                {
+                    "brand": brand,
+                    "total": len(brand_results),
+                    "profitable": len(profitable),
+                    "max_rate": max(profit_rates) if profit_rates else 0,
+                    "avg_rate": sum(profit_rates) / len(profit_rates) if profit_rates else 0,
+                    "min_profit": min(r["profit"] for r in brand_results),
+                    "max_profit": max(r["profit"] for r in brand_results),
+                }
+            )
 
         # 楽観シナリオでCSV出力
         if scenario == "optimistic":
             csv_path = output_dir / "ssense_other_brands_profit_analysis.csv"
             with open(csv_path, "w", newline="", encoding="utf-8") as f:
                 writer = csv.writer(f)
-                writer.writerow([
-                    "ブランド", "商品名", "SSENSE価格(USD)", "仕入原価(JPY)",
-                    "BUYMA推定価格(JPY)", "手数料抜収入(JPY)", "利益(JPY)",
-                    "利益率", "判定"
-                ])
+                writer.writerow(
+                    [
+                        "ブランド",
+                        "商品名",
+                        "SSENSE価格(USD)",
+                        "仕入原価(JPY)",
+                        "BUYMA推定価格(JPY)",
+                        "手数料抜収入(JPY)",
+                        "利益(JPY)",
+                        "利益率",
+                        "判定",
+                    ]
+                )
                 for r in all_results:
-                    writer.writerow([
-                        r["brand"], r["name"], f"${r['ssense_usd']}",
-                        f"¥{r['cost_jpy']:,}", f"¥{r['est_buyma_price']:,}",
-                        f"¥{r['revenue_after_fee']:,}", f"¥{r['profit']:,}",
-                        f"{r['profit_rate']:.1%}", "✅" if r["is_profitable"] else "❌"
-                    ])
+                    writer.writerow(
+                        [
+                            r["brand"],
+                            r["name"],
+                            f"${r['ssense_usd']}",
+                            f"¥{r['cost_jpy']:,}",
+                            f"¥{r['est_buyma_price']:,}",
+                            f"¥{r['revenue_after_fee']:,}",
+                            f"¥{r['profit']:,}",
+                            f"{r['profit_rate']:.1%}",
+                            "✅" if r["is_profitable"] else "❌",
+                        ]
+                    )
 
         # 楽観シナリオでMarkdown出力
         if scenario == "optimistic":
@@ -376,12 +392,16 @@ def main():
                 verdict = "✅✅有望"
             elif s["profitable"] > 0:
                 verdict = "⚠️一部商品のみ"
-            print(f"  {s['brand']}: {s['total']}商品中{s['profitable']}商品が15%以上 (最高{s['max_rate']:.1%}, 平均{s['avg_rate']:.1%}) {verdict}")
+            print(
+                f"  {s['brand']}: {s['total']}商品中{s['profitable']}商品が15%以上 (最高{s['max_rate']:.1%}, 平均{s['avg_rate']:.1%}) {verdict}"
+            )
 
 
 def _write_markdown(brand_summary_opt, all_results_opt, ssense_data):
     """楽観シナリオ（P75ベース）でMarkdown出力"""
-    md_path = Path("/home/yn4416/projects/obsidian-ssot/30_RESEARCH/atelier-kyo/SSENSE_他ブランド_サングラス利益分析_2026.md")
+    md_path = Path(
+        "/home/yn4416/projects/obsidian-ssot/30_RESEARCH/atelier-kyo/SSENSE_他ブランド_サングラス利益分析_2026.md"
+    )
     md_path.parent.mkdir(parents=True, exist_ok=True)
 
     # 再計算: 各シナリオのサマリー
@@ -399,13 +419,15 @@ def _write_markdown(brand_summary_opt, all_results_opt, ssense_data):
                 brand_results.append(result)
             profitable = [r for r in brand_results if r["is_profitable"]]
             profit_rates = [r["profit_rate"] for r in brand_results]
-            summaries.append({
-                "brand": brand,
-                "total": len(brand_results),
-                "profitable": len(profitable),
-                "max_rate": max(profit_rates) if profit_rates else 0,
-                "avg_rate": sum(profit_rates) / len(profit_rates) if profit_rates else 0,
-            })
+            summaries.append(
+                {
+                    "brand": brand,
+                    "total": len(brand_results),
+                    "profitable": len(profitable),
+                    "max_rate": max(profit_rates) if profit_rates else 0,
+                    "avg_rate": sum(profit_rates) / len(profit_rates) if profit_rates else 0,
+                }
+            )
         all_scenario_summaries[scenario] = summaries
 
     with open(md_path, "w", encoding="utf-8") as f:
@@ -416,8 +438,8 @@ def _write_markdown(brand_summary_opt, all_results_opt, ssense_data):
         f.write(f"- 小物送料: ¥{SHIPPING_COST:,}\n")
         f.write(f"- 利益率基準: {PROFIT_THRESHOLD:.0%}以上\n")
         f.write(f"- 利益計算式: 利益 = BUYMA価格 x (1-0.142) - (SSENSE価格x{USD_JPY} + ¥{SHIPPING_COST:,})\n")
-        f.write(f"- Celine: SSENSEにサングラスページなし(404)\n")
-        f.write(f"- 分析方法: BUYMA実勢価格を3段階（保守/現実的/楽観）で推定\n\n")
+        f.write("- Celine: SSENSEにサングラスページなし(404)\n")
+        f.write("- 分析方法: BUYMA実勢価格を3段階（保守/現実的/楽観）で推定\n\n")
 
         # === 楽観シナリオ（メイン） ===
         f.write("## ブランド別サマリー（楽観シナリオ: BUYMA P75ベース）\n\n")
@@ -465,7 +487,9 @@ def _write_markdown(brand_summary_opt, all_results_opt, ssense_data):
             # Break-even: buyma * 0.858 = usd * rate + 1500
             be_rate = (buyma_p75 * (1 - BUYMA_FEE_RATE) - SHIPPING_COST) / min_usd
             # 15% profit: buyma * 0.858 = (usd * rate + 1500) * 1.15
-            p15_rate = (buyma_p75 * (1 - BUYMA_FEE_RATE) - SHIPPING_COST * (1 + PROFIT_THRESHOLD)) / (min_usd * (1 + PROFIT_THRESHOLD))
+            p15_rate = (buyma_p75 * (1 - BUYMA_FEE_RATE) - SHIPPING_COST * (1 + PROFIT_THRESHOLD)) / (
+                min_usd * (1 + PROFIT_THRESHOLD)
+            )
             f.write(
                 f"| {brand} | ${min_usd} | ¥{buyma_p75:,} | {be_rate:.1f} | {p15_rate:.1f} | "
                 f"{'✅余裕' if p15_rate > 160.2 else f'⚠️あと{160.2 - p15_rate:.1f}円安(USD/JPY低下)が必要'} |\n"
@@ -521,11 +545,15 @@ def _write_markdown(brand_summary_opt, all_results_opt, ssense_data):
         profitable_brands = [s for s in opt_summaries if s["profitable"] > 0]
 
         if total_profitable > 0:
-            best = max(opt_summaries, key=lambda x: x["profitable"])
-            f.write(f"### 楽観シナリオ（BUYMA P75価格設定）\n")
-            f.write(f"- 全{len(ssense_data)}ブランド{total_products}商品中、{total_profitable}商品が15%以上の利益率\n\n")
+            max(opt_summaries, key=lambda x: x["profitable"])
+            f.write("### 楽観シナリオ（BUYMA P75価格設定）\n")
+            f.write(
+                f"- 全{len(ssense_data)}ブランド{total_products}商品中、{total_profitable}商品が15%以上の利益率\n\n"
+            )
             for s in profitable_brands:
-                f.write(f"- **{s['brand']}**: {s['profitable']}/{s['total']}商品が利益圏内（最高{s['max_rate']:.1%}）\n")
+                f.write(
+                    f"- **{s['brand']}**: {s['profitable']}/{s['total']}商品が利益圏内（最高{s['max_rate']:.1%}）\n"
+                )
             f.write("\n")
         else:
             f.write("### 結論: 全ブランド赤字\n")

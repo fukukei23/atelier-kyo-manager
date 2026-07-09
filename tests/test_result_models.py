@@ -1,6 +1,6 @@
 """Tests for app/models/result_models.py"""
-import pytest
-from app.models.result_models import GenerateResult, DiscoveryResult
+
+from app.models.result_models import DiscoveryResult, GenerateResult
 
 
 class TestGenerateResult:

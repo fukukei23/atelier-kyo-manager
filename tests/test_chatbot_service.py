@@ -1,6 +1,9 @@
 """Tests for app/services/chatbot_service.py"""
-import pytest
+
 from unittest.mock import MagicMock, patch
+
+import pytest
+
 from app import create_app
 from app.extensions import db
 
@@ -8,12 +11,14 @@ from app.extensions import db
 @pytest.fixture(scope="function")
 def app():
     application = create_app()
-    application.config.update({
-        "TESTING": True,
-        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-        "WTF_CSRF_ENABLED": False,
-        "SECRET_KEY": "test-secret",
-    })
+    application.config.update(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "WTF_CSRF_ENABLED": False,
+            "SECRET_KEY": "test-secret",
+        }
+    )
     with application.app_context():
         db.create_all()
         yield application
@@ -58,6 +63,7 @@ class TestChatBotServiceFaqMatch:
     def test_faq_match_no_templates(self, app):
         with app.app_context():
             from app.services.chatbot_service import ChatBotService
+
             result = ChatBotService._find_faq_match("anything", "some message")
             assert result is None
 
@@ -86,6 +92,7 @@ class TestChatBotServiceClassify:
     def test_classify_returns_escalation(self, mock_llm, app):
         with app.app_context():
             from app.services.chatbot_service import ChatBotService
+
             mock_llm.quick.return_value = "escalation"
             inquiry = MagicMock()
             inquiry.subject = "Complaint about damaged goods"
@@ -97,6 +104,7 @@ class TestChatBotServiceClassify:
     def test_classify_returns_ai_on_llm_failure(self, mock_llm, app):
         with app.app_context():
             from app.services.chatbot_service import ChatBotService
+
             mock_llm.quick.side_effect = Exception("LLM error")
             inquiry = MagicMock()
             inquiry.subject = "question"
@@ -110,6 +118,7 @@ class TestChatBotServiceGenerateResponse:
     def test_generate_returns_text(self, mock_llm, app):
         with app.app_context():
             from app.services.chatbot_service import ChatBotService
+
             mock_llm.quick.return_value = "Thank you for your inquiry."
             inquiry = MagicMock()
             inquiry.subject = "question"
@@ -121,6 +130,7 @@ class TestChatBotServiceGenerateResponse:
     def test_generate_returns_fallback_on_error(self, mock_llm, app):
         with app.app_context():
             from app.services.chatbot_service import ChatBotService
+
             mock_llm.quick.side_effect = Exception("LLM unavailable")
             inquiry = MagicMock()
             inquiry.subject = "q"
@@ -156,6 +166,7 @@ class TestChatBotServiceProcessInquiry:
     def test_process_ai_path(self, mock_llm, app):
         with app.app_context():
             from app.services.chatbot_service import ChatBotService
+
             mock_llm.quick.return_value = "ai"
             inquiry = ChatBotService.process_inquiry(
                 subject="general question",

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 
 class TestAnalyticsRoutes:
     def test_brand_analytics_200(self, routes_auth_client):

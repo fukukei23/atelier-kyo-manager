@@ -1,13 +1,13 @@
 """互換リダイレクト + 自動リサーチ + API倉庫"""
+
 from __future__ import annotations
 
 import logging
 from typing import Any
 
-from flask import jsonify, redirect, render_template, request, url_for
+from flask import redirect, render_template, request, url_for
 from flask_login import login_required
 
-from app.extensions import csrf
 from app.forms import AutoResearchForm
 from app.utils.errors import safe_error_msg
 
@@ -29,6 +29,7 @@ _REDIRECTS: dict[str, str] = {
 def _make_redirect(endpoint: str):
     def _view() -> str:
         return redirect(url_for(endpoint))
+
     _view.__name__ = f"redirect_to_{endpoint.replace('.', '_')}"
     return _view
 
@@ -38,6 +39,7 @@ for _path, _endpoint in _REDIRECTS.items():
 
 
 # ── Research pages ─────────────────────────────────────
+
 
 @bp.route("/auto-research", methods=["GET", "POST"])
 @login_required
@@ -56,6 +58,7 @@ def image_crawler() -> str:
 
 try:
     from app.utils.shipping_agent import ShippingAgent
+
     _shipping_ok = True
 except ImportError:
     ShippingAgent = None  # type: ignore[assignment]

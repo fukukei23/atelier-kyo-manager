@@ -1,7 +1,6 @@
 """Tests for app/routes/products.py - Issue #93 カバレッジ向上"""
-import pytest
-from unittest.mock import patch, MagicMock
 
+from unittest.mock import patch
 
 MINIMAL_PRODUCT = {
     "name": "Test Product",
@@ -35,6 +34,7 @@ def _create_product(client):
     """テスト用商品を作成してIDを返す"""
     client.post("/manage", data=MINIMAL_PRODUCT)
     from app.models import Product
+
     p = Product.query.first()
     return p.id if p else None
 
@@ -69,6 +69,7 @@ class TestManageProducts:
     def test_post_creates_product_in_db(self, routes_auth_client, routes_app):
         routes_auth_client.post("/manage", data=MINIMAL_PRODUCT)
         from app.models import Product
+
         with routes_app.app_context():
             assert Product.query.count() > 0
 
@@ -111,6 +112,7 @@ class TestDeleteProduct:
     def test_delete_existing(self, routes_auth_client, routes_app):
         routes_auth_client.post("/manage", data=MINIMAL_PRODUCT)
         from app.models import Product
+
         with routes_app.app_context():
             p = Product.query.first()
             if p:
@@ -176,18 +178,22 @@ class TestImportCsv:
     def test_import_csv_non_csv_file_redirects(self, routes_auth_client):
         """CSV以外のファイル → エラーリダイレクト"""
         from io import BytesIO
+
         data = {"file": (BytesIO(b"not a csv"), "test.txt")}
-        r = routes_auth_client.post("/import_csv", data=data,
-                                    content_type="multipart/form-data", follow_redirects=False)
+        r = routes_auth_client.post(
+            "/import_csv", data=data, content_type="multipart/form-data", follow_redirects=False
+        )
         assert r.status_code == 302
 
     def test_import_csv_valid_file(self, routes_auth_client):
         """有効なCSV → インポート成功"""
         from io import BytesIO
+
         csv_content = b"name,purchase_price,selling_price\nTest,1000,2000\n"
         data = {"file": (BytesIO(csv_content), "products.csv")}
-        r = routes_auth_client.post("/import_csv", data=data,
-                                    content_type="multipart/form-data", follow_redirects=False)
+        r = routes_auth_client.post(
+            "/import_csv", data=data, content_type="multipart/form-data", follow_redirects=False
+        )
         assert r.status_code == 302
 
 
@@ -213,11 +219,13 @@ class TestPipelineResult:
     def test_pipeline_result_with_processed_images(self, routes_auth_client, routes_app):
         """processed_images がある商品のパイプライン結果表示"""
         import json
+
         with routes_app.app_context():
             oid = _create_product(routes_auth_client)
             if oid:
-                from app.models import Product
                 from app.extensions import db
+                from app.models import Product
+
                 p = Product.query.get(oid)
                 p.processed_images = json.dumps(["img1.jpg", "img2.jpg"])
                 db.session.commit()

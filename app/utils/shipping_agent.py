@@ -289,8 +289,10 @@ class ShippingAgent:
         await page.wait_for_timeout(300)
         if not await _fill_first(page, self._EMAIL_SELECTORS, creds["email"], timeout_ms=12000):
             filled_in_frame = any(
-                [await _fill_first(frame, self._EMAIL_SELECTORS, creds["email"], timeout_ms=8000)
-                 for frame in page.frames]
+                [
+                    await _fill_first(frame, self._EMAIL_SELECTORS, creds["email"], timeout_ms=8000)
+                    for frame in page.frames
+                ]
             )
             if not filled_in_frame:
                 raise RuntimeError("メール入力欄が見つかりませんでした。UIが変わっている可能性があります。")
@@ -303,8 +305,10 @@ class ShippingAgent:
         if not await _fill_first(page, self._PASSWORD_SELECTORS, creds["password"], timeout_ms=15000):
             try:
                 filled_in_frame = any(
-                    [await _fill_first(frame, self._PASSWORD_SELECTORS, creds["password"], timeout_ms=8000)
-                     for frame in page.frames]
+                    [
+                        await _fill_first(frame, self._PASSWORD_SELECTORS, creds["password"], timeout_ms=8000)
+                        for frame in page.frames
+                    ]
                 )
                 if not filled_in_frame:
                     raise RuntimeError("パスワード入力欄が見つかりませんでした。")
@@ -315,6 +319,7 @@ class ShippingAgent:
                     html = await page.content()
                     # Strip sensitive input values before saving debug HTML
                     import re
+
                     html = re.sub(r'value="[^"]*@[^"]*"', 'value="<REDACTED>"', html)
                     html = re.sub(r'(type="email"[^>]*?)value="[^"]*"', r'\1value="<REDACTED>"', html)
                     debug_path = os.path.join(debug_dir, "login_debug.html")

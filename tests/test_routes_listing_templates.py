@@ -1,6 +1,4 @@
 """Tests for app/routes/listing_templates.py - Issue #88"""
-import pytest
-
 
 VALID_TPL = {
     "name": "テストテンプレート",
@@ -52,6 +50,7 @@ class TestEditTemplate:
     def _create(self, client):
         client.post("/templates/new", data={**VALID_TPL, "name": "編集用テンプレート"})
         from app.models.listing_template import ListingTemplate
+
         return ListingTemplate.query.first()
 
     def test_get_edit_form_existing(self, routes_auth_client, routes_app):
@@ -82,6 +81,7 @@ class TestDeleteTemplate:
     def test_delete_existing(self, routes_auth_client, routes_app):
         routes_auth_client.post("/templates/new", data={**VALID_TPL, "name": "削除用テンプレート"})
         from app.models.listing_template import ListingTemplate
+
         with routes_app.app_context():
             tpl = ListingTemplate.query.first()
             if tpl:

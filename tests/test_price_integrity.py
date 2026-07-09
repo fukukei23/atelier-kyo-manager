@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
+from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.schemas import (
     PriceData,
     PriceIntegrityError,
     PriceSource,
     PricingInput,
 )
-from app.core.pricing.calculator import calculate_pricing
 
 
 # =====================================================================

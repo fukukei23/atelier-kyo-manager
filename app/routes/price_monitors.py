@@ -4,7 +4,7 @@
 from __future__ import annotations
 
 from flask import abort, flash, jsonify, redirect, render_template, request, url_for
-from flask_login import current_user, login_required
+from flask_login import login_required
 
 from app.extensions import db
 from app.models.price_monitor import PriceMonitor
@@ -135,8 +135,7 @@ def price_monitor_refresh_all():
     """全アクティブ監視の価格チェック（手動）"""
     summary = price_monitor_service.run_all_monitors()
     flash(
-        f"全件チェック完了: {summary['checked']}件確認、"
-        f"{summary['alerts']}件アラート、{summary['errors']}件エラー",
+        f"全件チェック完了: {summary['checked']}件確認、{summary['alerts']}件アラート、{summary['errors']}件エラー",
         "success",
     )
     return redirect(url_for("main.price_monitor_dashboard"))

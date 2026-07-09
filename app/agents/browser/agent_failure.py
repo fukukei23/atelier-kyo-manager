@@ -71,7 +71,9 @@ class FailureHandlerMixin:
         }
 
         return DiscoveryResult(
-            ok=False, site=site, query=query,
+            ok=False,
+            site=site,
+            query=query,
             message=str(e),
             evidence={
                 "final_url": final_url_on_fail,
@@ -81,6 +83,7 @@ class FailureHandlerMixin:
 
     async def _perform_vrt(self, page: Page, scope: str, settings: dict[str, Any]):
         from app.utils.visual_regression import perform_vrt
+
         site_name = self.runtime_kwargs.get("site") or "GENERIC"
         await perform_vrt(page, scope, settings, site_name, self.logger)
 

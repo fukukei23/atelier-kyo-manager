@@ -127,7 +127,7 @@ class TestSendPipelineResult:
 
         svc = NotificationService()
         svc.webhook_url = "https://hooks.slack.com/test"
-        result = svc.send_pipeline_result("Test Product", "success", 5.2)
+        svc.send_pipeline_result("Test Product", "success", 5.2)
         call_msg = mock_requests.post.call_args[1]["json"]["text"]
         assert "完了" in call_msg
 
@@ -140,7 +140,7 @@ class TestSendPipelineResult:
 
         svc = NotificationService()
         svc.webhook_url = "https://hooks.slack.com/test"
-        result = svc.send_pipeline_result("Test Product", "partial", 3.1, errors="image failed")
+        svc.send_pipeline_result("Test Product", "partial", 3.1, errors="image failed")
         call_msg = mock_requests.post.call_args[1]["json"]["text"]
         assert "部分成功" in call_msg
 
@@ -153,7 +153,7 @@ class TestSendPipelineResult:
 
         svc = NotificationService()
         svc.webhook_url = "https://hooks.slack.com/test"
-        result = svc.send_pipeline_result("Test Product", "failed", 0, errors="crash")
+        svc.send_pipeline_result("Test Product", "failed", 0, errors="crash")
         call_msg = mock_requests.post.call_args[1]["json"]["text"]
         assert "失敗" in call_msg
 
@@ -166,6 +166,6 @@ class TestSendPipelineResult:
 
         svc = NotificationService()
         svc.webhook_url = "https://hooks.slack.com/test"
-        result = svc.send_pipeline_result("Test Product", "weird", 1.0)
+        svc.send_pipeline_result("Test Product", "weird", 1.0)
         call_msg = mock_requests.post.call_args[1]["json"]["text"]
         assert "不明" in call_msg

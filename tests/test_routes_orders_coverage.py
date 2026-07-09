@@ -1,6 +1,3 @@
-import pytest
-
-
 class TestOrderList:
     def test_unauthenticated_redirect(self, routes_client):
         r = routes_client.get("/orders", follow_redirects=False)
@@ -67,6 +64,7 @@ class TestEditOrder:
     def _make_order(self, client):
         client.post("/orders/new", data=self.VALID)
         from app.models.order import Order
+
         o = Order.query.first()
         return o.id if o else None
 
@@ -104,14 +102,24 @@ class TestDeleteOrder:
         assert r.status_code in (302, 404)
 
     def test_delete_existing(self, routes_auth_client, routes_app):
-        routes_auth_client.post("/orders/new", data={
-            "order_number": "ORD-DEL", "product_name": "DelProd",
-            "customer_name": "DelCust", "order_date": "2024-01-15",
-            "selling_price": "10000", "purchase_cost": "5000",
-            "customs_duty": "0", "payment_method": "bank_transfer",
-            "source_type": "domestic", "status": "pending", "notes": "",
-        })
+        routes_auth_client.post(
+            "/orders/new",
+            data={
+                "order_number": "ORD-DEL",
+                "product_name": "DelProd",
+                "customer_name": "DelCust",
+                "order_date": "2024-01-15",
+                "selling_price": "10000",
+                "purchase_cost": "5000",
+                "customs_duty": "0",
+                "payment_method": "bank_transfer",
+                "source_type": "domestic",
+                "status": "pending",
+                "notes": "",
+            },
+        )
         from app.models.order import Order
+
         with routes_app.app_context():
             o = Order.query.first()
             if o:
@@ -130,13 +138,22 @@ class TestApiDashboard:
         assert isinstance(r.get_json(), list)
 
     def test_with_order_has_fields(self, routes_auth_client):
-        routes_auth_client.post("/orders/new", data={
-            "order_number": "ORD-API", "product_name": "ApiProd",
-            "customer_name": "ApiCust", "order_date": "2024-01-15",
-            "selling_price": "100000", "purchase_cost": "60000",
-            "customs_duty": "5000", "payment_method": "bank_transfer",
-            "source_type": "domestic", "status": "pending", "notes": "",
-        })
+        routes_auth_client.post(
+            "/orders/new",
+            data={
+                "order_number": "ORD-API",
+                "product_name": "ApiProd",
+                "customer_name": "ApiCust",
+                "order_date": "2024-01-15",
+                "selling_price": "100000",
+                "purchase_cost": "60000",
+                "customs_duty": "5000",
+                "payment_method": "bank_transfer",
+                "source_type": "domestic",
+                "status": "pending",
+                "notes": "",
+            },
+        )
         r = routes_auth_client.get("/api/orders/dashboard")
         data = r.get_json()
         if data:
@@ -164,20 +181,28 @@ class TestExtendOrder:
         assert r.status_code in (302, 404)
 
     def test_extend_existing(self, routes_auth_client, routes_app):
-        routes_auth_client.post("/orders/new", data={
-            "order_number": "ORD-EXT", "product_name": "ExtProd",
-            "customer_name": "ExtCust", "order_date": "2024-01-15",
-            "selling_price": "50000", "purchase_cost": "30000",
-            "customs_duty": "0", "payment_method": "bank_transfer",
-            "source_type": "domestic", "status": "pending", "notes": "",
-        })
+        routes_auth_client.post(
+            "/orders/new",
+            data={
+                "order_number": "ORD-EXT",
+                "product_name": "ExtProd",
+                "customer_name": "ExtCust",
+                "order_date": "2024-01-15",
+                "selling_price": "50000",
+                "purchase_cost": "30000",
+                "customs_duty": "0",
+                "payment_method": "bank_transfer",
+                "source_type": "domestic",
+                "status": "pending",
+                "notes": "",
+            },
+        )
         from app.models.order import Order
+
         with routes_app.app_context():
             o = Order.query.first()
             if o:
                 r = routes_auth_client.post(
-                    f"/orders/{o.id}/extend",
-                    data={"extension_reason": "test reason"},
-                    follow_redirects=False
+                    f"/orders/{o.id}/extend", data={"extension_reason": "test reason"}, follow_redirects=False
                 )
                 assert r.status_code == 302

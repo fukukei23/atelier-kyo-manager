@@ -33,4 +33,5 @@ class FaqTemplate(db.Model):
 def _extract_placeholders(template: str) -> set[str]:
     """テンプレート文字列から {name} プレースホルダーを抽出する。"""
     import re
+
     return set(re.findall(r"\{(\w+)\}", template))

@@ -41,7 +41,9 @@ def get_overlay_config(site_config: dict[str, Any]) -> dict[str, Any]:
             "wait_after_click_ms": overlays_cfg.get("cookie_banner", {}).get("wait_after_click_ms") or 500,
         },
         "geo": {
-            "selectors": overlays_cfg.get("geo_popup", {}).get("selectors") or overlays_cfg.get("geo_modal_selectors") or [],
+            "selectors": overlays_cfg.get("geo_popup", {}).get("selectors")
+            or overlays_cfg.get("geo_modal_selectors")
+            or [],
             "wait_after_click_ms": overlays_cfg.get("geo_popup", {}).get("wait_after_click_ms") or 500,
         },
         "other": overlays_cfg.get("other_overlays") or {},
@@ -59,7 +61,8 @@ def get_trap_config(site_config: dict[str, Any]) -> dict[str, Any]:
             "exact_matches": trap_cfg.get("detect_by_url", {}).get("exact_matches") or [],
         },
         "detect_by_selector": trap_cfg.get("detect_by_selector") or [],
-        "recovery_actions": trap_cfg.get("recovery_actions") or [
+        "recovery_actions": trap_cfg.get("recovery_actions")
+        or [
             {"action": "go_back", "max_attempts": 1},
             {"action": "goto_target", "target_url_key": "seed_plp_url", "max_attempts": 1},
         ],

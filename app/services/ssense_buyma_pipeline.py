@@ -12,6 +12,7 @@ BUYMA検索で実際の出品価格を確認。両方BROWSER_VERIFIEDの
   Phase 4: 利益計算（PriceSource.BROWSER_VERIFIED）
   Phase 5: 結果保存（BrandPrice レコード）
 """
+
 from __future__ import annotations
 
 import logging
@@ -109,9 +110,7 @@ class SsenseBuymaPipeline:
         saved = self._phase5_save(results, brand, category)
 
         summary.buyma_matched = sum(1 for r in results if r.buyma_match)
-        summary.verified_profitable = sum(
-            1 for r in results if r.is_verified and r.pricing and r.pricing.profit > 0
-        )
+        summary.verified_profitable = sum(1 for r in results if r.is_verified and r.pricing and r.pricing.profit > 0)
         summary.errors = sum(1 for r in results if r.error)
         summary.results = results
 
@@ -170,9 +169,7 @@ class SsenseBuymaPipeline:
 
     # --- Phase 3: BUYMA検索 ---
 
-    def _phase3_buyma(
-        self, products: list[SsenseProduct], brand: str
-    ) -> dict[str, dict[str, Any]]:
+    def _phase3_buyma(self, products: list[SsenseProduct], brand: str) -> dict[str, dict[str, Any]]:
         """BUYMA検索で各商品の出品価格を取得。"""
         from app.services.buyma_price_scraper import BuymaPriceSearcher
 
@@ -190,9 +187,7 @@ class SsenseBuymaPipeline:
             except Exception as exc:
                 logger.debug("[pipeline] BUYMA search error for %s: %s", prod.name, exc)
 
-        logger.info(
-            "[pipeline] Phase 3: %d/%d BUYMA matches", len(results), len(products)
-        )
+        logger.info("[pipeline] Phase 3: %d/%d BUYMA matches", len(results), len(products))
         return results
 
     # --- Phase 4: 利益計算 ---
@@ -266,9 +261,7 @@ class SsenseBuymaPipeline:
 
     # --- Phase 5: 結果保存 ---
 
-    def _phase5_save(
-        self, results: list[PipelineResult], brand: str, category: str
-    ) -> int:
+    def _phase5_save(self, results: list[PipelineResult], brand: str, category: str) -> int:
         """BrandPriceレコードに保存。"""
         from app.extensions import db
         from app.models.brand_price import BrandPrice

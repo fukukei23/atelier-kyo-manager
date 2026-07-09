@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.extensions import db
 
 
@@ -62,6 +60,7 @@ class TestRegionRecommendationRoutes:
         assert r.status_code == 200
         with routes_app.app_context():
             from app.models.region_recommendation import RegionRecommendation
+
             rr = RegionRecommendation.query.filter_by(region="EU").first()
             assert rr is not None
 
@@ -79,6 +78,7 @@ class TestRegionRecommendationRoutes:
     def test_region_delete(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.region_recommendation import RegionRecommendation
+
             rr = RegionRecommendation(region="DEL", region_name="DeleteTarget", recommendation_score=50)
             db.session.add(rr)
             db.session.commit()

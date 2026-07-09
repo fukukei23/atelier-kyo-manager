@@ -1,4 +1,5 @@
 """Tests for app/extractors/moncler_extractor.py - Issue #83 カバレッジ向上"""
+
 import asyncio
 import json
 import logging
@@ -15,6 +16,7 @@ def extractor():
 
 
 # ── _infer_sku_from_url ───────────────────────────────────────────────────────
+
 
 class TestInferSkuFromUrl:
     def test_simple_slug_returns_upper(self, extractor):
@@ -55,6 +57,7 @@ class TestInferSkuFromUrl:
 
 # ── _build_result_from_product ────────────────────────────────────────────────
 
+
 class TestBuildResultFromProduct:
     def test_none_product_returns_none(self, extractor):
         assert extractor._build_result_from_product(None, "https://example.com") is None
@@ -68,10 +71,12 @@ class TestBuildResultFromProduct:
             "code": "G10910",
             "price": {"final": {"value": 150000, "currency": "JPY"}},
             "availability": {"status": "IN_STOCK"},
-            "media": {"gallery": [
-                {"url": "https://cdn.moncler.com/img1.jpg"},
-                {"url": "https://cdn.moncler.com/img2.jpg"},
-            ]},
+            "media": {
+                "gallery": [
+                    {"url": "https://cdn.moncler.com/img1.jpg"},
+                    {"url": "https://cdn.moncler.com/img2.jpg"},
+                ]
+            },
         }
         result = extractor._build_result_from_product(product, "https://moncler.com/en-jp/coats/monaco-G10910")
         assert result is not None
@@ -98,8 +103,9 @@ class TestBuildResultFromProduct:
 
     def test_gallery_without_url_skipped(self, extractor):
         product = {
-            "name": "Coat", "code": "X1",
-            "media": {"gallery": [{"alt": "no url"}, {"url": "https://cdn/img.jpg"}]}
+            "name": "Coat",
+            "code": "X1",
+            "media": {"gallery": [{"alt": "no url"}, {"url": "https://cdn/img.jpg"}]},
         }
         result = extractor._build_result_from_product(product, None)
         assert result["images"] == ["https://cdn/img.jpg"]
@@ -116,6 +122,7 @@ class TestBuildResultFromProduct:
 
 
 # ── _extract_from_next_data ───────────────────────────────────────────────────
+
 
 class TestExtractFromNextData:
     def _make_page(self, script_text=None):
@@ -174,6 +181,7 @@ class TestExtractFromNextData:
 
 # ── _extract_from_ld_json ─────────────────────────────────────────────────────
 
+
 class TestExtractFromLdJson:
     def _make_page_with_ld(self, nodes_data: list[dict | str]):
         """ld+json ノードのリストを持つページモックを作成"""
@@ -182,9 +190,7 @@ class TestExtractFromLdJson:
         nodes = []
         for data in nodes_data:
             node = AsyncMock()
-            node.inner_text = AsyncMock(
-                return_value=json.dumps(data) if isinstance(data, dict) else data
-            )
+            node.inner_text = AsyncMock(return_value=json.dumps(data) if isinstance(data, dict) else data)
             nodes.append(node)
         page.query_selector_all = AsyncMock(return_value=nodes)
         return page
@@ -212,10 +218,9 @@ class TestExtractFromLdJson:
         assert result is None
 
     def test_product_with_price_returns_dict(self, extractor):
-        page = self._make_page_with_ld([{
-            "@type": "Product",
-            "offers": {"price": "150000", "priceCurrency": "JPY", "availability": "InStock"}
-        }])
+        page = self._make_page_with_ld(
+            [{"@type": "Product", "offers": {"price": "150000", "priceCurrency": "JPY", "availability": "InStock"}}]
+        )
         page.url = "https://www.moncler.com/product"
         result = asyncio.run(extractor._extract_from_ld_json(page))
         assert result is not None
@@ -223,10 +228,9 @@ class TestExtractFromLdJson:
         assert result["currency"] == "JPY"
 
     def test_product_group_type_accepted(self, extractor):
-        page = self._make_page_with_ld([{
-            "@type": "ProductGroup",
-            "offers": {"price": "99000", "priceCurrency": "JPY"}
-        }])
+        page = self._make_page_with_ld(
+            [{"@type": "ProductGroup", "offers": {"price": "99000", "priceCurrency": "JPY"}}]
+        )
         page.url = "https://www.moncler.com/product"
         result = asyncio.run(extractor._extract_from_ld_json(page))
         assert result is not None
@@ -238,16 +242,14 @@ class TestExtractFromLdJson:
         assert result is None
 
     def test_url_included_in_result(self, extractor):
-        page = self._make_page_with_ld([{
-            "@type": "Product",
-            "offers": {"price": "50000", "priceCurrency": "JPY"}
-        }])
+        page = self._make_page_with_ld([{"@type": "Product", "offers": {"price": "50000", "priceCurrency": "JPY"}}])
         page.url = "https://www.moncler.com/my-product"
         result = asyncio.run(extractor._extract_from_ld_json(page))
         assert result["url"] == "https://www.moncler.com/my-product"
 
 
 # ── _extract_from_meta ────────────────────────────────────────────────────────
+
 
 class TestExtractFromMeta:
     def test_no_price_returns_none(self, extractor):

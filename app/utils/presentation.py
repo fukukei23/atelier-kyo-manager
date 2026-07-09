@@ -3,18 +3,19 @@
 Moved from model methods to maintain MVC separation.
 Registered as Jinja2 template filters in create_app().
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from app.models.listing_progress import ListingProgress
     from app.models.order import Order
     from app.models.partner import Partner
     from app.models.popularity_tracker import PopularityTracker
     from app.models.region_recommendation import RegionRecommendation
     from app.models.repeat_customer import RepeatCustomer
     from app.models.shipment_notification import ShipmentNotification
-    from app.models.listing_progress import ListingProgress
     from app.models.stock_check import StockCheck
 
 
@@ -66,6 +67,7 @@ def partner_status_label(obj: Partner) -> str:
 
 # ---------- Order ----------
 
+
 def deadline_color(obj: Order) -> str:
     remaining = obj.remaining_days()
     if remaining is None:
@@ -97,6 +99,7 @@ def deadline_message(obj: Order) -> str:
 
 
 # ---------- PopularityTracker ----------
+
 
 def score_label(obj: PopularityTracker) -> str:
     s = obj.popularity_score or 0
@@ -136,6 +139,7 @@ def shipment_status_label(obj: ShipmentNotification) -> str:
 
 # ---------- ListingProgress ----------
 
+
 def daily_status_color(obj: ListingProgress) -> str:
     rate = obj.daily_achievement_rate()
     if rate >= 100:
@@ -156,6 +160,7 @@ def monthly_status_color(obj: ListingProgress) -> str:
 
 # ---------- StockCheck ----------
 
+
 def stock_status_label(obj: StockCheck) -> str:
     if not obj.in_stock:
         return "在庫切れ"
@@ -173,6 +178,7 @@ def stock_status_color(obj: StockCheck) -> str:
 
 
 # ---------- RegionRecommendation ----------
+
 
 def risk_label(obj: RegionRecommendation) -> str:
     r = obj.risk_score or 0

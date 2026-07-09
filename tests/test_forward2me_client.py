@@ -1,7 +1,10 @@
 """Tests for app/integrations/forward2me_client.py"""
-import pytest
+
 from datetime import datetime
 from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
 from app.integrations.forward2me_client import Forward2meClient
 
 
@@ -72,7 +75,7 @@ class TestListParcels:
             mock_client_cls.return_value.__aexit__.return_value = None
 
             since = datetime(2024, 1, 1)
-            result = await client.list_parcels(updated_since=since)
+            await client.list_parcels(updated_since=since)
             call_kwargs = mock_http.get.call_args[1]
             assert "updated_since" in call_kwargs["params"]
 

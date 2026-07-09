@@ -3,15 +3,13 @@
 # ======================================================================
 from __future__ import annotations
 
-from datetime import datetime
-
 import markupsafe
 from flask import flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 from sqlalchemy.orm import joinedload
 
 from app.core.timezone import _utcnow
-from app.extensions import csrf, db
+from app.extensions import db
 from app.models import Product
 from app.models.stock_check import StockCheck
 from app.services.price_scraper import PriceScraper
@@ -25,7 +23,12 @@ from . import bp
 @login_required
 def stock_check_list():
     """在庫＆価格チェック一覧"""
-    checks = StockCheck.query.options(joinedload(StockCheck.product)).order_by(StockCheck.checked_at.desc()).paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
+    checks = (
+        StockCheck.query.options(joinedload(StockCheck.product))
+        .order_by(StockCheck.checked_at.desc())
+        .paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False)
+        .items
+    )
     return render_template("stock_check.html", checks=checks)
 
 

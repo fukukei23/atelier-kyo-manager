@@ -18,7 +18,11 @@ from . import bp
 @login_required
 def shipment_notifications():
     """発送通知一覧"""
-    notifications = ShipmentNotification.query.order_by(ShipmentNotification.created_at.desc()).paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
+    notifications = (
+        ShipmentNotification.query.order_by(ShipmentNotification.created_at.desc())
+        .paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False)
+        .items
+    )
     return render_template("shipment_notifications.html", notifications=notifications)
 
 

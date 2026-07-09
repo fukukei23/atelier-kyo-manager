@@ -7,8 +7,6 @@ import io
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from app.services.product_csv_service import (
     CANDIDATE_HEADERS,
     EXPORT_HEADERS,
@@ -61,7 +59,6 @@ class TestRowToProduct:
     @patch("app.services.product_csv_service._row_to_product")
     def test_basic_row_conversion(self, mock_fn):
         """Test that _row_to_product creates a Product with correct fields."""
-        from app.models import Product
 
         row = {
             "name": "Jacket",
@@ -188,10 +185,7 @@ class TestImportProductsFromCsv:
 
     def test_detects_double_commission(self):
         """transaction_fee > 5% of selling_price → 手数料二重計上警告"""
-        csv_content = (
-            "name,brand,purchase_price,selling_price,transaction_fee\n"
-            "Shoes,Valentino,950,312427,54243"
-        )
+        csv_content = "name,brand,purchase_price,selling_price,transaction_fee\nShoes,Valentino,950,312427,54243"
         session = MagicMock()
         count, warnings = import_products_from_csv(csv_content, session)
         assert count == 1

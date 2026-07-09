@@ -18,13 +18,11 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 import logging
 import re
-import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
-from urllib.parse import quote_plus, urljoin, urlparse
+from urllib.parse import quote_plus
 
 from playwright.async_api import BrowserContext, ElementHandle, Page
 
@@ -36,11 +34,6 @@ if TYPE_CHECKING:
 from app.agents.browser.extractor import (
     VISIBLE_PRICE_SELECTORS,
     extract_moncler_pdp_links,  # noqa: F401
-    looks_like_product_url,
-)
-
-from app.agents.browser.ui_helpers import (
-    click_continue_shopping_if_present as ui_click_continue_shopping_if_present,
 )
 
 logger = logging.getLogger(__name__)
@@ -324,8 +317,12 @@ class FallbackMixin:
     ) -> Page | None:
         """Click and capture navigation — delegates to module-level helper."""
         return await click_and_capture_nav(
-            click_coro, page, context,
-            url_regex=url_regex, wait_state=wait_state, timeout_ms=timeout_ms,
+            click_coro,
+            page,
+            context,
+            url_regex=url_regex,
+            wait_state=wait_state,
+            timeout_ms=timeout_ms,
         )
 
     async def header_search_fallback(self, ctx: NavigationContext) -> bool:

@@ -115,7 +115,7 @@ def _validate_row(row: dict[str, str]) -> list[str]:
     txn_fee = float(row.get("transaction_fee", 0) or 0)
     if selling > 0 and txn_fee > 0 and txn_fee / selling > 0.05:
         warnings.append(
-            f"transaction_fee={txn_fee:,} は selling_price の {txn_fee/selling*100:.1f}% です。"
+            f"transaction_fee={txn_fee:,} は selling_price の {txn_fee / selling * 100:.1f}% です。"
             f"BUYMA成約手数料は calculator が自動計算するため、"
             f"transaction_fee には含めないでください（二重計上になります）。"
         )

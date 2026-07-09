@@ -10,15 +10,14 @@ Cettire / Italist のGucciバッグ・財布を連続スクレイピング → �
 日付: 2026-06-11
 環境: WSL2 Ubuntu / atelier-kyo-manager venv
 """
+
 from __future__ import annotations
 
 import json
-import re
 import sys
 import time
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import List
 
 # 利益計算は既存のコアロジックを使用
 sys.path.insert(0, "/home/yn4416/projects/atelier-kyo-manager")
@@ -33,12 +32,15 @@ SHIPPING_JPY = 1500  # 小物送料
 OUTPUT_DIR = Path("/home/yn4416/projects/atelier-kyo-manager/output")
 OUTPUT_DIR.mkdir(exist_ok=True)
 JSON_PATH = OUTPUT_DIR / "gucci_bags_wallets_cettire_results.json"
-MD_PATH = Path("/home/yn4416/projects/obsidian-ssot/30_RESEARCH/atelier-kyo/Cettire_Italist_Gucciバッグ財布_利益ランキング_2026.md")
+MD_PATH = Path(
+    "/home/yn4416/projects/obsidian-ssot/30_RESEARCH/atelier-kyo/Cettire_Italist_Gucciバッグ財布_利益ランキング_2026.md"
+)
 
 
 @dataclass
 class ProductPrice:
     """1SKU分の価格情報"""
+
     source: str  # cettire / italist / official
     sku_name: str
     sku_id: str
@@ -53,6 +55,7 @@ class ProductPrice:
 @dataclass
 class ProfitAssessment:
     """1SKU分の利益評価"""
+
     product: ProductPrice
     buyma_price_jpy: float
     buyma_price_source: str  # "central_value" or "competitive_value"
@@ -156,18 +159,29 @@ def assess_profit(product: ProductPrice) -> ProfitAssessment:
     if product.price_jpy is None:
         return ProfitAssessment(
             product=product,
-            buyma_price_jpy=0, buyma_price_source="unknown",
-            profit_jpy=0, profit_rate=0, customs_duty=0, total_cost=0,
-            verdict="no_price", note="価格取得失敗"
+            buyma_price_jpy=0,
+            buyma_price_source="unknown",
+            profit_jpy=0,
+            profit_rate=0,
+            customs_duty=0,
+            total_cost=0,
+            verdict="no_price",
+            note="価格取得失敗",
         )
 
     # 財布なのでカテゴリは wallet, 素材 leather
     buyma_price, src = get_buyma_price(product.sku_name)
     if buyma_price == 0:
         return ProfitAssessment(
-            product=product, buyma_price_jpy=0, buyma_price_source=src,
-            profit_jpy=0, profit_rate=0, customs_duty=0, total_cost=0,
-            verdict="no_buyma_price", note="BUYMA価格マップに該当なし"
+            product=product,
+            buyma_price_jpy=0,
+            buyma_price_source=src,
+            profit_jpy=0,
+            profit_rate=0,
+            customs_duty=0,
+            total_cost=0,
+            verdict="no_buyma_price",
+            note="BUYMA価格マップに該当なし",
         )
 
     # 関税: 財布は12%（革製品）
@@ -194,23 +208,27 @@ def assess_profit(product: ProductPrice) -> ProfitAssessment:
         note = "在庫なし（販売不可）"
     elif result.profit >= 5000 and result.profit_rate >= 0.10:
         verdict = "black_ink"
-        note = f"◎ 黒字: 利益¥{result.profit:,.0f}・利益率{result.profit_rate*100:.1f}%"
+        note = f"◎ 黒字: 利益¥{result.profit:,.0f}・利益率{result.profit_rate * 100:.1f}%"
     elif result.profit >= 2000:
         verdict = "near_black"
-        note = f"○ ニア黒字: 利益¥{result.profit:,.0f}・利益率{result.profit_rate*100:.1f}%"
+        note = f"○ ニア黒字: 利益¥{result.profit:,.0f}・利益率{result.profit_rate * 100:.1f}%"
     elif result.profit >= 0:
         verdict = "tiny_profit"
-        note = f"△ 微益: 利益¥{result.profit:,.0f}・利益率{result.profit_rate*100:.1f}%"
+        note = f"△ 微益: 利益¥{result.profit:,.0f}・利益率{result.profit_rate * 100:.1f}%"
     else:
         verdict = "loss"
-        note = f"✗ 赤字: ▲¥{abs(result.profit):,.0f}・利益率{result.profit_rate*100:.1f}%"
+        note = f"✗ 赤字: ▲¥{abs(result.profit):,.0f}・利益率{result.profit_rate * 100:.1f}%"
 
     return ProfitAssessment(
         product=product,
-        buyma_price_jpy=buyma_price, buyma_price_source=src,
-        profit_jpy=result.profit, profit_rate=result.profit_rate,
-        customs_duty=result.auto_customs_duty, total_cost=result.total_cost,
-        verdict=verdict, note=note,
+        buyma_price_jpy=buyma_price,
+        buyma_price_source=src,
+        profit_jpy=result.profit,
+        profit_rate=result.profit_rate,
+        customs_duty=result.auto_customs_duty,
+        total_cost=result.total_cost,
+        verdict=verdict,
+        note=note,
     )
 
 
@@ -220,7 +238,7 @@ def main():
     print("Gucci バッグ・財布 利益調査 (Cettire/Italist)")
     print("=" * 60)
     print(f"USD/JPY: {USD_JPY}")
-    print(f"BUYMA手数料: {BUYMA_FEE_RATE*100:.1f}%")
+    print(f"BUYMA手数料: {BUYMA_FEE_RATE * 100:.1f}%")
     print(f"小物流通料: ¥{SHIPPING_JPY:,}")
     print()
 
@@ -228,6 +246,7 @@ def main():
 # ============================================================
 # Playwright連続スクレイピング（実データ取得用）
 # ============================================================
+
 
 def scrape_cettire_product(url: str, page) -> ProductPrice | None:
     """1SKUのCettire商品ページからJSON-LD構造化データを取得"""
@@ -258,10 +277,7 @@ def scrape_cettire_product(url: str, page) -> ProductPrice | None:
             return null;
         }""")
         if not result:
-            return ProductPrice(
-                source="cettire", sku_name=url, sku_id="",
-                url=url, note="JSON-LD取得失敗"
-            )
+            return ProductPrice(source="cettire", sku_name=url, sku_id="", url=url, note="JSON-LD取得失敗")
         # USDならJPY換算
         price_jpy = None
         price_usd = None
@@ -272,17 +288,17 @@ def scrape_cettire_product(url: str, page) -> ProductPrice | None:
             price_jpy = price_usd * USD_JPY
 
         return ProductPrice(
-            source="cettire", sku_name=result.get("name", ""),
+            source="cettire",
+            sku_name=result.get("name", ""),
             sku_id=result.get("sku", "") or "",
-            url=url, price_usd=price_usd, price_jpy=price_jpy,
+            url=url,
+            price_usd=price_usd,
+            price_jpy=price_jpy,
             currency=result.get("currency", "USD"),
             availability=result.get("avail", "unknown"),
         )
     except Exception as e:
-        return ProductPrice(
-            source="cettire", sku_name=url, sku_id="",
-            url=url, note=f"取得失敗: {str(e)[:80]}"
-        )
+        return ProductPrice(source="cettire", sku_name=url, sku_id="", url=url, note=f"取得失敗: {str(e)[:80]}")
 
 
 def scrape_italist_product(url: str, page) -> ProductPrice | None:
@@ -325,10 +341,7 @@ def scrape_italist_product(url: str, page) -> ProductPrice | None:
             return null;
         }""")
         if not result:
-            return ProductPrice(
-                source="italist", sku_name=url, sku_id="",
-                url=url, note="JSON-LD取得失敗"
-            )
+            return ProductPrice(source="italist", sku_name=url, sku_id="", url=url, note="JSON-LD取得失敗")
         price_jpy = None
         price_usd = None
         if result.get("currency") == "JPY":
@@ -338,17 +351,17 @@ def scrape_italist_product(url: str, page) -> ProductPrice | None:
             price_jpy = price_usd * USD_JPY
 
         return ProductPrice(
-            source="italist", sku_name=result.get("name", ""),
+            source="italist",
+            sku_name=result.get("name", ""),
             sku_id=result.get("sku", "") or "",
-            url=url, price_usd=price_usd, price_jpy=price_jpy,
+            url=url,
+            price_usd=price_usd,
+            price_jpy=price_jpy,
             currency=result.get("currency", "USD"),
             availability=result.get("avail", "unknown"),
         )
     except Exception as e:
-        return ProductPrice(
-            source="italist", sku_name=url, sku_id="",
-            url=url, note=f"取得失敗: {str(e)[:80]}"
-        )
+        return ProductPrice(source="italist", sku_name=url, sku_id="", url=url, note=f"取得失敗: {str(e)[:80]}")
 
 
 def run_playwright_scrape():
@@ -372,7 +385,7 @@ def run_playwright_scrape():
             elif line.startswith("export WEBSHARE_PROXY_PASSWORD="):
                 proxy_pass = line.split("=", 1)[1].strip().strip('"')
 
-    all_products: List[ProductPrice] = []
+    all_products: list[ProductPrice] = []
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         # プロキシ設定
@@ -422,13 +435,13 @@ def run_playwright_scrape():
     return all_products
 
 
-def _write_markdown_report(results: List[ProfitAssessment]):
+def _write_markdown_report(results: list[ProfitAssessment]):
     """Markdown形式のレポートを生成"""
     lines = [
         "# Cettire / Italist × Gucci バッグ・財布 利益ランキング",
         "",
-        f"> 調査日: 2026-06-11 / USD/JPY: {USD_JPY} / BUYMA手数料: {BUYMA_FEE_RATE*100:.1f}%",
-        f"> 利益計算: `app/core/pricing/calculator.py::calculate_pricing()`",
+        f"> 調査日: 2026-06-11 / USD/JPY: {USD_JPY} / BUYMA手数料: {BUYMA_FEE_RATE * 100:.1f}%",
+        "> 利益計算: `app/core/pricing/calculator.py::calculate_pricing()`",
         "",
         "## 1. 利益ランキング（利益額順）",
         "",
@@ -441,16 +454,18 @@ def _write_markdown_report(results: List[ProfitAssessment]):
         lines.append(
             f"| {r.verdict} | {r.product.sku_name[:50]} | {r.product.source} | "
             f"¥{cost:,.0f} | ¥{r.buyma_price_jpy:,.0f} | "
-            f"¥{r.profit_jpy:,.0f} | {r.profit_rate*100:.1f}% | "
+            f"¥{r.profit_jpy:,.0f} | {r.profit_rate * 100:.1f}% | "
             f"¥{r.customs_duty:,.0f} | {avail} |"
         )
-    lines.extend([
-        "",
-        "## 2. 仕入れ先別サマリ",
-        "",
-        "| 仕入れ先 | 取得数 | 在庫あり | 黒字 (¥5,000+) | ニア黒字 (¥2,000+) | 赤字 |",
-        "|----------|------:|--------:|-------------:|-----------------:|-----:|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## 2. 仕入れ先別サマリ",
+            "",
+            "| 仕入れ先 | 取得数 | 在庫あり | 黒字 (¥5,000+) | ニア黒字 (¥2,000+) | 赤字 |",
+            "|----------|------:|--------:|-------------:|-----------------:|-----:|",
+        ]
+    )
     for src in ["cettire", "italist"]:
         src_results = [r for r in results if r.product.source == src]
         in_stock = [r for r in src_results if r.verdict != "sold_out"]
@@ -458,40 +473,43 @@ def _write_markdown_report(results: List[ProfitAssessment]):
         near_black = [r for r in src_results if r.verdict == "near_black"]
         loss = [r for r in src_results if r.verdict == "loss"]
         lines.append(
-            f"| {src} | {len(src_results)} | {len(in_stock)} | "
-            f"{len(black_ink)} | {len(near_black)} | {len(loss)} |"
+            f"| {src} | {len(src_results)} | {len(in_stock)} | {len(black_ink)} | {len(near_black)} | {len(loss)} |"
         )
-    lines.extend([
-        "",
-        "## 3. ゴール達成判定",
-        "",
-        f"- 目標: 3仕入れ先 × 5SKU以上・合計15SKU以上の利益商品特定",
-        f"- 利益基準: 利益¥5,000以上・利益率10%以上",
-        f"- 取得総数: {len(results)} SKU",
-        f"- 黒字達成: {sum(1 for r in results if r.verdict == 'black_ink')} SKU",
-        f"- ニア黒字: {sum(1 for r in results if r.verdict == 'near_black')} SKU",
-        "",
-        "## 4. 調査プロセス（再現可能）",
-        "",
-        "1. **データソース**: Cettire/Italist の商品ページURL群をBrave Searchで取得",
-        "2. **スクレイピング**: Playwright (Chromium) でJSON-LD構造化データを抽出",
-        "3. **価格換算**: USD→JPY は 160.2倍 / Italist VAT除去済み",
-        "4. **BUYMA価格マッチング**: モデル名キーワードで辞書引き（中央値を使用）",
-        "5. **利益計算**: `app/core/pricing/calculator.py::calculate_pricing()` を使用",
-        "   - 関税: 財布×革 = 12% (`app/core/pricing/rules.py::resolve_customs_rate()`)",
-        "   - 手数料: 国内成約 7.7% + プラットフォーム 7.7% = 14.2%",
-        "6. **判定**: 利益¥5,000以上・利益率10%以上でBlackInk",
-        "",
-        "## 5. 次のアクション",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## 3. ゴール達成判定",
+            "",
+            "- 目標: 3仕入れ先 × 5SKU以上・合計15SKU以上の利益商品特定",
+            "- 利益基準: 利益¥5,000以上・利益率10%以上",
+            f"- 取得総数: {len(results)} SKU",
+            f"- 黒字達成: {sum(1 for r in results if r.verdict == 'black_ink')} SKU",
+            f"- ニア黒字: {sum(1 for r in results if r.verdict == 'near_black')} SKU",
+            "",
+            "## 4. 調査プロセス（再現可能）",
+            "",
+            "1. **データソース**: Cettire/Italist の商品ページURL群をBrave Searchで取得",
+            "2. **スクレイピング**: Playwright (Chromium) でJSON-LD構造化データを抽出",
+            "3. **価格換算**: USD→JPY は 160.2倍 / Italist VAT除去済み",
+            "4. **BUYMA価格マッチング**: モデル名キーワードで辞書引き（中央値を使用）",
+            "5. **利益計算**: `app/core/pricing/calculator.py::calculate_pricing()` を使用",
+            "   - 関税: 財布×革 = 12% (`app/core/pricing/rules.py::resolve_customs_rate()`)",
+            "   - 手数料: 国内成約 7.7% + プラットフォーム 7.7% = 14.2%",
+            "6. **判定**: 利益¥5,000以上・利益率10%以上でBlackInk",
+            "",
+            "## 5. 次のアクション",
+            "",
+        ]
+    )
 
     black_ink_results = [r for r in results if r.verdict == "black_ink"]
     if black_ink_results:
         lines.append("### 黒字達成SKU（BUYMA出品候補）")
         for r in black_ink_results:
-            lines.append(f"- **{r.product.sku_name}** ({r.product.source}): "
-                         f"利益¥{r.profit_jpy:,.0f}・利益率{r.profit_rate*100:.1f}%")
+            lines.append(
+                f"- **{r.product.sku_name}** ({r.product.source}): "
+                f"利益¥{r.profit_jpy:,.0f}・利益率{r.profit_rate * 100:.1f}%"
+            )
         lines.append("")
         lines.append("- [ ] 在庫・送料・関税の最終確認")
         lines.append("- [ ] BUYMA出品テンプレート作成")
@@ -509,6 +527,7 @@ def _write_markdown_report(results: List[ProfitAssessment]):
 if __name__ == "__main__":
     main()
     import sys
+
     if "--scrape" in sys.argv:
         products = run_playwright_scrape()
         # 利益評価
@@ -521,24 +540,31 @@ if __name__ == "__main__":
         for r in results:
             avail = r.product.availability.split("/")[-1] if "/" in r.product.availability else r.product.availability
             cost = r.product.price_jpy if r.product.price_jpy is not None else 0
-            print(f"[{r.verdict:12}] {r.product.sku_name[:50]:50} | "
-                  f"仕入¥{cost:>7,.0f} | "
-                  f"BUYMA¥{r.buyma_price_jpy:>6,.0f}({r.buyma_price_source[:8]}) | "
-                  f"利益¥{r.profit_jpy:>7,.0f} ({r.profit_rate*100:>5.1f}%) | {avail}")
+            print(
+                f"[{r.verdict:12}] {r.product.sku_name[:50]:50} | "
+                f"仕入¥{cost:>7,.0f} | "
+                f"BUYMA¥{r.buyma_price_jpy:>6,.0f}({r.buyma_price_source[:8]}) | "
+                f"利益¥{r.profit_jpy:>7,.0f} ({r.profit_rate * 100:>5.1f}%) | {avail}"
+            )
         with open(JSON_PATH, "w", encoding="utf-8") as f:
             json.dump(
-                [{
-                    "product": asdict(r.product),
-                    "buyma_price_jpy": r.buyma_price_jpy,
-                    "buyma_price_source": r.buyma_price_source,
-                    "profit_jpy": r.profit_jpy,
-                    "profit_rate": r.profit_rate,
-                    "customs_duty": r.customs_duty,
-                    "total_cost": r.total_cost,
-                    "verdict": r.verdict,
-                    "note": r.note,
-                } for r in results],
-                f, ensure_ascii=False, indent=2
+                [
+                    {
+                        "product": asdict(r.product),
+                        "buyma_price_jpy": r.buyma_price_jpy,
+                        "buyma_price_source": r.buyma_price_source,
+                        "profit_jpy": r.profit_jpy,
+                        "profit_rate": r.profit_rate,
+                        "customs_duty": r.customs_duty,
+                        "total_cost": r.total_cost,
+                        "verdict": r.verdict,
+                        "note": r.note,
+                    }
+                    for r in results
+                ],
+                f,
+                ensure_ascii=False,
+                indent=2,
             )
         print(f"\n結果を {JSON_PATH} に保存")
         _write_markdown_report(results)

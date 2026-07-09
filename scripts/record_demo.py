@@ -10,13 +10,12 @@ cast → Pillow → ffmpeg で CLI デモ GIF/MP4 を生成
     python scripts/record_demo.py --list        # シーン一覧
 """
 
-import os
-import json
-import time
-import subprocess
 import argparse
+import json
+import os
+import subprocess
+import time
 from pathlib import Path
-from datetime import datetime
 
 # ============================================================================
 # 設定
@@ -69,7 +68,7 @@ SKU-001  coach bag  在庫:12  ¥89,000
 SKU-002  wallet    在庫:8   ¥32,000
 SKU-003  sneakers  在庫:5   ¥67,000
 
-[OK] システム正常稼働"""
+[OK] システム正常稼働""",
     },
     {
         "id": 2,
@@ -97,7 +96,7 @@ pending → sourcing → shipped → completed
 
 [WARN] 18日ルール適用:
   カード払い: 18日以内に出庫
-  銀行振込み: 18日+N日以内"""
+  銀行振込み: 18日+N日以内""",
     },
     {
         "id": 3,
@@ -123,7 +122,7 @@ Coach Swagger  $245 → ¥36,627
 Michael Kors    $189 → ¥28,240
 
 [SAVE] データベース保存完了
-   price_cache: 12件更新"""
+   price_cache: 12件更新""",
     },
     {
         "id": 4,
@@ -142,13 +141,14 @@ passed        2068
 failed           0
 
 [OK] 全テスト通過 (99.9%)
-[STAT] カバレッジ: 78.5%"""
+[STAT] カバレッジ: 78.5%""",
     },
 ]
 
 # ============================================================================
 # ユーティリティ
 # ============================================================================
+
 
 def ensure_dirs():
     for d in [CAST_DIR, PNG_DIR, GIF_DIR, MP4_DIR]:
@@ -158,7 +158,7 @@ def ensure_dirs():
 
 def cast_to_png_frames(cast_path: Path, png_dir: Path, fps: int, duration: float) -> list:
     """cast → PNGフレーム（Pillow高速描画）"""
-    print(f"   🖼️  PNGフレーム生成中...")
+    print("   🖼️  PNGフレーム生成中...")
     png_dir.mkdir(parents=True, exist_ok=True)
 
     from PIL import Image, ImageDraw, ImageFont
@@ -167,7 +167,7 @@ def cast_to_png_frames(cast_path: Path, png_dir: Path, fps: int, duration: float
     font_size = 14
     try:
         font = ImageFont.truetype(font_path, font_size)
-    except:
+    except Exception:
         font = ImageFont.load_default()
 
     line_h = font_size + 6
@@ -187,7 +187,7 @@ def cast_to_png_frames(cast_path: Path, png_dir: Path, fps: int, duration: float
                     event = json.loads(line)
                     if isinstance(event, list) and len(event) >= 3:
                         events.append(event)
-                except:
+                except Exception:
                     continue
 
     total_frames = int(duration * fps)
@@ -235,9 +235,10 @@ def cast_to_png_frames(cast_path: Path, png_dir: Path, fps: int, duration: float
 def png_to_gif(png_files: list, gif_path: Path, fps: int) -> bool:
     if not png_files:
         return False
-    print(f"   🎬 GIF生成中...")
+    print("   🎬 GIF生成中...")
 
     import tempfile
+
     with tempfile.NamedTemporaryFile(suffix=".txt", mode="w", delete=False) as f:
         for p in png_files:
             f.write(f"file '{p}'\n")
@@ -245,16 +246,29 @@ def png_to_gif(png_files: list, gif_path: Path, fps: int) -> bool:
 
     ffmpeg = os.path.expanduser("~/.local/bin/ffmpeg")
     try:
-        subprocess.run([
-            ffmpeg, "-y", "-f", "concat", "-safe", "0",
-            "-i", concat_file,
-            "-vf", f"fps={fps},split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
-            "-loop", "0", str(gif_path)
-        ], check=True, capture_output=True)
+        subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                concat_file,
+                "-vf",
+                f"fps={fps},split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse",
+                "-loop",
+                "0",
+                str(gif_path),
+            ],
+            check=True,
+            capture_output=True,
+        )
         print(f"   [OK] GIF生成: {gif_path.name} ({gif_path.stat().st_size // 1024}KB)")
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"   [FAIL] GIF生成失敗")
+    except subprocess.CalledProcessError:
+        print("   [FAIL] GIF生成失敗")
         return False
     finally:
         Path(concat_file).unlink()
@@ -263,9 +277,10 @@ def png_to_gif(png_files: list, gif_path: Path, fps: int) -> bool:
 def png_to_mp4(png_files: list, mp4_path: Path, fps: int) -> bool:
     if not png_files:
         return False
-    print(f"   🎬 MP4生成中...")
+    print("   🎬 MP4生成中...")
 
     import tempfile
+
     with tempfile.NamedTemporaryFile(suffix=".txt", mode="w", delete=False) as f:
         for p in png_files:
             f.write(f"file '{p}'\n")
@@ -273,17 +288,33 @@ def png_to_mp4(png_files: list, mp4_path: Path, fps: int) -> bool:
 
     ffmpeg = os.path.expanduser("~/.local/bin/ffmpeg")
     try:
-        subprocess.run([
-            ffmpeg, "-y", "-f", "concat", "-safe", "0",
-            "-i", concat_file,
-            "-vf", f"fps={fps}",
-            "-c:v", "libx264", "-preset", "fast", "-crf", "23",
-            str(mp4_path)
-        ], check=True, capture_output=True)
+        subprocess.run(
+            [
+                ffmpeg,
+                "-y",
+                "-f",
+                "concat",
+                "-safe",
+                "0",
+                "-i",
+                concat_file,
+                "-vf",
+                f"fps={fps}",
+                "-c:v",
+                "libx264",
+                "-preset",
+                "fast",
+                "-crf",
+                "23",
+                str(mp4_path),
+            ],
+            check=True,
+            capture_output=True,
+        )
         print(f"   [OK] MP4生成: {mp4_path.name} ({mp4_path.stat().st_size // 1024}KB)")
         return True
-    except subprocess.CalledProcessError as e:
-        print(f"   [FAIL] MP4生成失敗")
+    except subprocess.CalledProcessError:
+        print("   [FAIL] MP4生成失敗")
         return False
     finally:
         Path(concat_file).unlink()
@@ -294,8 +325,13 @@ def generate_sample_cast(scene: dict) -> Path:
     cast_path = CAST_DIR / scene["cast_file"]
 
     with open(cast_path, "w") as f:
-        header = {"version": 2, "width": WIDTH, "height": HEIGHT,
-                  "timestamp": int(time.time()), "env": {"TERM": "xterm-256color"}}
+        header = {
+            "version": 2,
+            "width": WIDTH,
+            "height": HEIGHT,
+            "timestamp": int(time.time()),
+            "env": {"TERM": "xterm-256color"},
+        }
         f.write(json.dumps(header) + "\n")
 
         timestamp = 0.0
@@ -312,6 +348,7 @@ def generate_sample_cast(scene: dict) -> Path:
 # ============================================================================
 # メイン処理
 # ============================================================================
+
 
 def process_scene(scene: dict, generate: bool = True) -> dict:
     result = {"scene": scene["name"], "success": False}
@@ -340,8 +377,7 @@ def process_scene(scene: dict, generate: bool = True) -> dict:
 
 def main():
     parser = argparse.ArgumentParser(description="atelier Demo Recorder")
-    parser.add_argument("--scene", type=int, choices=range(1, 5),
-                        help="特定シーンのみ処理")
+    parser.add_argument("--scene", type=int, choices=range(1, 5), help="特定シーンのみ処理")
     parser.add_argument("--list", action="store_true", help="シーン一覧")
 
     args = parser.parse_args()

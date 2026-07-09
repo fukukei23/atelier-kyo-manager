@@ -22,7 +22,11 @@ def chatbot_dashboard():
     query = CustomerInquiry.query
     if status_filter != "all":
         query = query.filter_by(status=status_filter)
-    inquiries = query.order_by(CustomerInquiry.created_at.desc()).paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
+    inquiries = (
+        query.order_by(CustomerInquiry.created_at.desc())
+        .paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False)
+        .items
+    )
     return render_template(
         "chatbot_dashboard.html",
         inquiries=inquiries,

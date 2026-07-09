@@ -8,11 +8,7 @@ Web Reader経由でSSENSE商品データを取得し、BUYMA実勢価格と照�
 """
 
 import csv
-import json
-import os
-import re
-import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 # === 定数 ===
@@ -318,36 +314,48 @@ def build_products() -> list[SSENSEProduct]:
     products = []
 
     for item in SSENSE_PRADA_MEN:
-        products.append(SSENSEProduct(
-            brand="Prada", name=item["name"],
-            price_usd=item["sale"] or item["price"],
-            sale_price_usd=item["sale"],
-            gender="Men"
-        ))
+        products.append(
+            SSENSEProduct(
+                brand="Prada",
+                name=item["name"],
+                price_usd=item["sale"] or item["price"],
+                sale_price_usd=item["sale"],
+                gender="Men",
+            )
+        )
 
     for item in SSENSE_PRADA_WOMEN:
-        products.append(SSENSEProduct(
-            brand="Prada", name=item["name"],
-            price_usd=item["sale"] or item["price"],
-            sale_price_usd=item["sale"],
-            gender="Women"
-        ))
+        products.append(
+            SSENSEProduct(
+                brand="Prada",
+                name=item["name"],
+                price_usd=item["sale"] or item["price"],
+                sale_price_usd=item["sale"],
+                gender="Women",
+            )
+        )
 
     for item in SSENSE_GUCCI_MEN:
-        products.append(SSENSEProduct(
-            brand="Gucci", name=item["name"],
-            price_usd=item["sale"] or item["price"],
-            sale_price_usd=item["sale"],
-            gender="Men"
-        ))
+        products.append(
+            SSENSEProduct(
+                brand="Gucci",
+                name=item["name"],
+                price_usd=item["sale"] or item["price"],
+                sale_price_usd=item["sale"],
+                gender="Men",
+            )
+        )
 
     for item in SSENSE_GUCCI_WOMEN:
-        products.append(SSENSEProduct(
-            brand="Gucci", name=item["name"],
-            price_usd=item["sale"] or item["price"],
-            sale_price_usd=item["sale"],
-            gender="Women"
-        ))
+        products.append(
+            SSENSEProduct(
+                brand="Gucci",
+                name=item["name"],
+                price_usd=item["sale"] or item["price"],
+                sale_price_usd=item["sale"],
+                gender="Women",
+            )
+        )
 
     return products
 
@@ -368,23 +376,38 @@ def export_csv(results: list[ProfitResult]):
     CSV_PATH.parent.mkdir(parents=True, exist_ok=True)
     with open(CSV_PATH, "w", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow([
-            "順位", "ブランド", "モデル名", "性別",
-            "SSENSE価格(USD)", "原価(JPY)", "BUYMA最安値",
-            "BUYMA中央値", "利益(JPY)", "利益率", "判定"
-        ])
+        writer.writerow(
+            [
+                "順位",
+                "ブランド",
+                "モデル名",
+                "性別",
+                "SSENSE価格(USD)",
+                "原価(JPY)",
+                "BUYMA最安値",
+                "BUYMA中央値",
+                "利益(JPY)",
+                "利益率",
+                "判定",
+            ]
+        )
         sorted_results = sorted(results, key=lambda r: r.profit, reverse=True)
         for i, r in enumerate(sorted_results, 1):
-            writer.writerow([
-                i, r.product.brand, r.product.name, r.product.gender,
-                f"${r.product.effective_price_usd:.0f}",
-                f"¥{r.product.cost_jpy:,.0f}",
-                f"¥{r.buyma.min_price:,.0f}",
-                f"¥{r.buyma.median_price:,.0f}",
-                f"¥{r.profit:,.0f}",
-                f"{r.profit_rate:.1f}%",
-                r.verdict,
-            ])
+            writer.writerow(
+                [
+                    i,
+                    r.product.brand,
+                    r.product.name,
+                    r.product.gender,
+                    f"${r.product.effective_price_usd:.0f}",
+                    f"¥{r.product.cost_jpy:,.0f}",
+                    f"¥{r.buyma.min_price:,.0f}",
+                    f"¥{r.buyma.median_price:,.0f}",
+                    f"¥{r.profit:,.0f}",
+                    f"{r.profit_rate:.1f}%",
+                    r.verdict,
+                ]
+            )
     print(f"CSV saved: {CSV_PATH}")
 
 
@@ -396,9 +419,9 @@ def export_markdown(results: list[ProfitResult]):
     lines = [
         "# SSENSE Prada / Gucci サングラス 利益ランキング",
         "",
-        f"> 取得日: 2026-06-11",
+        "> 取得日: 2026-06-11",
         f"> USD/JPY: {USD_JPY}",
-        f"> BUYMA手数料: {BUYMA_FEE_RATE*100:.1f}%",
+        f"> BUYMA手数料: {BUYMA_FEE_RATE * 100:.1f}%",
         f"> 小物送料: ¥{SHIPPING_JPY:,}",
         "",
         f"> 利益 = BUYMA価格 - (SSENSE価格 x {USD_JPY} + ¥{SHIPPING_JPY:,} + BUYMA手数料)",
@@ -432,13 +455,15 @@ def export_markdown(results: list[ProfitResult]):
             f"{r.profit_rate:.1f}% | {r.verdict} |"
         )
 
-    lines.extend([
-        "",
-        "## Gucci サングラス",
-        "",
-        "| 順位 | モデル名 | 性別 | SSENSE(USD) | 原価(JPY) | BUYMA最安値 | BUYMA中央値 | 利益(JPY) | 利益率 | 判定 |",
-        "|-----:|---------|------|------------:|----------:|-----------:|-----------:|----------:|-------:|------|",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Gucci サングラス",
+            "",
+            "| 順位 | モデル名 | 性別 | SSENSE(USD) | 原価(JPY) | BUYMA最安値 | BUYMA中央値 | 利益(JPY) | 利益率 | 判定 |",
+            "|-----:|---------|------|------------:|----------:|-----------:|-----------:|----------:|-------:|------|",
+        ]
+    )
 
     gucci_results = [r for r in sorted_results if r.product.brand == "Gucci"]
     for i, r in enumerate(gucci_results, 1):
@@ -458,23 +483,27 @@ def export_markdown(results: list[ProfitResult]):
     avg_profit = sum(r.profit for r in profit_results) / len(profit_results) if profit_results else 0
     best = sorted_results[0] if sorted_results else None
 
-    lines.extend([
-        "",
-        "## 全体サマリー",
-        "",
-        f"- 総商品数: {len(sorted_results)}",
-        f"- 利益プス商品数: {len(profit_results)}",
-        f"- 平均利益（利益プスのみ）: ¥{avg_profit:,.0f}",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "## 全体サマリー",
+            "",
+            f"- 総商品数: {len(sorted_results)}",
+            f"- 利益プス商品数: {len(profit_results)}",
+            f"- 平均利益（利益プスのみ）: ¥{avg_profit:,.0f}",
+            "",
+        ]
+    )
 
     if best:
-        lines.extend([
-            "## トップ5 狙い目商品",
-            "",
-            "| # | ブランド | モデル | 原価 | BUYMA中央値 | 利益 | 利益率 |",
-            "|--:|---------|--------|-----:|-----------:|-----:|-------:|",
-        ])
+        lines.extend(
+            [
+                "## トップ5 狙い目商品",
+                "",
+                "| # | ブランド | モデル | 原価 | BUYMA中央値 | 利益 | 利益率 |",
+                "|--:|---------|--------|-----:|-----------:|-----:|-------:|",
+            ]
+        )
         for i, r in enumerate(sorted_results[:5], 1):
             lines.append(
                 f"| {i} | {r.product.brand} | {r.product.name} | "
@@ -520,8 +549,7 @@ def main():
     print("\n=== Bottom 5 ===")
     for i, r in enumerate(sorted_results[-5:], len(sorted_results) - 4):
         print(
-            f"{i:2d}. [{r.product.brand}] {r.product.name} | "
-            f"利益 ¥{r.profit:,.0f} ({r.profit_rate:.1f}%) | {r.verdict}"
+            f"{i:2d}. [{r.product.brand}] {r.product.name} | 利益 ¥{r.profit:,.0f} ({r.profit_rate:.1f}%) | {r.verdict}"
         )
 
     # エクスポート

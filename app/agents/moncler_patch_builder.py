@@ -2,19 +2,17 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, TypedDict
 
 from app.core.timezone import _utcnow
-from typing import TypedDict
-
 
 logger: logging.Logger = logging.getLogger(__name__)
 
 
 # ── Types ────────────────────────────────────────────────
+
 
 class RiskLevel(str, Enum):
     HIGH = "HIGH"
@@ -43,6 +41,7 @@ class TrapAppend(TypedDict):
 
 # ── Payload builder ──────────────────────────────────────
 
+
 def build_moncler_analysis_payload(
     run_id: str,
     site: str,
@@ -64,7 +63,9 @@ def build_moncler_analysis_payload(
         suggested_actions: list[dict[str, Any]] = []
         for action in self_healing_result.get("suggested_actions", []):
             if isinstance(action, str):
-                suggested_actions.append({"id": f"action_{len(suggested_actions)}", "description": action, "risk_level": "MEDIUM"})
+                suggested_actions.append(
+                    {"id": f"action_{len(suggested_actions)}", "description": action, "risk_level": "MEDIUM"}
+                )
             elif isinstance(action, dict):
                 suggested_actions.append(action)
         payload["self_healing"] = {
@@ -95,15 +96,18 @@ def build_moncler_analysis_payload(
 
 # ── Selector / trap generators ───────────────────────────
 
+
 def _filter_valid_selectors(candidate_selectors: list[str]) -> list[str]:
     return [
-        sel for sel in candidate_selectors
+        sel
+        for sel in candidate_selectors
         if "/products/" in sel or "/product/" in sel or "ProductCard" in sel or "product-card" in sel.lower()
     ]
 
 
 def _generate_selector_changes(
-    selector_discovery: dict[str, Any], current_site_config: dict[str, Any],
+    selector_discovery: dict[str, Any],
+    current_site_config: dict[str, Any],
 ) -> dict[str, Any]:
     changes: dict[str, Any] = {}
     candidates = selector_discovery.get("candidate_selectors", [])
@@ -129,7 +133,8 @@ def _generate_selector_changes(
 
 
 def _generate_trap_patterns(
-    rejection_stats: dict[str, int], current_site_config: dict[str, Any],
+    rejection_stats: dict[str, int],
+    current_site_config: dict[str, Any],
 ) -> dict[str, Any]:
     if rejection_stats.get("double_locale_path", 0) <= 0 and rejection_stats.get("trap_pattern", 0) <= 0:
         return {}
@@ -150,9 +155,18 @@ def _generate_trap_patterns(
 # ── Risk assessment ───────────────────────────────────────
 
 _RISK_MAP: dict[str, tuple[RiskLevel, str]] = {
-    "locale redirect loop": (RiskLevel.HIGH, "ロケールリダイレクトループが検出されました。LocaleGuard の動作を確認してください。"),
-    "primary selector mismatch": (RiskLevel.MEDIUM, "セレクタの不一致が検出されました。DOM 構造の変化の可能性があります。"),
-    "trap page navigation": (RiskLevel.MEDIUM, "Trap ページが検出されました。trap_url_patterns の追加を検討してください。"),
+    "locale redirect loop": (
+        RiskLevel.HIGH,
+        "ロケールリダイレクトループが検出されました。LocaleGuard の動作を確認してください。",
+    ),
+    "primary selector mismatch": (
+        RiskLevel.MEDIUM,
+        "セレクタの不一致が検出されました。DOM 構造の変化の可能性があります。",
+    ),
+    "trap page navigation": (
+        RiskLevel.MEDIUM,
+        "Trap ページが検出されました。trap_url_patterns の追加を検討してください。",
+    ),
 }
 
 
@@ -163,8 +177,10 @@ def _assess_risk(root_cause: str) -> RiskAssessment:
 
 # ── Patch candidate ──────────────────────────────────────
 
+
 def build_moncler_patch_candidate(
-    analysis_payload: dict[str, Any], current_site_config: dict[str, Any],
+    analysis_payload: dict[str, Any],
+    current_site_config: dict[str, Any],
 ) -> dict[str, Any]:
     run_id = analysis_payload.get("run_id", "unknown")
     site = analysis_payload.get("site", "MONCLER_OFFICIAL")
@@ -172,9 +188,12 @@ def build_moncler_patch_candidate(
 
     changes: dict[str, Any] = {}
     changes.update(_generate_selector_changes(analysis_payload.get("selector_discovery", {}), current_site_config))
-    changes.update(_generate_trap_patterns(
-        analysis_payload.get("moncler_outcome", {}).get("rejection_stats", {}), current_site_config,
-    ))
+    changes.update(
+        _generate_trap_patterns(
+            analysis_payload.get("moncler_outcome", {}).get("rejection_stats", {}),
+            current_site_config,
+        )
+    )
 
     root_cause = analysis_payload.get("self_healing", {}).get("root_cause", "")
     risk = _assess_risk(root_cause)
@@ -193,6 +212,7 @@ def build_moncler_patch_candidate(
 
 # ── Markdown formatting ──────────────────────────────────
 
+
 def _format_changes_markdown(changes: dict[str, Any]) -> str:
     if not changes:
         return "変更内容はありません。\n\n"
@@ -201,12 +221,18 @@ def _format_changes_markdown(changes: dict[str, Any]) -> str:
         parts.append(f"#### {path}\n\n")
         if isinstance(data, dict):
             if "before" in data and "after" in data:
-                parts.append(f"**Before:**\n```json\n{json.dumps(data['before'], ensure_ascii=False, indent=2)}\n```\n\n")
+                parts.append(
+                    f"**Before:**\n```json\n{json.dumps(data['before'], ensure_ascii=False, indent=2)}\n```\n\n"
+                )
                 parts.append(f"**After:**\n```json\n{json.dumps(data['after'], ensure_ascii=False, indent=2)}\n```\n\n")
             elif "append" in data:
-                parts.append(f"**Append:**\n```json\n{json.dumps(data['append'], ensure_ascii=False, indent=2)}\n```\n\n")
+                parts.append(
+                    f"**Append:**\n```json\n{json.dumps(data['append'], ensure_ascii=False, indent=2)}\n```\n\n"
+                )
             elif "remove" in data:
-                parts.append(f"**Remove:**\n```json\n{json.dumps(data['remove'], ensure_ascii=False, indent=2)}\n```\n\n")
+                parts.append(
+                    f"**Remove:**\n```json\n{json.dumps(data['remove'], ensure_ascii=False, indent=2)}\n```\n\n"
+                )
     return "".join(parts)
 
 
@@ -233,7 +259,9 @@ def _format_suggested_actions(self_healing: dict[str, Any]) -> str:
     lines: list[str] = []
     for i, action in enumerate(actions, 1):
         if isinstance(action, dict):
-            lines.append(f"{i}. **{action.get('description', str(action))}** (Risk: {action.get('risk_level', 'MEDIUM')})\n")
+            lines.append(
+                f"{i}. **{action.get('description', str(action))}** (Risk: {action.get('risk_level', 'MEDIUM')})\n"
+            )
         else:
             lines.append(f"{i}. {action}\n")
     return "".join(lines)
@@ -241,8 +269,11 @@ def _format_suggested_actions(self_healing: dict[str, Any]) -> str:
 
 # ── Report generation ────────────────────────────────────
 
+
 def generate_moncler_patch_markdown(
-    run_context: Any, analysis_payload: dict[str, Any], patch_candidate: dict[str, Any],
+    run_context: Any,
+    analysis_payload: dict[str, Any],
+    patch_candidate: dict[str, Any],
 ) -> Path | None:
     run_id = analysis_payload.get("run_id", "unknown")
     reports_dir = Path("docs/reports")
@@ -272,7 +303,14 @@ def generate_moncler_patch_markdown(
 ### Moncler Outcome
 """
         outcome = analysis_payload.get("moncler_outcome", {})
-        for key in ("plp_materialized", "tiles_detected", "pdp_links_raw", "pdp_links_accepted", "locale_corrections", "trap_detected"):
+        for key in (
+            "plp_materialized",
+            "tiles_detected",
+            "pdp_links_raw",
+            "pdp_links_accepted",
+            "locale_corrections",
+            "trap_detected",
+        ):
             content += f"- **{key}:** `{outcome.get(key, 'N/A')}`\n"
 
         content += f"""
@@ -331,7 +369,9 @@ def save_moncler_patch_files(
             logger.error("[PatchBuilder][Moncler] Failed to save %s: %s", suffix, e, exc_info=True)
 
     if generate_markdown:
-        md_path = generate_moncler_patch_markdown(run_context=run_context, analysis_payload=analysis_payload, patch_candidate=patch_candidate)
+        md_path = generate_moncler_patch_markdown(
+            run_context=run_context, analysis_payload=analysis_payload, patch_candidate=patch_candidate
+        )
         if md_path:
             saved["markdown"] = md_path
 
@@ -365,16 +405,26 @@ async def process_moncler_self_healing_results(
                 return {}
 
         analysis_payload = build_moncler_analysis_payload(
-            run_id=run_id, site=site, current_url=current_url, moncler_outcome=moncler_outcome,
-            self_healing_result=self_healing_result, selector_discovery_result=selector_discovery_result,
+            run_id=run_id,
+            site=site,
+            current_url=current_url,
+            moncler_outcome=moncler_outcome,
+            self_healing_result=self_healing_result,
+            selector_discovery_result=selector_discovery_result,
         )
-        patch_candidate = build_moncler_patch_candidate(analysis_payload=analysis_payload, current_site_config=current_site_config)
+        patch_candidate = build_moncler_patch_candidate(
+            analysis_payload=analysis_payload, current_site_config=current_site_config
+        )
         saved_paths = save_moncler_patch_files(
-            run_context=run_context, analysis_payload=analysis_payload, patch_candidate=patch_candidate, generate_markdown=generate_markdown,
+            run_context=run_context,
+            analysis_payload=analysis_payload,
+            patch_candidate=patch_candidate,
+            generate_markdown=generate_markdown,
         )
         logger.info(
             "[PatchBuilder][Moncler] Processed: analysis=%s patch=%s",
-            saved_paths.get("analysis"), saved_paths.get("patch_candidate"),
+            saved_paths.get("analysis"),
+            saved_paths.get("patch_candidate"),
         )
         return saved_paths
     except Exception as e:

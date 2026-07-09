@@ -3,6 +3,7 @@ SessionManager から分離されたプロキシ管理ロジック。
 
 プロキシプールの読み込み・サイト別選択・ラウンドロビン・引数生成を担当。
 """
+
 from __future__ import annotations
 
 import json
@@ -74,7 +75,9 @@ class ProxyManager:
                 return entry
         return None
 
-    def get_for_site(self, site: str, site_config: dict[str, Any], runtime_kwargs: dict[str, Any] | None = None) -> ProxyEntry | None:
+    def get_for_site(
+        self, site: str, site_config: dict[str, Any], runtime_kwargs: dict[str, Any] | None = None
+    ) -> ProxyEntry | None:
         if not self._pool:
             return None
         site_key = site or (site_config.get("id")) or (runtime_kwargs or {}).get("site_name")

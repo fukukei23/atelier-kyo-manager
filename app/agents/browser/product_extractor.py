@@ -137,7 +137,11 @@ class ProductExtractor:
                 locator = page.locator(selector).first
                 if await locator.count() == 0:
                     continue
-                content = await locator.get_attribute("content") if selector.startswith("meta[") else await locator.inner_text()
+                content = (
+                    await locator.get_attribute("content")
+                    if selector.startswith("meta[")
+                    else await locator.inner_text()
+                )
                 title = (content or "").strip()
                 if title:
                     self.logger.debug(f"[ProductExtractor] Title found via: {selector}")
@@ -147,7 +151,10 @@ class ProductExtractor:
         return None
 
     async def _extract_price_with_size_option(
-        self, page: Page, pdp_config: dict[str, Any], price_rules: dict[str, Any],
+        self,
+        page: Page,
+        pdp_config: dict[str, Any],
+        price_rules: dict[str, Any],
     ) -> float | None:
         price = await self._extract_price(page, pdp_config, price_rules)
         if price is not None:
@@ -166,7 +173,10 @@ class ProductExtractor:
         return None
 
     async def _extract_price(
-        self, page: Page, pdp_config: dict[str, Any], price_rules: dict[str, Any],
+        self,
+        page: Page,
+        pdp_config: dict[str, Any],
+        price_rules: dict[str, Any],
     ) -> float | None:
         price_selectors = pdp_config.get("price", [])
         if isinstance(price_selectors, dict):
@@ -177,7 +187,11 @@ class ProductExtractor:
                 locator = page.locator(selector).first
                 if await locator.count() == 0:
                     continue
-                content = await locator.get_attribute("content") if selector.startswith("meta[") else await locator.inner_text()
+                content = (
+                    await locator.get_attribute("content")
+                    if selector.startswith("meta[")
+                    else await locator.inner_text()
+                )
                 price_text = (content or "").strip()
                 if price_text:
                     price_float = normalize_price_to_float(price_text, price_rules)
@@ -267,7 +281,11 @@ class ProductExtractor:
                 locator = page.locator(selector).first
                 if await locator.count() == 0:
                     continue
-                content = await locator.get_attribute("content") if selector.startswith("meta[") else await locator.inner_text()
+                content = (
+                    await locator.get_attribute("content")
+                    if selector.startswith("meta[")
+                    else await locator.inner_text()
+                )
                 desc = (content or "").strip()
                 if desc:
                     self.logger.debug(f"[ProductExtractor] Description found via: {selector}")
@@ -282,7 +300,11 @@ class ProductExtractor:
                 locator = page.locator(selector).first
                 if await locator.count() == 0:
                     continue
-                content = await locator.get_attribute("content") if selector.startswith("meta[") else await locator.inner_text()
+                content = (
+                    await locator.get_attribute("content")
+                    if selector.startswith("meta[")
+                    else await locator.inner_text()
+                )
                 brand = (content or "").strip()
                 if brand:
                     self.logger.debug(f"[ProductExtractor] Brand found via: {selector}")
@@ -292,7 +314,10 @@ class ProductExtractor:
         return None
 
     async def _extract_list_price_and_discount(
-        self, page: Page, pdp_config: dict[str, Any], price_rules: dict[str, Any],
+        self,
+        page: Page,
+        pdp_config: dict[str, Any],
+        price_rules: dict[str, Any],
     ) -> tuple[float | None, float | None]:
         list_price = None
         discount_pct = None
@@ -319,7 +344,10 @@ class ProductExtractor:
         return list_price, discount_pct
 
     async def _click_size_to_reveal_price(
-        self, page: Page, pdp_config: dict[str, Any], size_select_policy: dict[str, Any],
+        self,
+        page: Page,
+        pdp_config: dict[str, Any],
+        size_select_policy: dict[str, Any],
     ) -> bool:
         size_button_selectors = pdp_config.get("size_button", [])
         availability_patterns = pdp_config.get("availability_patterns", [])
@@ -345,8 +373,14 @@ class ProductExtractor:
                     if not await btn.is_visible() or await btn.is_disabled():
                         continue
                     label = (
-                        (await btn.get_attribute("data-size") or await btn.get_attribute("aria-label") or await btn.inner_text() or "")
-                        .strip().upper()
+                        (
+                            await btn.get_attribute("data-size")
+                            or await btn.get_attribute("aria-label")
+                            or await btn.inner_text()
+                            or ""
+                        )
+                        .strip()
+                        .upper()
                     )
                     if label and any(label == pref for pref in prefer):
                         await btn.click()
@@ -389,7 +423,9 @@ class ProductExtractor:
         return clicked
 
     async def _extract_from_json_ld_or_meta(
-        self, page: Page, pdp_config: dict[str, Any],
+        self,
+        page: Page,
+        pdp_config: dict[str, Any],
     ) -> dict[str, Any] | None:
         json_ld_cfg = pdp_config.get("json_ld", {})
         meta_fallback_cfg = pdp_config.get("meta_fallback", {})

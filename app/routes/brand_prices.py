@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from flask import flash, jsonify, make_response, redirect, render_template, request, session, url_for
 from flask_login import login_required
@@ -12,9 +12,16 @@ from app.core.timezone import _utcnow
 from app.services import brand_price_service
 from app.services.brand_price_scraper import SUPPORTED_BRANDS, SUPPORTED_SITES, BrandPriceScraper
 
-SUPPORTED_PIPELINE_CATEGORIES = frozenset({
-    "bags", "sunglasses", "wallet", "shoes", "accessory", "clothing",
-})
+SUPPORTED_PIPELINE_CATEGORIES = frozenset(
+    {
+        "bags",
+        "sunglasses",
+        "wallet",
+        "shoes",
+        "accessory",
+        "clothing",
+    }
+)
 from app.services import price_comparison_service
 from app.services.buyma_price_scraper import (
     BRAND_THRESHOLDS,
@@ -127,6 +134,7 @@ def brand_prices_scrape_sale():
         logger.warning("Celery unavailable, falling back to sync: %s", e)
         try:
             from app.services.sale_scraper import SaleScraper
+
             scraper = SaleScraper()
             results = scraper.scrape(brand)
             if not results:
@@ -212,10 +220,12 @@ def brand_prices_add_to_pipeline():
         return redirect(url_for("main.brand_prices_dashboard", brand=brand, category=category))
 
     existing = db.session.scalar(
-        db.select(Product).filter(
+        db.select(Product)
+        .filter(
             Product.brand == record.brand,
             Product.name == record.product_name,
-        ).limit(1)
+        )
+        .limit(1)
     )
     if existing:
         flash(f"「{record.product_name}」は既に出品候補に存在します", "warning")
@@ -261,28 +271,41 @@ def brand_prices_export():
 
     buf = io.StringIO()
     writer = csv.writer(buf)
-    writer.writerow([
-        "商品名", "仕入れ原価(JPY)", "送料", "関税", "総コスト",
-        "販売価格", "利益額", "利益率", "判定",
-        "BUYMA商品名", "マッチスコア", "状態",
-    ])
+    writer.writerow(
+        [
+            "商品名",
+            "仕入れ原価(JPY)",
+            "送料",
+            "関税",
+            "総コスト",
+            "販売価格",
+            "利益額",
+            "利益率",
+            "判定",
+            "BUYMA商品名",
+            "マッチスコア",
+            "状態",
+        ]
+    )
     for item in comparison:
         if item.get("profit") is None:
             continue
-        writer.writerow([
-            item["product_name"],
-            int(item.get("cheapest_jpy", 0)),
-            int(item.get("shipping_cost", 0)),
-            int(item.get("customs_duty", 0)),
-            int(item.get("total_cost", 0)),
-            int(item.get("buyma_suggested_price", 0)),
-            int(item.get("profit", 0)),
-            f"{item.get('profit_rate', 0) * 100:.1f}%",
-            "OK" if item.get("is_profitable") else "NG",
-            item.get("buyma_matched_name", ""),
-            f"{item.get('buyma_match_score', 0) * 100:.0f}%" if item.get("buyma_match_score") else "",
-            item.get("buyma_status", ""),
-        ])
+        writer.writerow(
+            [
+                item["product_name"],
+                int(item.get("cheapest_jpy", 0)),
+                int(item.get("shipping_cost", 0)),
+                int(item.get("customs_duty", 0)),
+                int(item.get("total_cost", 0)),
+                int(item.get("buyma_suggested_price", 0)),
+                int(item.get("profit", 0)),
+                f"{item.get('profit_rate', 0) * 100:.1f}%",
+                "OK" if item.get("is_profitable") else "NG",
+                item.get("buyma_matched_name", ""),
+                f"{item.get('buyma_match_score', 0) * 100:.0f}%" if item.get("buyma_match_score") else "",
+                item.get("buyma_status", ""),
+            ]
+        )
 
     output = make_response(buf.getvalue())
     output.headers["Content-Type"] = "text/csv; charset=utf-8-sig"
@@ -294,8 +317,6 @@ def brand_prices_export():
 @login_required
 def brand_prices_search_buyma():
     """BUYMA販売価格を自動検索してDBに反映。"""
-    from app.extensions import db
-    from app.models.brand_price import BrandPrice
 
     brand = request.form.get("brand", "Gucci")
     category = request.args.get("category", request.form.get("category", "bag"))
@@ -309,9 +330,7 @@ def brand_prices_search_buyma():
 
     comparison = brand_price_service.get_price_comparison(brand)
     products = [
-        {"product_name": item["product_name"], "brand": brand}
-        for item in comparison
-        if item.get("cheapest_jpy")
+        {"product_name": item["product_name"], "brand": brand} for item in comparison if item.get("cheapest_jpy")
     ]
 
     if not products:
@@ -354,12 +373,16 @@ def api_buyma_search_single():
     if brand in BUYMA_UNAVAILABLE_BRANDS:
         return jsonify({"status": "skipped", "reason": "unavailable_brand"})
 
-    rows = db.session.execute(
-        db.select(BrandPrice).filter(
-            BrandPrice.brand == brand,
-            BrandPrice.product_name == product_name,
+    rows = (
+        db.session.execute(
+            db.select(BrandPrice).filter(
+                BrandPrice.brand == brand,
+                BrandPrice.product_name == product_name,
+            )
         )
-    ).scalars().all()
+        .scalars()
+        .all()
+    )
 
     # #4 キャッシュ判定
     if rows:
@@ -367,12 +390,14 @@ def api_buyma_search_single():
         if newest.buyma_searched_at and newest.buyma_status == "matched":
             age = _utcnow() - newest.buyma_searched_at
             if age.days < CACHE_DAYS:
-                return jsonify({
-                    "status": "cached",
-                    "buyma_price": newest.buyma_price,
-                    "buyma_name": newest.buyma_matched_name,
-                    "match_score": newest.buyma_match_score,
-                })
+                return jsonify(
+                    {
+                        "status": "cached",
+                        "buyma_price": newest.buyma_price,
+                        "buyma_name": newest.buyma_matched_name,
+                        "match_score": newest.buyma_match_score,
+                    }
+                )
 
     # #9 ブランド別閾値
     threshold = BRAND_THRESHOLDS.get(brand, DEFAULT_THRESHOLD)
@@ -412,13 +437,15 @@ def api_buyma_search_single():
 
     for row in rows:
         if row.buyma_price and row.buyma_price != match["buyma_price"]:
-            db.session.add(BuymaPriceHistory(
-                brand_price_id=row.id,
-                buyma_price=row.buyma_price,
-                buyma_matched_name=row.buyma_matched_name,
-                match_score=row.buyma_match_score,
-                source=row.buyma_price_source or "previous",
-            ))
+            db.session.add(
+                BuymaPriceHistory(
+                    brand_price_id=row.id,
+                    buyma_price=row.buyma_price,
+                    buyma_matched_name=row.buyma_matched_name,
+                    match_score=row.buyma_match_score,
+                    source=row.buyma_price_source or "previous",
+                )
+            )
         row.buyma_price = match["buyma_price"]
         row.buyma_price_source = f"buyma_search({match['match_score']:.2f})"
         row.buyma_matched_name = match["buyma_name"]
@@ -427,13 +454,15 @@ def api_buyma_search_single():
         row.buyma_status = "matched"
     db.session.commit()
 
-    return jsonify({
-        "status": "matched",
-        "buyma_price": match["buyma_price"],
-        "buyma_name": match["buyma_name"],
-        "match_score": match["match_score"],
-        "match_count": match["match_count"],
-    })
+    return jsonify(
+        {
+            "status": "matched",
+            "buyma_price": match["buyma_price"],
+            "buyma_name": match["buyma_name"],
+            "match_score": match["match_score"],
+            "match_count": match["match_count"],
+        }
+    )
 
 
 @bp.get("/api/tasks/<task_id>/status")
@@ -490,7 +519,8 @@ def price_comparison_search():
             category=category,
         )
         profit_data = price_comparison_service.calculate_comparison_profit(
-            comparison, category=category,
+            comparison,
+            category=category,
         )
 
     return render_template(
@@ -591,20 +621,22 @@ def api_pipeline_results():
 
     results = []
     for r in rows:
-        results.append({
-            "id": r.id,
-            "product_name": r.product_name,
-            "color": r.color,
-            "model_number": r.model_number,
-            "price_usd": r.price_original,
-            "price_jpy": r.price_jpy,
-            "buyma_price": r.buyma_price,
-            "buyma_matched_name": r.buyma_matched_name,
-            "buyma_match_score": r.buyma_match_score,
-            "source_url": r.source_url,
-            "purchase_verified": True,
-            "selling_verified": True,
-        })
+        results.append(
+            {
+                "id": r.id,
+                "product_name": r.product_name,
+                "color": r.color,
+                "model_number": r.model_number,
+                "price_usd": r.price_original,
+                "price_jpy": r.price_jpy,
+                "buyma_price": r.buyma_price,
+                "buyma_matched_name": r.buyma_matched_name,
+                "buyma_match_score": r.buyma_match_score,
+                "source_url": r.source_url,
+                "purchase_verified": True,
+                "selling_verified": True,
+            }
+        )
 
     return jsonify({"brand": brand, "category": category, "results": results, "total": len(results)})
 
@@ -620,6 +652,7 @@ def price_comparison_scrape_and_compare():
     # Celery非同期スクレイプがあれば利用、なければ同期
     try:
         from flask import current_app
+
         celery_app = getattr(current_app, "celery", None)
         if celery_app:
             task = celery_app.send_task(
@@ -636,7 +669,11 @@ def price_comparison_scrape_and_compare():
     except Exception as e:
         flash(f"スクレイプエラー: {safe_error_msg(e)}", "error")
 
-    return redirect(url_for(
-        "main.price_comparison_search",
-        brand=brand, q=query, category=category,
-    ))
+    return redirect(
+        url_for(
+            "main.price_comparison_search",
+            brand=brand,
+            q=query,
+            category=category,
+        )
+    )

@@ -68,9 +68,7 @@ class SessionLifecycleMixin:
 
         if site.upper() == "MONCLER_OFFICIAL" and not likely_plp:
             try:
-                gate_links_count = await page.evaluate(
-                    "() => document.querySelectorAll(\"a[href*='/en-']\").length"
-                )
+                gate_links_count = await page.evaluate("() => document.querySelectorAll(\"a[href*='/en-']\").length")
                 if gate_links_count and gate_links_count >= 10:
                     self.logger.warning(
                         f"[Moncler] Locale gate detected ({gate_links_count} links). Forcing navigation to PLP."
@@ -142,9 +140,13 @@ class SessionLifecycleMixin:
             raise ValueError("SessionManager failed to provision a Playwright page.")
 
         return await self._bootstrap_session_page(
-            page=page, site=site, site_config=site_config,
-            run_context=run_context, settings=settings,
-            target_url=target_url, likely_plp=likely_plp,
+            page=page,
+            site=site,
+            site_config=site_config,
+            run_context=run_context,
+            settings=settings,
+            target_url=target_url,
+            likely_plp=likely_plp,
         )
 
     async def _close_session(

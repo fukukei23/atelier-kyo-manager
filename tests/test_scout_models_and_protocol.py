@@ -1,7 +1,7 @@
 """Tests for app/utils/scout_models.py and app/utils/llm_protocol.py"""
-import pytest
-from app.utils.scout_models import SiteSelectors, SiteConfig, default_sites
+
 from app.utils.llm_protocol import LLMClient
+from app.utils.scout_models import SiteConfig, SiteSelectors, default_sites
 
 
 class TestSiteSelectors:

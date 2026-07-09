@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from datetime import date
 
-import pytest
-
 from app.extensions import db
 
 
@@ -28,6 +26,7 @@ class TestShipmentNotificationRoutes:
     def test_shipment_notification_create_success(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.order import Order
+
             o = Order(order_number="SN-001", product_name="TestSN")
             db.session.add(o)
             db.session.commit()
@@ -43,6 +42,7 @@ class TestShipmentNotificationRoutes:
         with routes_app.app_context():
             from app.models.order import Order
             from app.models.shipment_notification import ShipmentNotification
+
             o = Order(order_number="SN-002", product_name="TestSN2")
             db.session.add(o)
             db.session.flush()
@@ -57,6 +57,7 @@ class TestShipmentNotificationRoutes:
         with routes_app.app_context():
             from app.models.order import Order
             from app.models.shipment_notification import ShipmentNotification
+
             o = Order(order_number="SN-003", product_name="TestSN3")
             db.session.add(o)
             db.session.flush()
@@ -71,6 +72,7 @@ class TestShipmentNotificationRoutes:
         with routes_app.app_context():
             from app.models.order import Order
             from app.models.shipment_notification import ShipmentNotification
+
             o = Order(order_number="SN-004", product_name="TestSN4")
             db.session.add(o)
             db.session.flush()
@@ -121,9 +123,13 @@ class TestListingProgressRoutes:
     def test_listing_progress_delete(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.listing_progress import ListingProgress
+
             lp = ListingProgress(
-                record_date=date.today(), listings_count=10,
-                target_daily=20, target_monthly=600, cumulative_monthly=10,
+                record_date=date.today(),
+                listings_count=10,
+                target_daily=20,
+                target_monthly=600,
+                cumulative_monthly=10,
             )
             db.session.add(lp)
             db.session.commit()
@@ -148,8 +154,13 @@ class TestFaqTemplateRouteExtras:
     def test_faq_match_api_match_multiple(self, routes_auth_client, routes_app):
         with routes_app.app_context():
             from app.models.faq_template import FaqTemplate
-            db.session.add(FaqTemplate(category="shipping", question_pattern="送料", answer_template="送料無料", is_active=True))
-            db.session.add(FaqTemplate(category="return", question_pattern="返品", answer_template="返品OK", is_active=True))
+
+            db.session.add(
+                FaqTemplate(category="shipping", question_pattern="送料", answer_template="送料無料", is_active=True)
+            )
+            db.session.add(
+                FaqTemplate(category="return", question_pattern="返品", answer_template="返品OK", is_active=True)
+            )
             db.session.commit()
         r = routes_auth_client.post(
             "/api/faq-match",

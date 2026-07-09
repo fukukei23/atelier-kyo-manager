@@ -1,16 +1,17 @@
 """Tests for pure functions in app/extractors/product_info_extractor.py - Issue #84"""
+
 import pytest
 
 try:
     from bs4 import BeautifulSoup
+
     BS4_AVAILABLE = True
 except ImportError:
     BS4_AVAILABLE = False
 
 from app.extractors.product_info_extractor import (
-    extract_product_info,
-    _collect_ldjson,
     _collect_inline_json_candidates,
+    _collect_ldjson,
     _dig_price_in_dict,
     _extract_json_objects_from_text,
     _first_yen_from_text,
@@ -18,10 +19,11 @@ from app.extractors.product_info_extractor import (
     _norm_currency,
     _normalize_and_to_int,
     _parse_price_text,
+    extract_product_info,
 )
 
-
 # ── _normalize_and_to_int ─────────────────────────────────────────────────────
+
 
 class TestNormalizeAndToInt:
     def test_none_returns_none(self):
@@ -54,6 +56,7 @@ class TestNormalizeAndToInt:
 
 # ── _first_yen_from_text ──────────────────────────────────────────────────────
 
+
 class TestFirstYenFromText:
     def test_empty_returns_none(self):
         assert _first_yen_from_text("") is None
@@ -81,6 +84,7 @@ class TestFirstYenFromText:
 
 
 # ── _norm_currency ────────────────────────────────────────────────────────────
+
 
 class TestNormCurrency:
     def test_none_returns_none(self):
@@ -119,6 +123,7 @@ class TestNormCurrency:
 
 # ── _parse_price_text ─────────────────────────────────────────────────────────
 
+
 class TestParsePriceText:
     def test_empty_returns_none_tuple(self):
         assert _parse_price_text("") == (None, None)
@@ -152,6 +157,7 @@ class TestParsePriceText:
 
 
 # ── _flatten_dicts ────────────────────────────────────────────────────────────
+
 
 class TestFlattenDicts:
     def test_empty_dict(self):
@@ -188,6 +194,7 @@ class TestFlattenDicts:
 
 # ── _extract_json_objects_from_text ───────────────────────────────────────────
 
+
 class TestExtractJsonObjectsFromText:
     def test_empty_returns_empty(self):
         assert _extract_json_objects_from_text("") == []
@@ -221,6 +228,7 @@ class TestExtractJsonObjectsFromText:
 
 # ── _dig_price_in_dict ────────────────────────────────────────────────────────
 
+
 class TestDigPriceInDict:
     def test_empty_dict_returns_none(self):
         assert _dig_price_in_dict({}) == (None, None)
@@ -239,9 +247,7 @@ class TestDigPriceInDict:
         assert cur == "JPY"
 
     def test_offers_price(self):
-        amt, cur = _dig_price_in_dict({
-            "offers": {"price": "150000", "priceCurrency": "JPY"}
-        })
+        amt, cur = _dig_price_in_dict({"offers": {"price": "150000", "priceCurrency": "JPY"}})
         assert amt == 150000.0
         assert cur == "JPY"
 
@@ -265,12 +271,14 @@ class TestDigPriceInDict:
 
     def test_offers_list(self):
         """offers がリストの場合は最初のマッチを返す"""
-        amt, cur = _dig_price_in_dict({
-            "offers": [
-                {"price": 300.0, "priceCurrency": "USD"},
-                {"price": 400.0, "priceCurrency": "EUR"},
-            ]
-        })
+        amt, cur = _dig_price_in_dict(
+            {
+                "offers": [
+                    {"price": 300.0, "priceCurrency": "USD"},
+                    {"price": 400.0, "priceCurrency": "EUR"},
+                ]
+            }
+        )
         assert amt == 300.0
 
     def test_no_price_key_returns_none(self):
@@ -279,6 +287,7 @@ class TestDigPriceInDict:
 
 
 # ── _collect_ldjson ───────────────────────────────────────────────────────────
+
 
 @pytest.mark.skipif(not BS4_AVAILABLE, reason="BeautifulSoup not installed")
 class TestCollectLdjson:
@@ -290,29 +299,30 @@ class TestCollectLdjson:
         assert _collect_ldjson(soup) == []
 
     def test_parses_product_ldjson(self):
-        html = '''<html><head>
+        html = """<html><head>
         <script type="application/ld+json">{"@type":"Product","name":"Coat","price":50000}</script>
-        </head></html>'''
+        </head></html>"""
         result = _collect_ldjson(self._soup(html))
         assert any(r.get("@type") == "Product" for r in result)
 
     def test_skips_invalid_json(self):
-        html = '''<html><head>
+        html = """<html><head>
         <script type="application/ld+json">{invalid json}</script>
-        </head></html>'''
+        </head></html>"""
         result = _collect_ldjson(self._soup(html))
         assert result == []
 
     def test_flattens_nested(self):
-        html = '''<html><head>
+        html = """<html><head>
         <script type="application/ld+json">{"@type":"Product","offers":{"price":1000}}</script>
-        </head></html>'''
+        </head></html>"""
         result = _collect_ldjson(self._soup(html))
         # includes {"price":1000} as flattened
         assert any("price" in r for r in result)
 
 
 # ── _collect_inline_json_candidates ──────────────────────────────────────────
+
 
 @pytest.mark.skipif(not BS4_AVAILABLE, reason="BeautifulSoup not installed")
 class TestCollectInlineJsonCandidates:
@@ -325,17 +335,17 @@ class TestCollectInlineJsonCandidates:
         assert isinstance(result, list)
 
     def test_extracts_next_data(self):
-        html = '''<html><head>
+        html = """<html><head>
         <script>var data = {"name":"Coat","price":50000};</script>
-        </head></html>'''
+        </head></html>"""
         result = _collect_inline_json_candidates(self._soup(html))
         # _flatten_dicts でネストが展開されるので何らかのdictが返る
         assert isinstance(result, list)
 
     def test_skips_ldjson_scripts(self):
-        html = '''<html><head>
+        html = """<html><head>
         <script type="application/ld+json">{"@type":"Product"}</script>
-        </head></html>'''
+        </head></html>"""
         result = _collect_inline_json_candidates(self._soup(html))
         # ld+json はスキップされる
         assert not any(r.get("@type") == "Product" for r in result)
@@ -343,47 +353,48 @@ class TestCollectInlineJsonCandidates:
 
 # ── extract_product_info ──────────────────────────────────────────────────────
 
+
 @pytest.mark.skipif(not BS4_AVAILABLE, reason="BeautifulSoup not installed")
 class TestExtractProductInfo:
     def test_og_title_extracted(self):
-        html = '''<html><head>
+        html = """<html><head>
         <meta property="og:title" content="Moncler Monaco Coat">
-        </head><body></body></html>'''
+        </head><body></body></html>"""
         result = extract_product_info(html, {})
         assert result["title"] == "Moncler Monaco Coat"
 
     def test_fallback_to_title_tag(self):
-        html = '''<html><head><title>Test Product</title></head><body></body></html>'''
+        html = """<html><head><title>Test Product</title></head><body></body></html>"""
         result = extract_product_info(html, {})
         assert result["title"] == "Test Product"
 
     def test_og_brand_extracted(self):
-        html = '''<html><head>
+        html = """<html><head>
         <meta property="og:site_name" content="MONCLER">
-        </head><body></body></html>'''
+        </head><body></body></html>"""
         result = extract_product_info(html, {})
         assert result["brand"] == "MONCLER"
 
     def test_price_from_meta(self):
-        html = '''<html><head>
+        html = """<html><head>
         <meta property="product:price:amount" content="150000">
         <meta property="product:price:currency" content="JPY">
-        </head><body></body></html>'''
+        </head><body></body></html>"""
         result = extract_product_info(html, {})
         assert result["price"] == 150000.0
         assert result["currency"] == "JPY"
 
     def test_price_from_dom_element(self):
-        html = '''<html><body>
+        html = """<html><body>
         <span class="price">¥50,000</span>
-        </body></html>'''
+        </body></html>"""
         result = extract_product_info(html, {})
         assert result["price"] == 50000.0
 
     def test_price_from_ldjson(self):
-        html = '''<html><head>
+        html = """<html><head>
         <script type="application/ld+json">{"@type":"Product","offers":{"price":"99000","priceCurrency":"JPY"}}</script>
-        </head><body></body></html>'''
+        </head><body></body></html>"""
         result = extract_product_info(html, {})
         assert result["price"] == 99000.0
 
@@ -401,9 +412,9 @@ class TestExtractProductInfo:
         assert "source_flags" in result
 
     def test_custom_price_selector(self):
-        html = '''<html><body>
+        html = """<html><body>
         <div id="my-price">¥120,000</div>
-        </body></html>'''
+        </body></html>"""
         config = {"selectors": {"pdp": {"price": ["#my-price"]}}}
         result = extract_product_info(html, config)
         assert result["price"] == 120000.0

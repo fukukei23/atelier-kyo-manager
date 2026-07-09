@@ -10,8 +10,6 @@ from __future__ import annotations
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 
-from app.core.timezone import _utcnow
-from app.models.enums import ListingStatus, PipelineStatus
 from app.config.constants import (
     DOMESTIC_COMMISSION_RATE,
     OVERSEAS_COMMISSION_RATE,
@@ -19,7 +17,9 @@ from app.config.constants import (
 )
 from app.core.pricing import PricingInput, calculate_pricing
 from app.core.pricing.schemas import nz
+from app.core.timezone import _utcnow
 from app.extensions import db
+from app.models.enums import ListingStatus, PipelineStatus
 
 # ブランド階層判定キーワード
 _HIGH_BRAND_KEYWORDS = (
@@ -95,7 +95,9 @@ class Product(db.Model):
     item_category = db.Column(String(64), nullable=True)  # 品目カテゴリ（関税率自動決定用）
 
     # --- FR-002/003 パイプライン ---
-    pipeline_status = db.Column(String(16), default=PipelineStatus.PENDING, index=True)  # pending/running/success/partial/failed
+    pipeline_status = db.Column(
+        String(16), default=PipelineStatus.PENDING, index=True
+    )  # pending/running/success/partial/failed
     pipeline_error = db.Column(Text, nullable=True)
     processed_images = db.Column(Text, nullable=True)  # JSON: ["path1.png", ...]
     pipeline_run_at = db.Column(DateTime, nullable=True)

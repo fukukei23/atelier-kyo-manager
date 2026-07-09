@@ -156,10 +156,15 @@ class PlpOverlayMixin:
 
         if not remove_selectors:
             remove_selectors = [
-                ".overlay", ".backdrop", ".modal-backdrop",
-                "#onetrust-banner-sdk", ".cookie-banner",
-                '[aria-modal="true"]', ".cmp-ui-overlay",
-                ".cmp-modal", ".drawer--open",
+                ".overlay",
+                ".backdrop",
+                ".modal-backdrop",
+                "#onetrust-banner-sdk",
+                ".cookie-banner",
+                '[aria-modal="true"]',
+                ".cmp-ui-overlay",
+                ".cmp-modal",
+                ".drawer--open",
             ]
 
         if not remove_selectors and not remove_body_classes:

@@ -27,4 +27,3 @@ class RegionRecommendation(db.Model):
         if self.reliability_score is None or self.risk_score is None or self.avg_profit_rate is None:
             return None
         return self.reliability_score * 0.4 + (100 - self.risk_score) * 0.3 + self.avg_profit_rate * 0.3
-

@@ -1,5 +1,6 @@
 """atelier-kyo-manager ルートテスト"""
 
+import contextlib
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,10 +25,8 @@ def app():
         db.create_all()
         yield app
         db.session.remove()
-        try:
-            db.drop_all()
-        except Exception:
-            pass  # テーブルがない場合は無視
+        with contextlib.suppress(Exception):
+            db.drop_all()  # テーブルがない場合は無視
 
 
 @pytest.fixture()

@@ -26,7 +26,6 @@ import re
 import sys
 import time
 from datetime import datetime
-from pathlib import Path
 from urllib.parse import quote_plus, urlparse
 
 from playwright.sync_api import Browser, BrowserContext, Page, Route, sync_playwright
@@ -36,7 +35,7 @@ from app.core.timezone import _utcnow
 from app.utils.fx_utils import get_fx_table_jpy, parse_fx_rates_str
 from app.utils.scout_config import APP_ROOT, load_config_sites
 from app.utils.scout_currency import convert_price, detect_currency, to_number
-from app.utils.scout_models import SiteConfig, SiteSelectors
+from app.utils.scout_models import SiteConfig
 
 # ---------------------------------------------------------
 # パス/出力設定

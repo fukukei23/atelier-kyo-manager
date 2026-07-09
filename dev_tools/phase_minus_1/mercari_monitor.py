@@ -30,15 +30,10 @@ from pathlib import Path
 from playwright.sync_api import Page, sync_playwright
 from tracker import ListingTracker
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("mercari_monitor")
 
-SEARCH_URL = (
-    "https://jp.mercari.com/search?keyword={kw}"
-    "&status=on_sale&sort=created_time&order=desc"
-)
+SEARCH_URL = "https://jp.mercari.com/search?keyword={kw}&status=on_sale&sort=created_time&order=desc"
 ITEM_URL = "https://jp.mercari.com/item/{item_id}"
 PRICE_RE = re.compile(r"[\d,]+")
 
@@ -219,10 +214,7 @@ def check_sold(page: Page, item_id: str) -> bool:
     return ("売り切れました" in body) or ("SOLD OUT" in body.upper())
 
 
-SOLD_SEARCH_URL = (
-    "https://jp.mercari.com/search?keyword={kw}"
-    "&status=sold_out&sort=created_time&order=desc"
-)
+SOLD_SEARCH_URL = "https://jp.mercari.com/search?keyword={kw}&status=sold_out&sort=created_time&order=desc"
 
 
 def _find_known_sold_items(page: Page, keyword: str, limit: int = 3) -> list[str]:
@@ -283,9 +275,7 @@ def run_once(page: Page, tracker: ListingTracker, watches: list[dict]) -> None:
     now = datetime.now()
     for w in watches:
         try:
-            added = discover_candidates(
-                page, tracker, w["keyword"], int(w["price_ceiling"]), now
-            )
+            added = discover_candidates(page, tracker, w["keyword"], int(w["price_ceiling"]), now)
             logger.info(f"[{w['keyword']}] 発見周: 新規{added}件")
         except Exception as exc:  # noqa: BLE001
             # ネットワーク一時障害等で1キーワード失敗しても24h走行を止めない
@@ -297,17 +287,13 @@ def run_once(page: Page, tracker: ListingTracker, watches: list[dict]) -> None:
             if check_sold(page, item_id):
                 rec = tracker.mark_sold(datetime.now(), item_id)
                 if rec:
-                    logger.info(
-                        f"SOLD確定 {item_id} 滞留{rec['residence_min']}分"
-                    )
+                    logger.info(f"SOLD確定 {item_id} 滞留{rec['residence_min']}分")
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"SOLDチェック失敗 {item_id}: {exc}")
         _human_pause()
 
 
-def dump_results(
-    tracker: ListingTracker, out_dir: Path, self_check_ok: bool | None
-) -> None:
+def dump_results(tracker: ListingTracker, out_dir: Path, self_check_ok: bool | None) -> None:
     """売却記録CSVとサマリーJSONを書き出す.
 
     self_check_ok: 直近の自己診断結果（True=正常/False=SOLD検知が壊れている疑い/

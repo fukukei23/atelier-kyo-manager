@@ -61,21 +61,25 @@ class TestMakeItem:
 class TestBrandPriceScraper:
     def test_scraper_headless_default(self):
         from app.services.brand_price_scraper import BrandPriceScraper
+
         scraper = BrandPriceScraper()
         assert scraper.headless is True
 
     def test_scraper_headless_false(self):
         from app.services.brand_price_scraper import BrandPriceScraper
+
         scraper = BrandPriceScraper(headless=False)
         assert scraper.headless is False
 
     def test_scraper_has_scrape_method(self):
         from app.services.brand_price_scraper import BrandPriceScraper
+
         scraper = BrandPriceScraper()
         assert callable(scraper.scrape)
 
     def test_scraper_private_methods(self):
         from app.services.brand_price_scraper import BrandPriceScraper
+
         scraper = BrandPriceScraper()
         assert hasattr(scraper, "_init_browser")
         assert hasattr(scraper, "_close_browser")
@@ -97,7 +101,7 @@ class TestScraperPatterns:
         assert re.compile(pattern) is not None
 
     def test_loewe_pattern(self):
-        pattern = r'>([^<]{5,60}?)<.*?¥([\d,]+)'
+        pattern = r">([^<]{5,60}?)<.*?¥([\d,]+)"
         assert re.compile(pattern) is not None
 
     def test_balenciaga_pattern(self):

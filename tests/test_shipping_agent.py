@@ -1,7 +1,7 @@
 """Tests for app/utils/shipping_agent.py - Issue #81 カバレッジ向上"""
+
 import asyncio
 import logging
-import os
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -13,16 +13,19 @@ from app.utils.shipping_agent import ShippingAgent, _click_first, _fill_first
 @pytest.fixture(scope="function")
 def app():
     application = create_app()
-    application.config.update({
-        "TESTING": True,
-        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-        "SECRET_KEY": "test-secret",
-        "WTF_CSRF_ENABLED": False,
-    })
+    application.config.update(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "SECRET_KEY": "test-secret",
+            "WTF_CSRF_ENABLED": False,
+        }
+    )
     return application
 
 
 # ── _click_first ─────────────────────────────────────────────────────────────
+
 
 class TestClickFirst:
     def _make_locator(self, count=1, visible=True):
@@ -87,6 +90,7 @@ class TestClickFirst:
 
 # ── _fill_first ──────────────────────────────────────────────────────────────
 
+
 class TestFillFirst:
     def _make_locator(self, count=1, visible=True):
         loc = AsyncMock()
@@ -146,6 +150,7 @@ class TestFillFirst:
 
 # ── ShippingAgent.__init__ ───────────────────────────────────────────────────
 
+
 class TestShippingAgentInit:
     @patch("os.makedirs")
     def test_headless_default_when_no_env(self, _mock, monkeypatch):
@@ -197,6 +202,7 @@ class TestShippingAgentInit:
 
 
 # ── ShippingAgent._get_credentials ──────────────────────────────────────────
+
 
 class TestGetCredentials:
     @patch("os.makedirs")
@@ -254,6 +260,7 @@ class TestGetCredentials:
             monkeypatch.delenv(key, raising=False)
         with app.app_context():
             from flask import current_app
+
             current_app.config["BUYANDSHIP_EMAIL"] = "cfg@example.com"
             current_app.config["BUYANDSHIP_PASSWORD"] = "cfgpass"
             agent = ShippingAgent()
@@ -263,6 +270,7 @@ class TestGetCredentials:
 
 
 # ── ShippingAgent._pick_working_page ────────────────────────────────────────
+
 
 class TestPickWorkingPage:
     @patch("os.makedirs")
@@ -324,6 +332,7 @@ class TestPickWorkingPage:
 
 
 # ── ShippingAgent._close_blank_tabs ─────────────────────────────────────────
+
 
 class TestCloseBlankTabs:
     @patch("os.makedirs")
@@ -389,6 +398,7 @@ class TestCloseBlankTabs:
 
 # ── ShippingAgent._login_if_needed ──────────────────────────────────────────
 
+
 class TestLoginIfNeeded:
     """_login_if_needed のテスト（既ログイン時はスキップ）"""
 
@@ -423,6 +433,7 @@ class TestLoginIfNeeded:
 
 
 # ── ShippingAgent._do_login_flow ─────────────────────────────────────────────
+
 
 class TestDoLoginFlow:
     """_do_login_flow のテスト（ログインフロー）"""
@@ -474,6 +485,7 @@ class TestDoLoginFlow:
 
 
 # ── ShippingAgent._extract_warehouses ───────────────────────────────────────
+
 
 class TestExtractWarehouses:
     """_extract_warehouses のテスト（Playwright locator をモック化）"""
@@ -574,6 +586,7 @@ class TestExtractWarehouses:
 
 # ── ShippingAgent.get_warehouses_by_country ──────────────────────────────────
 
+
 class TestGetWarehousesByCountry:
     """get_warehouses_by_country のテスト"""
 
@@ -602,6 +615,7 @@ class TestGetWarehousesByCountry:
 
 
 # ── ShippingAgent.fetch_warehouses ───────────────────────────────────────────
+
 
 class TestFetchWarehouses:
     @patch("os.makedirs")

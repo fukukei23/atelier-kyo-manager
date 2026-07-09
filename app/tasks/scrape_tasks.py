@@ -17,8 +17,8 @@ logger = logging.getLogger(__name__)
 def scrape_brand_prices(self, brand: str, sites: list[str] | None = None) -> dict:
     """公式ブランドサイトの価格をスクレイピングして保存する."""
     try:
-        from app.services.brand_price_scraper import BrandPriceScraper
         from app.services import brand_price_service
+        from app.services.brand_price_scraper import BrandPriceScraper
 
         scraper = BrandPriceScraper(headless=True)
         results = scraper.scrape(brand=brand, sites=sites)
@@ -39,8 +39,8 @@ def scrape_brand_prices(self, brand: str, sites: list[str] | None = None) -> dic
 def scrape_sale_prices(self, brand: str, category: str = "bag") -> dict:
     """YOOX/SSENSE セール価格をスクレイピングして保存する."""
     try:
-        from app.services.sale_scraper import SaleScraper
         from app.services import brand_price_service
+        from app.services.sale_scraper import SaleScraper
 
         scraper = SaleScraper()
         results = scraper.scrape(brand, category=category)

@@ -7,7 +7,6 @@
 # ================================================================
 import json
 import logging
-import os
 
 from dotenv import load_dotenv
 

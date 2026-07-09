@@ -1,6 +1,9 @@
 """Tests for app/routes/misc.py"""
-import pytest
+
 from unittest.mock import patch
+
+import pytest
+
 from app import create_app
 from app.extensions import db
 
@@ -8,13 +11,15 @@ from app.extensions import db
 @pytest.fixture(scope="function")
 def app():
     application = create_app()
-    application.config.update({
-        "TESTING": True,
-        "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
-        "WTF_CSRF_ENABLED": False,
-        "SECRET_KEY": "test-secret",
-        "LOGIN_DISABLED": True,
-    })
+    application.config.update(
+        {
+            "TESTING": True,
+            "SQLALCHEMY_DATABASE_URI": "sqlite:///:memory:",
+            "WTF_CSRF_ENABLED": False,
+            "SECRET_KEY": "test-secret",
+            "LOGIN_DISABLED": True,
+        }
+    )
     with application.app_context():
         db.create_all()
         yield application
@@ -71,6 +76,7 @@ class TestWarehouseApiRoute:
 
     def test_shipping_unavailable_returns_503(self, client):
         import app.routes.misc as misc_module
+
         original = misc_module._shipping_ok
         try:
             misc_module._shipping_ok = False
@@ -82,6 +88,7 @@ class TestWarehouseApiRoute:
     @patch("app.routes.misc.ShippingAgent")
     def test_valid_country_returns_200(self, mock_agent, client):
         import app.routes.misc as misc_module
+
         original = misc_module._shipping_ok
         try:
             misc_module._shipping_ok = True

@@ -2,6 +2,7 @@
 
 Q5 decision: Python str Enum only (DB CHECK constraints deferred).
 """
+
 from __future__ import annotations
 
 from enum import StrEnum

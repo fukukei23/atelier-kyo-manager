@@ -11,11 +11,6 @@ from typing import Any
 
 from playwright.async_api import BrowserContext, Page
 
-from app.agents.browser.moncler_plp_link_extractor import (
-    _get_moncler_rejection_reason,
-    _is_valid_moncler_pdp_url,
-    extract_moncler_pdp_links,
-)
 from app.agents.browser.product_extractor import ProductExtractor
 from app.agents.browser.session_manager import EXTERNAL_BLOCKLIST_HOSTS
 from app.core.run_context import RunContext

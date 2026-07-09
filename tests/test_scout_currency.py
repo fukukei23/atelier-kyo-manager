@@ -1,6 +1,6 @@
 """Tests for app/utils/scout_currency.py"""
-import pytest
-from app.utils.scout_currency import detect_currency, to_number, convert_price
+
+from app.utils.scout_currency import convert_price, detect_currency, to_number
 
 
 class TestDetectCurrency:

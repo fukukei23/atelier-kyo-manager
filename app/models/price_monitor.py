@@ -13,9 +13,7 @@ class PriceMonitor(db.Model):
     __tablename__ = "price_monitor"
 
     id = db.Column(Integer, primary_key=True)
-    brand_price_id = db.Column(
-        Integer, db.ForeignKey("brand_price.id"), nullable=True
-    )
+    brand_price_id = db.Column(Integer, db.ForeignKey("brand_price.id"), nullable=True)
     # 非正規化（BrandPriceは再スクレイプで上書きされるため保持）
     source_url = db.Column(String(1024), nullable=False)
     brand = db.Column(String(128), nullable=False)
@@ -47,16 +45,9 @@ class PriceMonitor(db.Model):
     updated_at = db.Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     # リレーション
-    brand_price = db.relationship(
-        "BrandPrice", backref=db.backref("price_monitor", uselist=False)
-    )
+    brand_price = db.relationship("BrandPrice", backref=db.backref("price_monitor", uselist=False))
 
-    __table_args__ = (
-        Index("ix_price_monitor_active", "is_active", "last_checked_at"),
-    )
+    __table_args__ = (Index("ix_price_monitor_active", "is_active", "last_checked_at"),)
 
     def __repr__(self) -> str:
-        return (
-            f"<PriceMonitor brand={self.brand!r} "
-            f"profitable={self.is_profitable}>"
-        )
+        return f"<PriceMonitor brand={self.brand!r} profitable={self.is_profitable}>"

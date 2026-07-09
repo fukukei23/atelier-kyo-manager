@@ -14,12 +14,8 @@ def make_celery(app=None):
     from celery import Celery
     from celery.schedules import crontab
 
-    broker_url = os.environ.get(
-        "CELERY_BROKER_URL", "redis://localhost:6379/0"
-    )
-    result_backend = os.environ.get(
-        "CELERY_RESULT_BACKEND", "redis://localhost:6379/0"
-    )
+    broker_url = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
+    result_backend = os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0")
 
     celery = Celery(
         app.import_name if app else "atelier_kyo",
@@ -40,6 +36,7 @@ def make_celery(app=None):
     )
 
     if app:
+
         class ContextTask(celery.Task):
             def __call__(self, *args, **kwargs):
                 with app.app_context():

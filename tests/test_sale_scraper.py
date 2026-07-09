@@ -6,8 +6,8 @@ from unittest.mock import patch
 import pytest
 
 from app.services.sale_scraper import (
-    _YOOX_SLUGS,
     _SSENSE_SLUGS,
+    _YOOX_SLUGS,
     _is_bag,
     _slug_to_name,
 )
@@ -31,7 +31,7 @@ class TestBrandSlugMappings:
             "Balenciaga": "balenciaga",
             "Bottega Veneta": "bottega-veneta",
         }
-        assert _YOOX_SLUGS == expected
+        assert expected == _YOOX_SLUGS
 
     def test_ssense_all_brands(self):
         """All 11 brands should have SSENSE slugs."""
@@ -48,7 +48,7 @@ class TestBrandSlugMappings:
             "Balenciaga": "balenciaga",
             "Bottega Veneta": "bottega-veneta",
         }
-        assert _SSENSE_SLUGS == expected
+        assert expected == _SSENSE_SLUGS
 
     def test_yoox_valentino_has_hyphen(self):
         """Valentino YOOX slug should include -garavani suffix."""
@@ -78,20 +78,23 @@ class TestSlugToName:
 class TestIsBag:
     """Test bag category detection."""
 
-    @pytest.mark.parametrize("keyword,expected", [
-        ("Handbag", True),
-        ("Shoulder Bag", True),
-        ("Tote Bag", True),
-        ("Cross-body Bag", True),
-        ("Clutch", True),
-        ("Mini Bag", True),
-        ("Wallet", True),
-        ("Satchel", True),
-        ("Backpack", True),
-        ("Dress", False),
-        ("Top", False),
-        ("Shoes", False),
-    ])
+    @pytest.mark.parametrize(
+        "keyword,expected",
+        [
+            ("Handbag", True),
+            ("Shoulder Bag", True),
+            ("Tote Bag", True),
+            ("Cross-body Bag", True),
+            ("Clutch", True),
+            ("Mini Bag", True),
+            ("Wallet", True),
+            ("Satchel", True),
+            ("Backpack", True),
+            ("Dress", False),
+            ("Top", False),
+            ("Shoes", False),
+        ],
+    )
     def test_bag_keywords(self, keyword, expected):
         assert _is_bag(keyword) == expected
 
@@ -122,19 +125,19 @@ class TestYooxParsing:
 
     def test_parse_yoox_item_code(self):
         """Item codes should be extracted from image URLs."""
-        html = '''
+        html = """
         <img src="/images/items/45/45886656NN_14_f.jpg" />
 <span>Handbags</span>
         <span>$2,001 (-36%)</span>
-        '''
-        item_code_re = re.compile(r'/items/\d+/([A-Za-z0-9]+)_\d+_\w+\.jpg')
+        """
+        item_code_re = re.compile(r"/items/\d+/([A-Za-z0-9]+)_\d+_\w+\.jpg")
         matches = list(item_code_re.finditer(html))
         assert len(matches) == 1
         assert matches[0].group(1).upper() == "45886656NN"
 
     def test_parse_yoox_price_with_discount(self):
         """Sale prices with discount percentage should be parsed."""
-        price_re = re.compile(r'\$\s*([\d,]+)\s*(?:\(([-\d]+)%\))?')
+        price_re = re.compile(r"\$\s*([\d,]+)\s*(?:\(([-\d]+)%\))?")
         m = price_re.search("$ 2,001 (-36%)")
         assert m is not None
         assert m.group(1) == "2,001"
@@ -142,7 +145,7 @@ class TestYooxParsing:
 
     def test_parse_yoox_price_without_discount(self):
         """Regular prices without discount should be parsed."""
-        price_re = re.compile(r'\$\s*([\d,]+)\s*(?:\(([-\d]+)%\))?')
+        price_re = re.compile(r"\$\s*([\d,]+)\s*(?:\(([-\d]+)%\))?")
         m = price_re.search("$ 2,001")
         assert m is not None
         assert m.group(1) == "2,001"
@@ -155,13 +158,14 @@ class TestSsenseParsing:
     def test_parse_ssense_url_slug(self):
         """Product name should be extracted from SSENSE URL slug."""
         url = "/women/product/gucci/red-rebelle-bag/3426109"
-        slug_match = re.search(r'/product/[^/]+/([^/]+)/\d+$', url)
+        slug_match = re.search(r"/product/[^/]+/([^/]+)/\d+$", url)
         assert slug_match is not None
         assert slug_match.group(1) == "red-rebelle-bag"
 
     def test_parse_ssense_metadata_json(self):
         """SSENSE metadata JSON should be parseable."""
         import json
+
         metadata_str = '{"url": ["/women/product/gucci/bag/123"], "price": [260000], "sku": ["ABC123"]}'
         metadata = json.loads(metadata_str)
         assert len(metadata["url"]) == 1
@@ -171,8 +175,5 @@ class TestSsenseParsing:
     def test_parse_ssense_price_dict(self):
         """SSENSE price can be dict with 'amount' key."""
         price_raw = {"amount": 260000, "currencyCode": "USD"}
-        if isinstance(price_raw, dict):
-            price = float(price_raw.get("amount", 0))
-        else:
-            price = float(price_raw)
+        price = float(price_raw.get("amount", 0)) if isinstance(price_raw, dict) else float(price_raw)
         assert price == 260000.0

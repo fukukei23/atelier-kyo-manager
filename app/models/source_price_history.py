@@ -13,9 +13,7 @@ class SourcePriceHistory(db.Model):
     __tablename__ = "source_price_history"
 
     id = db.Column(Integer, primary_key=True)
-    monitor_id = db.Column(
-        Integer, db.ForeignKey("price_monitor.id"), nullable=False
-    )
+    monitor_id = db.Column(Integer, db.ForeignKey("price_monitor.id"), nullable=False)
     source_price = db.Column(Float, nullable=False)
     source_price_jpy = db.Column(Float, nullable=False)
     exchange_rate = db.Column(Float, nullable=False)
@@ -40,7 +38,4 @@ class SourcePriceHistory(db.Model):
     )
 
     def __repr__(self) -> str:
-        return (
-            f"<SourcePriceHistory monitor={self.monitor_id} "
-            f"price={self.source_price_jpy}>"
-        )
+        return f"<SourcePriceHistory monitor={self.monitor_id} price={self.source_price_jpy}>"

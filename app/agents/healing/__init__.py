@@ -6,3 +6,15 @@ from app.agents.healing.self_healing_patch_adapter import SelfHealingPatchAdapte
 from app.agents.healing.self_healing_patch_agent import SelfHealingPatchAgent
 from app.agents.healing.self_healing_patch_applier import SelfHealingPatchApplier
 from app.agents.healing.self_healing_sandbox import SelfHealingSandbox
+
+__all__ = [
+    "FKB",
+    "FailureAnalysisAgent",
+    "PageRecoveryAgent",
+    "SelectorRepairAgent",
+    "SelfHealingAgent",
+    "SelfHealingPatchAdapter",
+    "SelfHealingPatchAgent",
+    "SelfHealingPatchApplier",
+    "SelfHealingSandbox",
+]

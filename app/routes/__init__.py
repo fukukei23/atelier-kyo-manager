@@ -21,8 +21,8 @@ from . import (
     misc,  # noqa: F401  — 互換リダイレクト + 自動リサーチ + API倉庫
     orders,  # noqa: F401  — F05注文管理 + F08キャッシュフロー
     partners,  # noqa: F401  — F06パートナー + F13リピーター
-    price_monitors,  # noqa: F401  — SSENSE価格監視
     popularity,  # noqa: F401  — F11人気度トラッキング
+    price_monitors,  # noqa: F401  — SSENSE価格監視
     products,  # noqa: F401  — F01商品管理 + F02BUYMA拡張 + CSV
     prohibited_sources,  # noqa: F401  — F04禁制品買付先チェックAPI
     region_recommendations,  # noqa: F401  — F12買付先地域レコメンド

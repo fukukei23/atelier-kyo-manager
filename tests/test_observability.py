@@ -1,9 +1,8 @@
 """Tests for app/utils/observability.py - Issue #85 カバレッジ向上"""
+
 import asyncio
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
+from unittest.mock import AsyncMock, MagicMock
 
 from app.utils.observability import (
     _log,
@@ -38,6 +37,7 @@ def _make_page(closed=False, content="<html></html>"):
 
 # ── _log ─────────────────────────────────────────────────────────────────────
 
+
 class TestLog:
     def test_returns_rc_logger_when_present(self):
         rc = MagicMock()
@@ -58,6 +58,7 @@ class TestLog:
 
 # ── _maybe_await ──────────────────────────────────────────────────────────────
 
+
 class TestMaybeAwait:
     def test_plain_value_returned_as_is(self):
         assert asyncio.run(_maybe_await(42)) == 42
@@ -71,6 +72,7 @@ class TestMaybeAwait:
     def test_awaitable_is_awaited(self):
         async def coro():
             return "result"
+
         assert asyncio.run(_maybe_await(coro())) == "result"
 
     def test_async_mock_awaited(self):
@@ -79,6 +81,7 @@ class TestMaybeAwait:
 
 
 # ── save_dom ──────────────────────────────────────────────────────────────────
+
 
 class TestSaveDom:
     def test_page_none_returns_immediately(self):
@@ -118,6 +121,7 @@ class TestSaveDom:
 
 # ── save_json ─────────────────────────────────────────────────────────────────
 
+
 class TestSaveJson:
     def test_calls_save_json_with_correct_name(self):
         rc = _make_rc()
@@ -144,6 +148,7 @@ class TestSaveJson:
 
 
 # ── count_selectors ───────────────────────────────────────────────────────────
+
 
 class TestCountSelectors:
     def test_page_none_returns_immediately(self):
@@ -203,6 +208,7 @@ class TestCountSelectors:
 
 # ── save_raw_hrefs ────────────────────────────────────────────────────────────
 
+
 class TestSaveRawHrefs:
     def test_saves_hrefs_with_count(self):
         rc = _make_rc()
@@ -241,6 +247,7 @@ class TestSaveRawHrefs:
 
 
 # ── write_fail_snapshot ───────────────────────────────────────────────────────
+
 
 class TestWriteFailSnapshot:
     def test_page_none_saves_snapshot(self):
@@ -286,10 +293,7 @@ class TestWriteFailSnapshot:
         loc_mock = MagicMock()
         loc_mock.count = AsyncMock(return_value=2)
         page.locator = MagicMock(return_value=loc_mock)
-        config = {"selectors": {"pdp": {
-            "title_selectors": ["h1"],
-            "price_selectors": [".price"]
-        }}}
+        config = {"selectors": {"pdp": {"title_selectors": ["h1"], "price_selectors": [".price"]}}}
         error = Exception("error")
         asyncio.run(write_fail_snapshot(rc, page, "https://site.com", error, config))
         rc.save_content.assert_called()

@@ -67,6 +67,7 @@ def create_app(config_name: str | None = None) -> Flask:
 
     # --- CLI コマンド登録 ---
     from .commands import register_commands
+
     register_commands(app)
 
     return app
@@ -75,25 +76,27 @@ def create_app(config_name: str | None = None) -> Flask:
 def _register_template_filters(app: Flask) -> None:
     from .utils import presentation as pres
 
-    app.jinja_env.filters.update({
-        "segment_label": pres.segment_label,
-        "segment_color": pres.segment_color,
-        "priority_label": pres.priority_label,
-        "priority_color": pres.priority_color,
-        "partner_status_label": pres.partner_status_label,
-        "deadline_color": pres.deadline_color,
-        "deadline_message": pres.deadline_message,
-        "score_label": pres.score_label,
-        "score_color": pres.score_color,
-        "shipment_status_label": pres.shipment_status_label,
-        "daily_status_color": pres.daily_status_color,
-        "monthly_status_color": pres.monthly_status_color,
-        "stock_status_label": pres.stock_status_label,
-        "stock_status_color": pres.stock_status_color,
-        "risk_label": pres.risk_label,
-        "risk_color": pres.risk_color,
-        "recommendation_label": pres.recommendation_label,
-    })
+    app.jinja_env.filters.update(
+        {
+            "segment_label": pres.segment_label,
+            "segment_color": pres.segment_color,
+            "priority_label": pres.priority_label,
+            "priority_color": pres.priority_color,
+            "partner_status_label": pres.partner_status_label,
+            "deadline_color": pres.deadline_color,
+            "deadline_message": pres.deadline_message,
+            "score_label": pres.score_label,
+            "score_color": pres.score_color,
+            "shipment_status_label": pres.shipment_status_label,
+            "daily_status_color": pres.daily_status_color,
+            "monthly_status_color": pres.monthly_status_color,
+            "stock_status_label": pres.stock_status_label,
+            "stock_status_color": pres.stock_status_color,
+            "risk_label": pres.risk_label,
+            "risk_color": pres.risk_color,
+            "recommendation_label": pres.recommendation_label,
+        }
+    )
 
 
 @login_manager.user_loader

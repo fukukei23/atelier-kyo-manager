@@ -6,8 +6,6 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 
-import pytest
-
 from app.models.order import Order
 from app.utils.presentation import deadline_color, deadline_message
 

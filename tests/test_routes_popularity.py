@@ -2,16 +2,14 @@ from __future__ import annotations
 
 from datetime import date as _date
 
-import pytest
-
 from app.extensions import db
 from app.models.popularity_tracker import PopularityTracker
 from app.models.product import Product
 
-
 # ---------------------------------------------------------------------------
 # Model unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestPopularityTrackerModel:
     def test_calc_score_normal_values(self):
@@ -49,6 +47,7 @@ class TestPopularityTrackerModel:
 # Route tests
 # ---------------------------------------------------------------------------
 
+
 def _create_product(app) -> int:
     with app.app_context():
         p = Product(name="テスト商品", brand="Brand", purchase_price=1000.0, selling_price=1500.0)
@@ -72,46 +71,60 @@ class TestPopularityRoutes:
 
     def test_post_new_valid_data(self, routes_auth_client, routes_app):
         product_id = _create_product(routes_app)
-        resp = routes_auth_client.post("/popularity/new", data={
-            "product_id": str(product_id),
-            "views": "100",
-            "favorites": "10",
-            "inquiries": "5",
-            "sold_count": "2",
-        }, follow_redirects=False)
+        resp = routes_auth_client.post(
+            "/popularity/new",
+            data={
+                "product_id": str(product_id),
+                "views": "100",
+                "favorites": "10",
+                "inquiries": "5",
+                "sold_count": "2",
+            },
+            follow_redirects=False,
+        )
         assert resp.status_code == 302
 
     def test_post_new_invalid_string(self, routes_auth_client, routes_app):
         product_id = _create_product(routes_app)
-        resp = routes_auth_client.post("/popularity/new", data={
-            "product_id": str(product_id),
-            "views": "invalid",
-            "favorites": "10",
-            "inquiries": "5",
-            "sold_count": "2",
-        })
+        resp = routes_auth_client.post(
+            "/popularity/new",
+            data={
+                "product_id": str(product_id),
+                "views": "invalid",
+                "favorites": "10",
+                "inquiries": "5",
+                "sold_count": "2",
+            },
+        )
         assert resp.status_code == 200
 
     def test_post_new_negative_values(self, routes_auth_client, routes_app):
         product_id = _create_product(routes_app)
-        resp = routes_auth_client.post("/popularity/new", data={
-            "product_id": str(product_id),
-            "views": "-10",
-            "favorites": "10",
-            "inquiries": "5",
-            "sold_count": "2",
-        })
+        resp = routes_auth_client.post(
+            "/popularity/new",
+            data={
+                "product_id": str(product_id),
+                "views": "-10",
+                "favorites": "10",
+                "inquiries": "5",
+                "sold_count": "2",
+            },
+        )
         assert resp.status_code == 200
 
     def test_post_new_all_zero(self, routes_auth_client, routes_app):
         product_id = _create_product(routes_app)
-        resp = routes_auth_client.post("/popularity/new", data={
-            "product_id": str(product_id),
-            "views": "0",
-            "favorites": "0",
-            "inquiries": "0",
-            "sold_count": "0",
-        }, follow_redirects=False)
+        resp = routes_auth_client.post(
+            "/popularity/new",
+            data={
+                "product_id": str(product_id),
+                "views": "0",
+                "favorites": "0",
+                "inquiries": "0",
+                "sold_count": "0",
+            },
+            follow_redirects=False,
+        )
         assert resp.status_code == 302
 
     def test_delete_existing(self, routes_auth_client, routes_app):

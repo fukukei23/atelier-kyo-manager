@@ -16,7 +16,6 @@ import logging
 import os  # ★ NEW (diff で要求)
 import subprocess
 import time
-from datetime import datetime  # ★ NEW (diff で要求)
 from pathlib import Path
 from typing import Any
 

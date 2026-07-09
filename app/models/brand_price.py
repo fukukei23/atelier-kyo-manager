@@ -38,28 +38,19 @@ class BrandPrice(db.Model):
     selling_price_source = db.Column(String(32), nullable=True, default="unknown")
     scraped_at = db.Column(DateTime, default=_utcnow)
     created_at = db.Column(DateTime, default=_utcnow)
-    updated_at = db.Column(
-        DateTime, default=_utcnow, onupdate=_utcnow
-    )
+    updated_at = db.Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
     @classmethod
     def get_by_brand(cls, brand: str) -> list[BrandPrice]:
-        return db.session.scalars(
-            db.select(cls).filter(cls.brand == brand).order_by(cls.price_jpy)
-        ).all()
+        return db.session.scalars(db.select(cls).filter(cls.brand == brand).order_by(cls.price_jpy)).all()
 
     @classmethod
     def get_latest_by_brand_site(cls, brand: str, site: str) -> BrandPrice | None:
         return db.session.scalar(
-            db.select(cls)
-            .filter(cls.brand == brand, cls.source_site == site)
-            .order_by(cls.scraped_at.desc())
-            .limit(1)
+            db.select(cls).filter(cls.brand == brand, cls.source_site == site).order_by(cls.scraped_at.desc()).limit(1)
         )
 
     def __repr__(self) -> str:
         return f"<BrandPrice brand={self.brand!r} site={self.source_site!r} price={self.price_jpy}>"
 
-    __table_args__ = (
-        Index("ix_brand_price_brand_product", "brand", "product_name"),
-    )
+    __table_args__ = (Index("ix_brand_price_brand_product", "brand", "product_name"),)

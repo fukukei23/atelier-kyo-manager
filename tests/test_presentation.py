@@ -1,15 +1,25 @@
 """Tests for app/utils/presentation.py"""
-import pytest
+
 from unittest.mock import MagicMock
+
 from app.utils.presentation import (
-    segment_label, segment_color,
-    priority_label, priority_color, partner_status_label,
-    deadline_color, deadline_message,
-    score_label, score_color,
+    daily_status_color,
+    deadline_color,
+    deadline_message,
+    monthly_status_color,
+    partner_status_label,
+    priority_color,
+    priority_label,
+    recommendation_label,
+    risk_color,
+    risk_label,
+    score_color,
+    score_label,
+    segment_color,
+    segment_label,
     shipment_status_label,
-    daily_status_color, monthly_status_color,
-    stock_status_label, stock_status_color,
-    risk_label, risk_color, recommendation_label,
+    stock_status_color,
+    stock_status_label,
 )
 
 

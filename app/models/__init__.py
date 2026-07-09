@@ -8,8 +8,6 @@
 
 from .brand_price import BrandPrice
 from .buyma_price_history import BuymaPriceHistory
-from .price_monitor import PriceMonitor
-from .source_price_history import SourcePriceHistory
 from .customer_inquiry import CustomerInquiry
 from .faq_template import FaqTemplate
 from .listing_progress import ListingProgress
@@ -17,12 +15,14 @@ from .listing_template import ListingTemplate
 from .order import Order
 from .partner import Partner
 from .popularity_tracker import PopularityTracker
+from .price_monitor import PriceMonitor
 from .product import Product
 from .prohibited_source import ProhibitedSource
 from .region_recommendation import RegionRecommendation
 from .repeat_customer import RepeatCustomer
 from .result_models import DiscoveryResult, GenerateResult
 from .shipment_notification import ShipmentNotification
+from .source_price_history import SourcePriceHistory
 from .stock_check import StockCheck
 from .user import User
 

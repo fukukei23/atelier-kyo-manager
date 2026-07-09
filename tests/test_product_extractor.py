@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.agents.browser.product_extractor import ProductExtractor, ProductInfo
-from app.agents.browser.product_normalizer import normalize_price_text, normalize_price_to_float
+from app.agents.browser.product_normalizer import normalize_price_text
 from app.core.run_context import RunContext
 
 
@@ -196,7 +196,7 @@ class TestProductExtractorBasic:
     @pytest.mark.asyncio
     async def test_price_normalization_yen(self, site_config, run_context):
         """円通貨の価格正規化のテスト"""
-        extractor = ProductExtractor(site_config=site_config, run_context=run_context)
+        ProductExtractor(site_config=site_config, run_context=run_context)
 
         price_rules = {"strip_chars": ["¥", ",", " "], "decimal_separator": ".", "thousands_separator": ","}
 
@@ -207,7 +207,7 @@ class TestProductExtractorBasic:
     @pytest.mark.asyncio
     async def test_price_normalization_decimal(self, site_config, run_context):
         """小数点付き価格のテスト"""
-        extractor = ProductExtractor(site_config=site_config, run_context=run_context)
+        ProductExtractor(site_config=site_config, run_context=run_context)
         price_rules = {"strip_chars": ["€", ",", " "], "decimal_separator": ".", "thousands_separator": ","}
 
         normalized = normalize_price_text("€1,234.56", price_rules)

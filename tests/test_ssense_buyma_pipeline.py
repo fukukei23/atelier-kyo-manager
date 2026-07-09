@@ -2,16 +2,14 @@
 
 外部通信は全てモック。パイプラインの各フェーズが正しく動くことを検証。
 """
+
 from __future__ import annotations
 
-import json
-from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.core.pricing.schemas import PriceSource, PricingInput
-
 
 # ---------------------------------------------------------------------------
 # Phase 1: SSENSE PLP スクレイパ（カテゴリ対応）
@@ -25,12 +23,14 @@ class TestSsenseScraperCategory:
         """category='sunglasses' で正しいURLが生成されること。"""
         from app.services.sale_scraper import _scrape_ssense
 
-        with patch("app.services.sale_scraper._fetch_with_cffi", return_value=None):
-            with patch("app.services.sale_scraper._ssense_via_playwright", return_value=None):
-                result = _scrape_ssense("Gucci", category="sunglasses")
-                # URLは関数内部で生成されるため、fetchが呼ばれたURLを確認
-                # 結果が空（HTML取得失敗）でもURL生成は行われる
-                assert result == []
+        with (
+            patch("app.services.sale_scraper._fetch_with_cffi", return_value=None),
+            patch("app.services.sale_scraper._ssense_via_playwright", return_value=None),
+        ):
+            result = _scrape_ssense("Gucci", category="sunglasses")
+            # URLは関数内部で生成されるため、fetchが呼ばれたURLを確認
+            # 結果が空（HTML取得失敗）でもURL生成は行われる
+            assert result == []
 
     def test_bags_url_default(self):
         """デフォルトカテゴリ='bags' でURLが変更されないこと。"""
@@ -56,7 +56,7 @@ class TestSsensePdpScraper:
         """JSON-LDから色・型番を抽出できること。"""
         from app.services.sale_scraper import scrape_ssense_pdp
 
-        mock_html = '''
+        mock_html = """
         <html><head>
         <script type="application/ld+json">{
             "@type": "Product",
@@ -65,7 +65,7 @@ class TestSsensePdpScraper:
             "color": "Black"
         }</script>
         </head><body></body></html>
-        '''
+        """
 
         with patch("app.services.sale_scraper._fetch_with_cffi", return_value=mock_html):
             result = scrape_ssense_pdp("https://www.ssense.com/en-us/women/product/fendi/test/123")
@@ -80,10 +80,12 @@ class TestSsensePdpScraper:
 
         mock_html = "<html><body>No structured data</body></html>"
 
-        with patch("app.services.sale_scraper._fetch_with_cffi", return_value=mock_html):
-            with patch("app.services.sale_scraper._ssense_via_playwright", return_value=None):
-                result = scrape_ssense_pdp("https://example.com")
-                assert result is None
+        with (
+            patch("app.services.sale_scraper._fetch_with_cffi", return_value=mock_html),
+            patch("app.services.sale_scraper._ssense_via_playwright", return_value=None),
+        ):
+            result = scrape_ssense_pdp("https://example.com")
+            assert result is None
 
     def test_empty_url_returns_none(self):
         """空URLの場合Noneを返すこと。"""
@@ -96,12 +98,12 @@ class TestSsensePdpScraper:
         """JSON-LDなし → metaタグフォールバック。"""
         from app.services.sale_scraper import scrape_ssense_pdp
 
-        mock_html = '''
+        mock_html = """
         <html><head>
         <meta property="og:title" content="Gucci Sunglasses GG123">
         <meta property="product:color" content="Havana">
         </head><body></body></html>
-        '''
+        """
 
         with patch("app.services.sale_scraper._fetch_with_cffi", return_value=mock_html):
             result = scrape_ssense_pdp("https://www.ssense.com/en-us/test")

@@ -24,7 +24,8 @@ def popularity_list():
     trackers = (
         PopularityTracker.query.options(joinedload(PopularityTracker.product))
         .order_by(PopularityTracker.popularity_score.desc())
-        .paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
+        .paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False)
+        .items
     )
     avg_score = db.session.query(func.avg(PopularityTracker.popularity_score)).scalar() or 0
     top_count = sum(1 for t in trackers if (t.popularity_score or 0) >= 100)

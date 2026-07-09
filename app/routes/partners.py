@@ -21,7 +21,11 @@ from . import bp
 @login_required
 def partner_list():
     """パートナー一覧"""
-    partners = Partner.query.order_by(Partner.priority_level.asc(), Partner.name.asc()).paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
+    partners = (
+        Partner.query.order_by(Partner.priority_level.asc(), Partner.name.asc())
+        .paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False)
+        .items
+    )
     return render_template("partners.html", partners=partners)
 
 
@@ -94,7 +98,11 @@ def delete_partner(pid: int):
 @login_required
 def customer_list():
     """リピーター一覧"""
-    customers = RepeatCustomer.query.order_by(RepeatCustomer.total_orders.desc()).paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False).items
+    customers = (
+        RepeatCustomer.query.order_by(RepeatCustomer.total_orders.desc())
+        .paginate(page=request.args.get("page", 1, type=int), per_page=50, error_out=False)
+        .items
+    )
     return render_template("repeat_customers.html", customers=customers)
 
 

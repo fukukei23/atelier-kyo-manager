@@ -1,7 +1,11 @@
 """Tests for app/agents/plugins/base.py"""
-import pytest
+
+import contextlib
 from unittest.mock import AsyncMock, MagicMock, patch
-from app.agents.plugins.base import StrategyPlugin, STEALTH_CONFIG, _apply_stealth
+
+import pytest
+
+from app.agents.plugins.base import STEALTH_CONFIG, StrategyPlugin, _apply_stealth
 
 
 class TestStealtConfig:
@@ -21,11 +25,8 @@ class TestApplyStealth:
     def test_apply_stealth_missing_module_no_error(self):
         mock_page = MagicMock()
         # Should not raise even if playwright_stealth is not installed
-        with patch("builtins.__import__", side_effect=ImportError):
-            try:
-                _apply_stealth(mock_page)
-            except Exception:
-                pass  # ImportError is caught inside function
+        with patch("builtins.__import__", side_effect=ImportError), contextlib.suppress(Exception):
+            _apply_stealth(mock_page)  # ImportError is caught inside function
 
 
 class TestStrategyPlugin:

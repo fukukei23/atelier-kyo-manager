@@ -70,9 +70,7 @@ class ListingTracker:
             "price": item.price,
             "first_seen": item.first_seen.isoformat(timespec="seconds"),
             "sold_at": now.isoformat(timespec="seconds"),
-            "residence_min": round(
-                (now - item.first_seen).total_seconds() / 60.0, 1
-            ),
+            "residence_min": round((now - item.first_seen).total_seconds() / 60.0, 1),
         }
         self.sold_records.append(record)
         return record

@@ -14,7 +14,7 @@ from PIL import Image
 from rembg import remove
 
 from app.config.config import AppConfig
-from app.utils.validation import validate_url, ValidationError
+from app.utils.validation import ValidationError, validate_url
 
 logger = logging.getLogger(__name__)
 

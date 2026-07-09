@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from app.extensions import db
 
 
@@ -33,6 +31,7 @@ class TestAutoOrderRoutes:
         """実際の Order を使った start のテスト。"""
         with routes_app.app_context():
             from app.models.order import Order
+
             o = Order(order_number="ORD-001", product_name="Test", status="pending")
             db.session.add(o)
             db.session.commit()
@@ -86,6 +85,7 @@ class TestProductRoutes:
 
     def test_import_csv_non_csv_file(self, routes_auth_client):
         import io
+
         data = {"file": (io.BytesIO(b"not a csv"), "test.txt")}
         r = routes_auth_client.post("/import_csv", data=data, follow_redirects=True)
         assert r.status_code == 200

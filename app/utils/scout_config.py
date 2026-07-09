@@ -38,7 +38,6 @@ def _load_json_if_exists(path: Path) -> dict:
 
 
 def _dict_to_siteconfig(d: dict) -> SiteConfig:
-    from app.utils.scout_models import default_sites
 
     base_obj = SiteConfig(name="", home_url="")
     full_dict = asdict(base_obj)

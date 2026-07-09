@@ -18,7 +18,9 @@ def validate_url(url: str, *, allowed_schemes: tuple[str, ...] = ("https",)) -> 
     return url
 
 
-def validate_int(value: str | int, *, name: str = "value", min_val: int | None = None, max_val: int | None = None) -> int:
+def validate_int(
+    value: str | int, *, name: str = "value", min_val: int | None = None, max_val: int | None = None
+) -> int:
     """文字列/intをintに変換し、範囲チェック。"""
     try:
         result = int(value)
@@ -31,7 +33,9 @@ def validate_int(value: str | int, *, name: str = "value", min_val: int | None =
     return result
 
 
-def validate_float(value: str | float, *, name: str = "value", min_val: float | None = None, max_val: float | None = None) -> float:
+def validate_float(
+    value: str | float, *, name: str = "value", min_val: float | None = None, max_val: float | None = None
+) -> float:
     """文字列/floatをfloatに変換し、範囲チェック。"""
     try:
         result = float(value)

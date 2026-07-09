@@ -27,7 +27,7 @@ from typing import TYPE_CHECKING, Any
 
 from playwright.async_api import BrowserContext, Page
 
-from app.agents.browser.plp_config import get_plp_config, get_trap_config
+from app.agents.browser.plp_config import get_trap_config
 from app.agents.browser.plp_evidence import save_materialize_failure_evidence
 from app.agents.browser.plp_navigation import PlpNavigationMixin
 from app.agents.browser.plp_overlay import PlpOverlayMixin
@@ -112,10 +112,17 @@ class PlpDriver(PlpOverlayMixin, PlpTrapMixin, PlpTileMaterializerMixin, PlpNavi
                 self._log_diagnostic_info(plp_url, "Early trap detection")
                 errors.append(trap_reason_early)
                 return PlpNavigationResult(
-                    pdp_url="", pdp_opened_in_new_tab=False, plp_url=plp_url,
-                    tiles_seen=0, trap_detected=True, trap_reason=trap_reason_early,
-                    recovery_attempted=False, recovery_successful=False,
-                    overlays_handled=overlays_handled, navigation_method=None, errors=errors,
+                    pdp_url="",
+                    pdp_opened_in_new_tab=False,
+                    plp_url=plp_url,
+                    tiles_seen=0,
+                    trap_detected=True,
+                    trap_reason=trap_reason_early,
+                    recovery_attempted=False,
+                    recovery_successful=False,
+                    overlays_handled=overlays_handled,
+                    navigation_method=None,
+                    errors=errors,
                 )
 
             if target_url and self._detected_locale_redirect():
@@ -123,10 +130,17 @@ class PlpDriver(PlpOverlayMixin, PlpTrapMixin, PlpTileMaterializerMixin, PlpNavi
                 self._log_diagnostic_info(plp_url, "Early locale redirect loop detection", target_url=target_url)
                 errors.append(error_msg)
                 return PlpNavigationResult(
-                    pdp_url="", pdp_opened_in_new_tab=False, plp_url=plp_url,
-                    tiles_seen=0, trap_detected=False, trap_reason=None,
-                    recovery_attempted=False, recovery_successful=False,
-                    overlays_handled=overlays_handled, navigation_method=None, errors=errors,
+                    pdp_url="",
+                    pdp_opened_in_new_tab=False,
+                    plp_url=plp_url,
+                    tiles_seen=0,
+                    trap_detected=False,
+                    trap_reason=None,
+                    recovery_attempted=False,
+                    recovery_successful=False,
+                    overlays_handled=overlays_handled,
+                    navigation_method=None,
+                    errors=errors,
                 )
 
             # 1. Overlay handling
@@ -135,8 +149,10 @@ class PlpDriver(PlpOverlayMixin, PlpTrapMixin, PlpTileMaterializerMixin, PlpNavi
             # 2. Tile materialization
             plp_config = self._get_plp_config()
             tiles_seen = await self._materialize_tiles(
-                plp_config=plp_config, start_t=actual_start_t,
-                budget_ms=actual_budget_ms, target_url=target_url,
+                plp_config=plp_config,
+                start_t=actual_start_t,
+                budget_ms=actual_budget_ms,
+                target_url=target_url,
             )
 
             if tiles_seen == 0:
@@ -162,7 +178,8 @@ class PlpDriver(PlpOverlayMixin, PlpTrapMixin, PlpTileMaterializerMixin, PlpNavi
                 if target_url:
                     recovery_attempted = True
                     recovery_successful = await self._recover_from_trap(
-                        target_url=target_url, trap_config=trap_config,
+                        target_url=target_url,
+                        trap_config=trap_config,
                     )
                     if recovery_successful:
                         if self._is_trap_page(self.page.url, trap_config):
@@ -176,7 +193,8 @@ class PlpDriver(PlpOverlayMixin, PlpTrapMixin, PlpTileMaterializerMixin, PlpNavi
 
             # 4. Click tile → PDP navigation
             pdp_page = await self._click_tile_and_navigate(
-                plp_config=plp_config, timeout_ms=min(10000, actual_budget_ms // 6),
+                plp_config=plp_config,
+                timeout_ms=min(10000, actual_budget_ms // 6),
             )
 
             if pdp_page is None:
@@ -192,11 +210,17 @@ class PlpDriver(PlpOverlayMixin, PlpTrapMixin, PlpTileMaterializerMixin, PlpNavi
                 self.page = pdp_page
 
             return PlpNavigationResult(
-                pdp_url=pdp_url, pdp_opened_in_new_tab=pdp_opened_in_new_tab,
-                plp_url=plp_url, tiles_seen=tiles_seen,
-                trap_detected=trap_detected, trap_reason=trap_reason,
-                recovery_attempted=recovery_attempted, recovery_successful=recovery_successful,
-                overlays_handled=overlays_handled, navigation_method=navigation_method, errors=errors,
+                pdp_url=pdp_url,
+                pdp_opened_in_new_tab=pdp_opened_in_new_tab,
+                plp_url=plp_url,
+                tiles_seen=tiles_seen,
+                trap_detected=trap_detected,
+                trap_reason=trap_reason,
+                recovery_attempted=recovery_attempted,
+                recovery_successful=recovery_successful,
+                overlays_handled=overlays_handled,
+                navigation_method=navigation_method,
+                errors=errors,
             )
 
         except Exception as e:
@@ -229,7 +253,9 @@ class PlpDriver(PlpOverlayMixin, PlpTrapMixin, PlpTileMaterializerMixin, PlpNavi
         return max(0, budget_ms - elapsed_ms)
 
     async def _save_materialize_failure_evidence(
-        self, tile_selector_str: str, plp_config: dict[str, Any],
+        self,
+        tile_selector_str: str,
+        plp_config: dict[str, Any],
     ) -> None:
         """Delegate to plp_evidence module."""
         await save_materialize_failure_evidence(
@@ -241,7 +267,10 @@ class PlpDriver(PlpOverlayMixin, PlpTrapMixin, PlpTileMaterializerMixin, PlpNavi
         )
 
     def _log_diagnostic_info(
-        self, plp_url: str, context: str, target_url: str | None = None,
+        self,
+        plp_url: str,
+        context: str,
+        target_url: str | None = None,
     ) -> None:
         """Log diagnostic info for trap/locale detection (fire-and-forget)."""
         try:

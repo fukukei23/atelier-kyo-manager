@@ -11,7 +11,6 @@ from flask_login import login_required
 from app.extensions import db
 from app.models.listing_template import ListingTemplate
 from app.utils.decorators import handle_db_error
-from app.utils.errors import safe_error_msg
 
 from . import bp
 

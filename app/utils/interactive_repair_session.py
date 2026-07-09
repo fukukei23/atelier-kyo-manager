@@ -28,7 +28,6 @@ _ACTION_SPEC = (
 
 
 class InteractiveRepairSession:
-
     def __init__(
         self,
         ai_controller: AiLlmController,
@@ -159,7 +158,10 @@ HTML_END\"\"\"
 """.strip()
 
     def _build_llm_prompt_for_finalize(
-        self, site_key: str, intent: str, steps: list[dict[str, Any]],
+        self,
+        site_key: str,
+        intent: str,
+        steps: list[dict[str, Any]],
     ) -> str:
         steps_json = json.dumps(steps, ensure_ascii=False, indent=2)
 
@@ -211,13 +213,15 @@ HTML_END\"\"\"
         tried_selectors = initial_failure.get("selectors_used", {})
         last_error = initial_failure.get("exception_message", "")
 
-        self.steps_log.append({
-            "action": {"action_type": "init_state", "selector": "", "rationale": "failure context captured"},
-            "exec_error": None,
-            "after_url": current_url,
-            "after_html_path": initial_failure.get("page_html_path", ""),
-            "after_screenshot_path": initial_failure.get("screenshot_path", ""),
-        })
+        self.steps_log.append(
+            {
+                "action": {"action_type": "init_state", "selector": "", "rationale": "failure context captured"},
+                "exec_error": None,
+                "after_url": current_url,
+                "after_html_path": initial_failure.get("page_html_path", ""),
+                "after_screenshot_path": initial_failure.get("screenshot_path", ""),
+            }
+        )
 
         return dom_text, current_url, tried_selectors, last_error
 
@@ -232,16 +236,24 @@ HTML_END\"\"\"
     # ── Main entry ────────────────────────────────────────
 
     async def run_repair_loop(
-        self, page, site_key: str, intent: str, initial_failure: dict[str, Any],
+        self,
+        page,
+        site_key: str,
+        intent: str,
+        initial_failure: dict[str, Any],
     ) -> dict[str, Any]:
         dom_text, current_url, tried_selectors, last_error = self._load_initial_state(initial_failure)
         new_html_path = ""
 
         for _ in range(self.max_steps):
             llm_raw = self._query_llm_for_action(
-                site_key=site_key, intent=intent, current_url=current_url,
-                recent_dom_text=dom_text, last_error=last_error,
-                tried_selectors=tried_selectors, steps_so_far=self.steps_log,
+                site_key=site_key,
+                intent=intent,
+                current_url=current_url,
+                recent_dom_text=dom_text,
+                last_error=last_error,
+                tried_selectors=tried_selectors,
+                steps_so_far=self.steps_log,
             )
             if llm_raw.get("action_type") == "done":
                 break

@@ -1,7 +1,7 @@
 import pytest
 
-from app.agents.browser.session_manager import SessionManager
 from app.agents.browser import session_proxy as sp_mod
+from app.agents.browser.session_manager import SessionManager
 from app.core.run_context import RunContext
 
 

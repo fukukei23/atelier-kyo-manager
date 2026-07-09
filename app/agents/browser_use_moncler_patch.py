@@ -376,7 +376,10 @@ async def _handle_location_modal(page: Page) -> None:
 
 
 async def _inject_moncler_cookies(
-    page: Page, ship_to: str, lang_code: str, force_locale: str,
+    page: Page,
+    ship_to: str,
+    lang_code: str,
+    force_locale: str,
 ) -> list[dict[str, str]]:
     """Cookie & LocalStorage injection for Moncler locale enforcement."""
     cookies = [
@@ -405,6 +408,7 @@ async def _inject_moncler_cookies(
 
 async def _dismiss_consent_banner(page: Page) -> None:
     """OneTrust等の同意バナーをクリックして閉じる。"""
+
     async def _try_click(sel: str) -> bool:
         try:
             await page.locator(sel).click(timeout=1000)
@@ -429,7 +433,10 @@ async def _dismiss_consent_banner(page: Page) -> None:
 
 
 async def _normalize_locale_url(
-    page: Page, force_locale: str, ship_to: str, cookies: list[dict[str, str]],
+    page: Page,
+    force_locale: str,
+    ship_to: str,
+    cookies: list[dict[str, str]],
 ) -> None:
     """現在のURLがターゲットロケールと異なる場合、強制的に遷移する。"""
     try:

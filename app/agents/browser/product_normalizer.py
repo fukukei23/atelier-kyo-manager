@@ -6,7 +6,6 @@ import re
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
-
 # Default selectors (fallback when site_config has no definition)
 DEFAULT_PRICE_SELECTORS = [
     "meta[property='product:price:amount']",

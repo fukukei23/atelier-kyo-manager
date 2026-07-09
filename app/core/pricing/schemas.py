@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
-from typing import Literal
 
 
 def nz(value: float | int | None) -> float:
@@ -14,10 +13,10 @@ class PriceSource(str, Enum):
     """価格データの取得元 — 信頼度に応じて計可/不可を判定。"""
 
     BROWSER_VERIFIED = "browser_verified"  # ブラウザ/スクレイパで実際のページから取得
-    MANUAL_INPUT = "manual_input"          # 人間が手動入力
-    API_VERIFIED = "api_verified"          # 公式API等から取得
-    KEYWORD_GUESS = "keyword_guess"        # キーワードマッチングによる推測（禁止）
-    UNKNOWN = "unknown"                    # 出所不明（禁止）
+    MANUAL_INPUT = "manual_input"  # 人間が手動入力
+    API_VERIFIED = "api_verified"  # 公式API等から取得
+    KEYWORD_GUESS = "keyword_guess"  # キーワードマッチングによる推測（禁止）
+    UNKNOWN = "unknown"  # 出所不明（禁止）
 
 
 @dataclass

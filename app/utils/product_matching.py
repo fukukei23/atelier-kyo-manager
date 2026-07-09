@@ -8,6 +8,7 @@ Usage:
 The generalized cross_site_match_score() works across any two product name strings,
 not limited to BUYMA matching like the original _match_score() in buyma_price_scraper.
 """
+
 from __future__ import annotations
 
 import re
@@ -18,14 +19,44 @@ from difflib import SequenceMatcher
 # ---------------------------------------------------------------------------
 
 NOISE_WORDS: set[str] = {
-    "中古", "USED", "used", "新品", "未使用", "即発", "国内発送",
-    "送料込", "関税込", "送料・関税込", "送料・関税込み",
-    "直営店買付", "セール", "人気", "入手困難", "限定",
-    "レッド", "ディズ", " unisex", "100%",
-    "☆", "★", "♪", "【", "】", "！", "！",
-    "全色", "全カラー", "カラバリあり",
-    "再入荷", "完売", "残りわずか", "在庫あり", "残少",
-    "あすつく", "翌日配送", "正規品", "本物保証",
+    "中古",
+    "USED",
+    "used",
+    "新品",
+    "未使用",
+    "即発",
+    "国内発送",
+    "送料込",
+    "関税込",
+    "送料・関税込",
+    "送料・関税込み",
+    "直営店買付",
+    "セール",
+    "人気",
+    "入手困難",
+    "限定",
+    "レッド",
+    "ディズ",
+    " unisex",
+    "100%",
+    "☆",
+    "★",
+    "♪",
+    "【",
+    "】",
+    "！",
+    "全色",
+    "全カラー",
+    "カラバリあり",
+    "再入荷",
+    "完売",
+    "残りわずか",
+    "在庫あり",
+    "残少",
+    "あすつく",
+    "翌日配送",
+    "正規品",
+    "本物保証",
 }
 
 MODEL_NUMBER_RE = re.compile(r"\b([A-Z0-9]{5,12})\b")
@@ -36,24 +67,58 @@ SIZE_RE = re.compile(
 )
 
 COLOR_NORMALIZE: dict[str, str] = {
-    "BLACK": "BLACK", "NERO": "BLACK", "黒": "BLACK", "ブラック": "BLACK", "NOIR": "BLACK",
-    "WHITE": "WHITE", "BIANCO": "WHITE", "白": "WHITE", "ホワイト": "WHITE",
-    "RED": "RED", "ROSSO": "RED", "赤": "RED", "レッド": "RED",
-    "BLUE": "BLUE", "BLU": "BLUE", "青": "BLUE", "ブルー": "BLUE",
-    "BEIGE": "BEIGE", "ベージュ": "BEIGE", "ECRU": "BEIGE",
-    "BROWN": "BROWN", "MARRONE": "BROWN", "茶": "BROWN", "ブラウン": "BROWN", "CARAMEL": "BROWN",
-    "GREEN": "GREEN", "VERDE": "GREEN", "緑": "GREEN", "グリーン": "GREEN",
-    "PINK": "PINK", "ROSA": "PINK", "ピンク": "PINK",
-    "GREY": "GREY", "GRAY": "GREY", "グレー": "GREY", "GRIGIO": "GREY",
-    "NAVY": "NAVY", "ネイビー": "NAVY", "MARINE": "NAVY",
-    "GOLD": "GOLD", "ゴールド": "GOLD", "ORO": "GOLD",
-    "SILVER": "SILVER", "シルバー": "SILVER", "ARGENTO": "SILVER",
+    "BLACK": "BLACK",
+    "NERO": "BLACK",
+    "黒": "BLACK",
+    "ブラック": "BLACK",
+    "NOIR": "BLACK",
+    "WHITE": "WHITE",
+    "BIANCO": "WHITE",
+    "白": "WHITE",
+    "ホワイト": "WHITE",
+    "RED": "RED",
+    "ROSSO": "RED",
+    "赤": "RED",
+    "レッド": "RED",
+    "BLUE": "BLUE",
+    "BLU": "BLUE",
+    "青": "BLUE",
+    "ブルー": "BLUE",
+    "BEIGE": "BEIGE",
+    "ベージュ": "BEIGE",
+    "ECRU": "BEIGE",
+    "BROWN": "BROWN",
+    "MARRONE": "BROWN",
+    "茶": "BROWN",
+    "ブラウン": "BROWN",
+    "CARAMEL": "BROWN",
+    "GREEN": "GREEN",
+    "VERDE": "GREEN",
+    "緑": "GREEN",
+    "グリーン": "GREEN",
+    "PINK": "PINK",
+    "ROSA": "PINK",
+    "ピンク": "PINK",
+    "GREY": "GREY",
+    "GRAY": "GREY",
+    "グレー": "GREY",
+    "GRIGIO": "GREY",
+    "NAVY": "NAVY",
+    "ネイビー": "NAVY",
+    "MARINE": "NAVY",
+    "GOLD": "GOLD",
+    "ゴールド": "GOLD",
+    "ORO": "GOLD",
+    "SILVER": "SILVER",
+    "シルバー": "SILVER",
+    "ARGENTO": "SILVER",
 }
 
 
 # ---------------------------------------------------------------------------
 # Token / Model extraction
 # ---------------------------------------------------------------------------
+
 
 def extract_model_numbers(name: str) -> set[str]:
     """Extract alphanumeric model numbers (5-12 chars) from product name."""
@@ -97,6 +162,7 @@ def extract_size(name: str) -> str | None:
 # Matching score functions
 # ---------------------------------------------------------------------------
 
+
 def cross_site_match_score(
     query_name: str,
     candidate_name: str,
@@ -126,9 +192,8 @@ def cross_site_match_score(
     candidate_upper = candidate_name.upper()
 
     # Optional brand requirement (useful for BUYMA matching)
-    if require_brand_in_candidate and brand:
-        if brand.upper() not in candidate_upper:
-            return 0.0
+    if require_brand_in_candidate and brand and brand.upper() not in candidate_upper:
+        return 0.0
 
     # Model number bonus
     query_models = extract_model_numbers(query_name)

@@ -9,15 +9,15 @@ from datetime import timedelta
 
 from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
 
-from app.core.timezone import _utcnow
-from app.models.enums import OrderStatus
 from app.config.constants import (
     EXPECTED_PAYMENT_DAYS,
     PAYMENT_METHOD_EXTENSION_DAYS,
 )
 from app.core.pricing import PricingInput, calculate_pricing
 from app.core.pricing.schemas import nz
+from app.core.timezone import _utcnow
 from app.extensions import db
+from app.models.enums import OrderStatus
 
 
 class Order(db.Model):
@@ -47,7 +47,9 @@ class Order(db.Model):
     # 区分
     payment_method = db.Column(String(32), nullable=True, comment="決済方法")
     source_type = db.Column(String(16), nullable=True, default="domestic", comment="domestic/overseas")
-    status = db.Column(String(32), default=OrderStatus.PENDING, index=True, comment="pending/shipped/completed/cancelled")
+    status = db.Column(
+        String(32), default=OrderStatus.PENDING, index=True, comment="pending/shipped/completed/cancelled"
+    )
 
     # 紐付け
     product_id = db.Column(Integer, db.ForeignKey("product.id"), nullable=True)

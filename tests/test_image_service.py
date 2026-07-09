@@ -1,8 +1,9 @@
 """Tests for app/services/image_service.py"""
+
 import io
+from unittest.mock import MagicMock, patch
+
 import pytest
-from pathlib import Path
-from unittest.mock import MagicMock, patch, PropertyMock
 from PIL import Image
 
 
@@ -18,17 +19,20 @@ def _make_fake_image() -> bytes:
 @pytest.fixture
 def service(tmp_path):
     from app.services.image_service import ImageService
+
     return ImageService(base_dir=tmp_path / "images")
 
 
 class TestImageServiceInit:
     def test_base_dir_created(self, tmp_path):
         from app.services.image_service import ImageService
-        svc = ImageService(base_dir=tmp_path / "new_dir")
+
+        ImageService(base_dir=tmp_path / "new_dir")
         assert (tmp_path / "new_dir").exists()
 
     def test_custom_base_dir(self, tmp_path):
         from app.services.image_service import ImageService
+
         custom = tmp_path / "custom"
         svc = ImageService(base_dir=custom)
         assert svc.base_dir == custom

@@ -1,4 +1,5 @@
 """Tests for app/commands.py - Issue #87 カバレッジ向上"""
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -22,6 +23,7 @@ def runner(app):
 
 # ── register_commands ─────────────────────────────────────────────────────────
 
+
 class TestRegisterCommands:
     def test_register_commands_adds_cli_command(self, app):
         """scrape-brand-prices コマンドが登録されている"""
@@ -36,6 +38,7 @@ class TestRegisterCommands:
 
 
 # ── scrape-brand-prices コマンド ──────────────────────────────────────────────
+
 
 class TestScrapeBrandPricesCommand:
     def test_unsupported_brand_prints_error(self, runner):
@@ -58,8 +61,10 @@ class TestScrapeBrandPricesCommand:
     def test_supported_brand_with_results(self, runner):
         """サポートブランドで結果ありの場合に Saved N records が出る"""
         fake_results = [{"brand": "Prada", "price": 100000}]
-        with patch("app.services.brand_price_scraper.BrandPriceScraper") as MockScraper, \
-             patch("app.services.brand_price_service.save_scraped_prices", return_value=1) as mock_save:
+        with (
+            patch("app.services.brand_price_scraper.BrandPriceScraper") as MockScraper,
+            patch("app.services.brand_price_service.save_scraped_prices", return_value=1) as mock_save,
+        ):
             mock_instance = MagicMock()
             mock_instance.scrape.return_value = fake_results
             MockScraper.return_value = mock_instance

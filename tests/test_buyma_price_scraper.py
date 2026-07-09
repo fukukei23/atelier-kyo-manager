@@ -1,16 +1,13 @@
 """Tests for app/services/buyma_price_scraper.py - Issue #82 カバレッジ向上"""
-import pytest
 
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
 from app.services.buyma_price_scraper import (
-    BuymaPriceSearcher,
-
-    BUYMA_UNAVAILABLE_BRANDS,
-    DEFAULT_THRESHOLD,
     _BRAND_ALIASES,
     _NOISE_WORDS,
-    _build_search_query,
+    BUYMA_UNAVAILABLE_BRANDS,
+    DEFAULT_THRESHOLD,
+    BuymaPriceSearcher,
     _extract_model_numbers,
     _extract_size,
     _extract_tokens,
@@ -22,8 +19,8 @@ from app.services.buyma_price_scraper import (
     match_product,
 )
 
-
 # ── 定数テスト ────────────────────────────────────────────────────────────────
+
 
 class TestConstants:
     def test_noise_words_is_set(self):
@@ -51,6 +48,7 @@ class TestConstants:
 
 # ── _normalize_brand ──────────────────────────────────────────────────────────
 
+
 class TestNormalizeBrand:
     def test_expands_ferragamo_alias(self):
         assert _normalize_brand("SALVATORE FERRAGAMO") == "FERRAGAMO"
@@ -72,6 +70,7 @@ class TestNormalizeBrand:
 
 
 # ── _extract_model_numbers ────────────────────────────────────────────────────
+
 
 class TestExtractModelNumbers:
     def test_extracts_alphanumeric_token(self):
@@ -112,6 +111,7 @@ class TestExtractModelNumbers:
 
 # ── _extract_tokens ───────────────────────────────────────────────────────────
 
+
 class TestExtractTokens:
     def test_removes_noise_words(self):
         result = _extract_tokens("中古 商品 USED")
@@ -142,6 +142,7 @@ class TestExtractTokens:
 
 
 # ── _normalize_color ──────────────────────────────────────────────────────────
+
 
 class TestNormalizeColor:
     def test_japanese_black(self):
@@ -178,6 +179,7 @@ class TestNormalizeColor:
 
 # ── _extract_size ─────────────────────────────────────────────────────────────
 
+
 class TestExtractSize:
     def test_s_size(self):
         assert _extract_size("サイズ S") == "S"
@@ -210,6 +212,7 @@ class TestExtractSize:
 
 
 # ── _filter_outliers ──────────────────────────────────────────────────────────
+
 
 class TestFilterOutliers:
     def test_less_than_4_returns_same(self):
@@ -245,6 +248,7 @@ class TestFilterOutliers:
 
 # ── _parse_buyma_results ──────────────────────────────────────────────────────
 
+
 def _make_buyma_html(item_id="123456", name="商品名テスト", brand="PRADA", price="50000"):
     return f'syo_id="{item_id}" syo_name="{name}" brand_name="{brand}" price="{price}"'
 
@@ -266,14 +270,20 @@ class TestParseBuymaResults:
         assert "buyma.com" in result[0]["item_url"]
 
     def test_parses_multiple_items(self):
-        html = _make_buyma_html("111", "商品A", "PRADA", "30000") + " " + \
-               _make_buyma_html("222", "商品B", "GUCCI", "40000")
+        html = (
+            _make_buyma_html("111", "商品A", "PRADA", "30000")
+            + " "
+            + _make_buyma_html("222", "商品B", "GUCCI", "40000")
+        )
         result = _parse_buyma_results(html)
         assert len(result) == 2
 
     def test_skips_duplicate_ids(self):
-        html = _make_buyma_html("123", "商品1", "PRADA", "30000") + " " + \
-               _make_buyma_html("123", "商品2", "GUCCI", "40000")
+        html = (
+            _make_buyma_html("123", "商品1", "PRADA", "30000")
+            + " "
+            + _make_buyma_html("123", "商品2", "GUCCI", "40000")
+        )
         result = _parse_buyma_results(html)
         assert len(result) == 1
         assert result[0]["name"] == "商品1"
@@ -297,6 +307,7 @@ class TestParseBuymaResults:
 
 
 # ── _match_score ──────────────────────────────────────────────────────────────
+
 
 class TestMatchScore:
     def test_brand_not_in_name_returns_zero(self):
@@ -331,6 +342,7 @@ class TestMatchScore:
 
 # ── match_product ─────────────────────────────────────────────────────────────
 
+
 def _make_result(name="PRADA Bag", brand="PRADA", price=50000, item_id="1"):
     return {
         "name": name,
@@ -346,9 +358,7 @@ class TestMatchProduct:
         assert match_product("PRADA Bag", "PRADA", []) is None
 
     def test_below_threshold_returns_none(self):
-        result = match_product("PRADA Bag", "PRADA",
-                               [_make_result("Totally Different Item", "OTHER")],
-                               threshold=0.9)
+        result = match_product("PRADA Bag", "PRADA", [_make_result("Totally Different Item", "OTHER")], threshold=0.9)
         assert result is None
 
     def test_matching_item_returns_dict(self):
@@ -391,6 +401,7 @@ class TestMatchProduct:
 
 
 # ── BuymaPriceSearcher ────────────────────────────────────────────────────────
+
 
 class TestBuymaPriceSearcher:
     """BuymaPriceSearcher クラスのテスト（Playwright はモック化）"""
@@ -457,10 +468,11 @@ class TestBuymaPriceSearcher:
     def test_search_batch_returns_matches(self):
         """マッチした結果を辞書で返す"""
         searcher = BuymaPriceSearcher()
-        fake_match = {"buyma_name": "PRADA Bag", "buyma_price": 50000,
-                      "match_score": 0.8, "match_count": 3}
-        with patch.object(searcher, "search_single", return_value=fake_match):
-            with patch("app.services.buyma_price_scraper.time.sleep"):
-                results = searcher.search_batch([{"product_name": "PRADA Bag", "brand": "PRADA"}])
+        fake_match = {"buyma_name": "PRADA Bag", "buyma_price": 50000, "match_score": 0.8, "match_count": 3}
+        with (
+            patch.object(searcher, "search_single", return_value=fake_match),
+            patch("app.services.buyma_price_scraper.time.sleep"),
+        ):
+            results = searcher.search_batch([{"product_name": "PRADA Bag", "brand": "PRADA"}])
         assert "PRADA Bag" in results
         assert results["PRADA Bag"]["buyma_price"] == 50000

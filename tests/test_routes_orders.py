@@ -1,11 +1,6 @@
 """Tests for app/utils/order_model.py - Order calculations"""
 
-from datetime import datetime, timezone
-
-import pytest
-
 from app.models.order import Order
-
 
 # ---------- Order model calculation methods ----------
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app.config.constants import CHAT_HISTORY_RETENTION_DAYS
 from app.core.timezone import _utcnow

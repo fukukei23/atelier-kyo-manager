@@ -4,19 +4,16 @@ from __future__ import annotations
 
 import json
 import tempfile
-from pathlib import Path
 
-import pytest
-
+from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.rules import (
+    _DEFAULT_CONFIG,
     CUSTOMS_RATE_TABLE,
     PricingConfig,
-    _DEFAULT_CONFIG,
     load_pricing_config,
     resolve_customs_rate,
 )
 from app.core.pricing.schemas import PricingInput, PricingResult, nz
-from app.core.pricing.calculator import calculate_pricing
 
 
 # =====================================================================
@@ -184,12 +181,15 @@ class TestLoadPricingConfig:
 
     def test_valid_config_file(self):
         with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            json.dump({
-                "buyma_platform_fee_rate": 0.05,
-                "buyma_effective_fee_rate": 0.12,
-                "additional_fee_rate": 0.02,
-                "transfer_fee": 500.0,
-            }, f)
+            json.dump(
+                {
+                    "buyma_platform_fee_rate": 0.05,
+                    "buyma_effective_fee_rate": 0.12,
+                    "additional_fee_rate": 0.02,
+                    "transfer_fee": 500.0,
+                },
+                f,
+            )
             f.flush()
             cfg = load_pricing_config(f.name)
         assert cfg.buyma_platform_fee_rate == 0.05

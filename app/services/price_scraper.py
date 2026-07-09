@@ -14,7 +14,7 @@ import requests
 from bs4 import BeautifulSoup
 
 from app.config.constants import SCRAPER_CACHE_SIZE, SCRAPER_MAX_RETRIES, SCRAPER_REQUEST_TIMEOUT
-from app.utils.validation import validate_url, ValidationError
+from app.utils.validation import ValidationError, validate_url
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +66,14 @@ class PriceScraper:
         try:
             url = validate_url(url)
         except ValidationError as e:
-            return {"success": False, "title": None, "price": None, "in_stock": True, "raw_price": None, "error": str(e)}
+            return {
+                "success": False,
+                "title": None,
+                "price": None,
+                "in_stock": True,
+                "raw_price": None,
+                "error": str(e),
+            }
 
         result: dict[str, Any] = {
             "success": False,

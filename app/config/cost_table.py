@@ -14,10 +14,10 @@ from __future__ import annotations
 # Buyandship 送料テーブル（EUR → 日本）
 # 単位: JPY。商品カテゴリに基づく概算。
 BUYANDSHIP_SHIPPING_RATES: dict[str, float] = {
-    "light": 3300.0,     # ~1lb（財布・小物アクセサリー）= 3,300円（3lb以下固定）
-    "medium": 3300.0,    # ~2lb（バッグ・靴）= 3,300円（3lb以下固定）
-    "heavy": 4200.0,     # ~4lb（大型バッグ・コート）= 3,300 + 900
-    "default": 3300.0,   # 不明時のデフォルト
+    "light": 3300.0,  # ~1lb（財布・小物アクセサリー）= 3,300円（3lb以下固定）
+    "medium": 3300.0,  # ~2lb（バッグ・靴）= 3,300円（3lb以下固定）
+    "heavy": 4200.0,  # ~4lb（大型バッグ・コート）= 3,300 + 900
+    "default": 3300.0,  # 不明時のデフォルト
 }
 
 # 商品カテゴリ → Buyandship重量帯のマッピング

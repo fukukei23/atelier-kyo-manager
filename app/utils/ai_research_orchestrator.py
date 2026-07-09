@@ -12,7 +12,6 @@
 import argparse
 import asyncio
 import logging
-from pathlib import Path
 
 from app.agents.persistence_agent import PersistenceAgent
 from app.agents.reporting_agent import ReportingAgent

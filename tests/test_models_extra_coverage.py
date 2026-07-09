@@ -6,10 +6,8 @@ context issues with many sequential tests.
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from datetime import datetime, timedelta
-import uuid
+from pathlib import Path
 
 import pytest
 
@@ -19,8 +17,8 @@ from app.models.brand_price import BrandPrice
 from app.models.customer_inquiry import CustomerInquiry
 from app.models.partner import Partner
 from app.models.popularity_tracker import PopularityTracker
-from app.models.prohibited_source import ProhibitedSource
 from app.models.product import Product
+from app.models.prohibited_source import ProhibitedSource
 from app.models.region_recommendation import RegionRecommendation
 from app.models.repeat_customer import RepeatCustomer
 from app.models.stock_check import StockCheck
@@ -135,10 +133,15 @@ class TestStockCheckModel:
     def test_to_dict_basic(self, app):
         now = datetime(2026, 5, 1, 12, 0, 0)
         sc = StockCheck(
-            product_id=1, source_url="https://example.com",
-            current_price=10000.0, previous_price=9000.0,
-            price_changed=True, in_stock=True, stock_changed=False,
-            checked_at=now, notes="test note",
+            product_id=1,
+            source_url="https://example.com",
+            current_price=10000.0,
+            previous_price=9000.0,
+            price_changed=True,
+            in_stock=True,
+            stock_changed=False,
+            checked_at=now,
+            notes="test note",
         )
         d = sc.to_dict()
         assert d["product_id"] == 1
@@ -156,15 +159,25 @@ class TestStockCheckModel:
         sc = StockCheck(product_id=1)
         d = sc.to_dict()
         assert set(d.keys()) == {
-            "id", "product_id", "source_url", "current_price",
-            "previous_price", "price_changed", "in_stock",
-            "stock_changed", "checked_at", "notes",
+            "id",
+            "product_id",
+            "source_url",
+            "current_price",
+            "previous_price",
+            "price_changed",
+            "in_stock",
+            "stock_changed",
+            "checked_at",
+            "notes",
         }
 
     def test_db_insert_and_query(self, app):
         prod = Product(
-            name="SCProd", brand="Test", purchase_price=8000,
-            selling_price=12000, retail_price=10000,
+            name="SCProd",
+            brand="Test",
+            purchase_price=8000,
+            selling_price=12000,
+            retail_price=10000,
         )
         db.session.add(prod)
         db.session.flush()
@@ -190,7 +203,9 @@ class TestProhibitedSourceModel:
         assert result is False
 
     def test_is_prohibited_exact_match(self, app):
-        db.session.add(ProhibitedSource(domain="badsite.com", reason="詐欺", severity="blocked", source_type="domestic"))
+        db.session.add(
+            ProhibitedSource(domain="badsite.com", reason="詐欺", severity="blocked", source_type="domestic")
+        )
         db.session.commit()
         result, reason = ProhibitedSource.is_prohibited("https://badsite.com/product/123")
         assert result is True
@@ -211,7 +226,9 @@ class TestProhibitedSourceModel:
         assert reason == ""
 
     def test_is_prohibited_source_type_filter(self, app):
-        db.session.add(ProhibitedSource(domain="tf-bad.com", reason="blocked", severity="blocked", source_type="overseas"))
+        db.session.add(
+            ProhibitedSource(domain="tf-bad.com", reason="blocked", severity="blocked", source_type="overseas")
+        )
         db.session.commit()
         result, _ = ProhibitedSource.is_prohibited("https://tf-bad.com/product", source_type="domestic")
         assert result is False
@@ -224,7 +241,9 @@ class TestProhibitedSourceModel:
         assert "warning" in repr(ps)
 
     def test_is_prohibited_case_insensitive(self, app):
-        db.session.add(ProhibitedSource(domain="BadSite.COM", reason="test", severity="blocked", source_type="domestic"))
+        db.session.add(
+            ProhibitedSource(domain="BadSite.COM", reason="test", severity="blocked", source_type="domestic")
+        )
         db.session.commit()
         result, _ = ProhibitedSource.is_prohibited("https://badsite.com/page")
         assert result is True
@@ -257,7 +276,14 @@ class TestRegionRecommendationModel:
         assert rr.calc_recommendation() == pytest.approx(30.0)
 
     def test_db_insert(self, app):
-        rr = RegionRecommendation(region="IT", region_name="Italy", total_products=50, avg_profit_rate=25.0, reliability_score=90.0, risk_score=10.0)
+        rr = RegionRecommendation(
+            region="IT",
+            region_name="Italy",
+            total_products=50,
+            avg_profit_rate=25.0,
+            reliability_score=90.0,
+            risk_score=10.0,
+        )
         db.session.add(rr)
         db.session.commit()
         fetched = db.session.scalar(db.select(RegionRecommendation).filter_by(region="IT"))
@@ -426,19 +452,47 @@ class TestCustomerInquiryModel:
 # =====================================================================
 class TestBrandPriceModel:
     def test_repr(self, app):
-        bp = BrandPrice(brand="Gucci", product_name="Belt", source_site="gucci.com",
-                        price_original=350.0, currency="EUR", price_jpy=52500.0, exchange_rate=150.0)
+        bp = BrandPrice(
+            brand="Gucci",
+            product_name="Belt",
+            source_site="gucci.com",
+            price_original=350.0,
+            currency="EUR",
+            price_jpy=52500.0,
+            exchange_rate=150.0,
+        )
         r = repr(bp)
         assert "Gucci" in r
         assert "gucci.com" in r
 
     def test_get_by_brand(self, app):
-        bp1 = BrandPrice(brand="Prada", product_name="Bag A", source_site="prada.com",
-                         price_original=1000, currency="EUR", price_jpy=150000, exchange_rate=150)
-        bp2 = BrandPrice(brand="Prada", product_name="Bag B", source_site="other.com",
-                         price_original=800, currency="EUR", price_jpy=120000, exchange_rate=150)
-        bp3 = BrandPrice(brand="Gucci", product_name="Belt", source_site="gucci.com",
-                         price_original=400, currency="EUR", price_jpy=60000, exchange_rate=150)
+        bp1 = BrandPrice(
+            brand="Prada",
+            product_name="Bag A",
+            source_site="prada.com",
+            price_original=1000,
+            currency="EUR",
+            price_jpy=150000,
+            exchange_rate=150,
+        )
+        bp2 = BrandPrice(
+            brand="Prada",
+            product_name="Bag B",
+            source_site="other.com",
+            price_original=800,
+            currency="EUR",
+            price_jpy=120000,
+            exchange_rate=150,
+        )
+        bp3 = BrandPrice(
+            brand="Gucci",
+            product_name="Belt",
+            source_site="gucci.com",
+            price_original=400,
+            currency="EUR",
+            price_jpy=60000,
+            exchange_rate=150,
+        )
         db.session.add_all([bp1, bp2, bp3])
         db.session.commit()
         results = BrandPrice.get_by_brand("Prada")
@@ -450,12 +504,26 @@ class TestBrandPriceModel:
         assert BrandPrice.get_by_brand("NonExistent") == []
 
     def test_get_latest_by_brand_site(self, app):
-        old = BrandPrice(brand="LV", product_name="Wallet", source_site="lv.com",
-                         price_original=500, currency="EUR", price_jpy=75000, exchange_rate=150,
-                         scraped_at=datetime(2026, 1, 1))
-        new = BrandPrice(brand="LV", product_name="Wallet", source_site="lv.com",
-                         price_original=520, currency="EUR", price_jpy=78000, exchange_rate=150,
-                         scraped_at=datetime(2026, 3, 1))
+        old = BrandPrice(
+            brand="LV",
+            product_name="Wallet",
+            source_site="lv.com",
+            price_original=500,
+            currency="EUR",
+            price_jpy=75000,
+            exchange_rate=150,
+            scraped_at=datetime(2026, 1, 1),
+        )
+        new = BrandPrice(
+            brand="LV",
+            product_name="Wallet",
+            source_site="lv.com",
+            price_original=520,
+            currency="EUR",
+            price_jpy=78000,
+            exchange_rate=150,
+            scraped_at=datetime(2026, 3, 1),
+        )
         db.session.add_all([old, new])
         db.session.commit()
         result = BrandPrice.get_latest_by_brand_site("LV", "lv.com")
@@ -466,9 +534,17 @@ class TestBrandPriceModel:
         assert BrandPrice.get_latest_by_brand_site("None", "none.com") is None
 
     def test_db_insert_basic(self, app):
-        bp = BrandPrice(brand="Chanel", product_name="Classic", source_site="chanel.com",
-                        price_original=8000, currency="EUR", price_jpy=1200000, exchange_rate=150,
-                        in_stock=True, size_available="M")
+        bp = BrandPrice(
+            brand="Chanel",
+            product_name="Classic",
+            source_site="chanel.com",
+            price_original=8000,
+            currency="EUR",
+            price_jpy=1200000,
+            exchange_rate=150,
+            in_stock=True,
+            size_available="M",
+        )
         db.session.add(bp)
         db.session.commit()
         fetched = db.session.scalar(db.select(BrandPrice).filter_by(brand="Chanel"))

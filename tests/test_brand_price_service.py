@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from datetime import datetime
 
 import pytest
@@ -27,10 +28,8 @@ def app():
     with app.app_context():
         db.create_all()
         yield app
-        try:
-            db.drop_all()
-        except Exception:
-            pass  # テーブルがない場合は無視
+        with contextlib.suppress(Exception):
+            db.drop_all()  # テーブルがない場合は無視
 
 
 class TestBrandPriceService:
@@ -56,8 +55,13 @@ class TestBrandPriceService:
 
     def test_save_scraped_prices_update_existing(self, app):
         bp = BrandPrice(
-            brand="Prada", product_name="Bag X", source_site="prada.com",
-            price_original=1000, currency="EUR", price_jpy=150000, exchange_rate=150,
+            brand="Prada",
+            product_name="Bag X",
+            source_site="prada.com",
+            price_original=1000,
+            currency="EUR",
+            price_jpy=150000,
+            exchange_rate=150,
         )
         db.session.add(bp)
         db.session.commit()
@@ -97,14 +101,37 @@ class TestBrandPriceService:
         assert saved == 3
 
     def test_get_available_brands(self, app):
-        db.session.add_all([
-            BrandPrice(brand="Chanel", product_name="A", source_site="s1",
-                       price_original=1, currency="EUR", price_jpy=1, exchange_rate=1),
-            BrandPrice(brand="Gucci", product_name="B", source_site="s2",
-                       price_original=1, currency="EUR", price_jpy=1, exchange_rate=1),
-            BrandPrice(brand="Gucci", product_name="C", source_site="s3",
-                       price_original=1, currency="EUR", price_jpy=1, exchange_rate=1),
-        ])
+        db.session.add_all(
+            [
+                BrandPrice(
+                    brand="Chanel",
+                    product_name="A",
+                    source_site="s1",
+                    price_original=1,
+                    currency="EUR",
+                    price_jpy=1,
+                    exchange_rate=1,
+                ),
+                BrandPrice(
+                    brand="Gucci",
+                    product_name="B",
+                    source_site="s2",
+                    price_original=1,
+                    currency="EUR",
+                    price_jpy=1,
+                    exchange_rate=1,
+                ),
+                BrandPrice(
+                    brand="Gucci",
+                    product_name="C",
+                    source_site="s3",
+                    price_original=1,
+                    currency="EUR",
+                    price_jpy=1,
+                    exchange_rate=1,
+                ),
+            ]
+        )
         db.session.commit()
         brands = brand_price_service.get_available_brands()
         assert brands == ["Chanel", "Gucci"]
@@ -114,13 +141,23 @@ class TestBrandPriceService:
 
     def test_cleanup_old_records(self, app):
         old = BrandPrice(
-            brand="Old", product_name="Old", source_site="s",
-            price_original=1, currency="EUR", price_jpy=1, exchange_rate=1,
+            brand="Old",
+            product_name="Old",
+            source_site="s",
+            price_original=1,
+            currency="EUR",
+            price_jpy=1,
+            exchange_rate=1,
             scraped_at=datetime(2020, 1, 1),
         )
         recent = BrandPrice(
-            brand="Recent", product_name="Recent", source_site="s",
-            price_original=1, currency="EUR", price_jpy=1, exchange_rate=1,
+            brand="Recent",
+            product_name="Recent",
+            source_site="s",
+            price_original=1,
+            currency="EUR",
+            price_jpy=1,
+            exchange_rate=1,
             scraped_at=datetime.utcnow(),
         )
         db.session.add_all([old, recent])
@@ -134,8 +171,13 @@ class TestBrandPriceService:
 
     def test_cleanup_old_records_none_to_clean(self, app):
         recent = BrandPrice(
-            brand="R", product_name="R", source_site="s",
-            price_original=1, currency="EUR", price_jpy=1, exchange_rate=1,
+            brand="R",
+            product_name="R",
+            source_site="s",
+            price_original=1,
+            currency="EUR",
+            price_jpy=1,
+            exchange_rate=1,
             scraped_at=datetime.utcnow(),
         )
         db.session.add(recent)
@@ -146,12 +188,30 @@ class TestBrandPriceService:
     def test_get_last_scraped_at(self, app):
         dt1 = datetime(2026, 1, 1)
         dt2 = datetime(2026, 5, 1)
-        db.session.add_all([
-            BrandPrice(brand="LV", product_name="A", source_site="s1",
-                       price_original=1, currency="EUR", price_jpy=1, exchange_rate=1, scraped_at=dt1),
-            BrandPrice(brand="LV", product_name="B", source_site="s2",
-                       price_original=1, currency="EUR", price_jpy=1, exchange_rate=1, scraped_at=dt2),
-        ])
+        db.session.add_all(
+            [
+                BrandPrice(
+                    brand="LV",
+                    product_name="A",
+                    source_site="s1",
+                    price_original=1,
+                    currency="EUR",
+                    price_jpy=1,
+                    exchange_rate=1,
+                    scraped_at=dt1,
+                ),
+                BrandPrice(
+                    brand="LV",
+                    product_name="B",
+                    source_site="s2",
+                    price_original=1,
+                    currency="EUR",
+                    price_jpy=1,
+                    exchange_rate=1,
+                    scraped_at=dt2,
+                ),
+            ]
+        )
         db.session.commit()
         result = brand_price_service.get_last_scraped_at("LV")
         assert result == dt2
@@ -162,14 +222,24 @@ class TestBrandPriceService:
 
     def test_cleanup_buyma_cache(self, app):
         old_cached = BrandPrice(
-            brand="B", product_name="P", source_site="s",
-            price_original=1, currency="EUR", price_jpy=1, exchange_rate=1,
+            brand="B",
+            product_name="P",
+            source_site="s",
+            price_original=1,
+            currency="EUR",
+            price_jpy=1,
+            exchange_rate=1,
             buyma_status="matched",
             buyma_searched_at=datetime(2020, 1, 1),
         )
         fresh_cached = BrandPrice(
-            brand="B", product_name="P2", source_site="s",
-            price_original=1, currency="EUR", price_jpy=1, exchange_rate=1,
+            brand="B",
+            product_name="P2",
+            source_site="s",
+            price_original=1,
+            currency="EUR",
+            price_jpy=1,
+            exchange_rate=1,
             buyma_status="matched",
             buyma_searched_at=datetime.utcnow(),
         )
@@ -185,14 +255,30 @@ class TestBrandPriceService:
         assert fresh_cached.buyma_status == "matched"
 
     def test_get_cheapest_source(self, app):
-        db.session.add_all([
-            BrandPrice(brand="LV", product_name="Wallet", source_site="site_a",
-                       price_original=500, currency="EUR", price_jpy=75000, exchange_rate=150,
-                       scraped_at=datetime(2026, 5, 1)),
-            BrandPrice(brand="LV", product_name="Wallet", source_site="site_b",
-                       price_original=450, currency="EUR", price_jpy=67500, exchange_rate=150,
-                       scraped_at=datetime(2026, 5, 1)),
-        ])
+        db.session.add_all(
+            [
+                BrandPrice(
+                    brand="LV",
+                    product_name="Wallet",
+                    source_site="site_a",
+                    price_original=500,
+                    currency="EUR",
+                    price_jpy=75000,
+                    exchange_rate=150,
+                    scraped_at=datetime(2026, 5, 1),
+                ),
+                BrandPrice(
+                    brand="LV",
+                    product_name="Wallet",
+                    source_site="site_b",
+                    price_original=450,
+                    currency="EUR",
+                    price_jpy=67500,
+                    exchange_rate=150,
+                    scraped_at=datetime(2026, 5, 1),
+                ),
+            ]
+        )
         db.session.commit()
         result = brand_price_service.get_cheapest_source("LV")
         assert "Wallet" in result
@@ -200,14 +286,30 @@ class TestBrandPriceService:
         assert result["Wallet"]["price_jpy"] == 67500
 
     def test_get_price_comparison(self, app):
-        db.session.add_all([
-            BrandPrice(brand="G", product_name="Bag", source_site="s1",
-                       price_original=1, currency="EUR", price_jpy=10000, exchange_rate=1,
-                       scraped_at=datetime(2026, 5, 1)),
-            BrandPrice(brand="G", product_name="Bag", source_site="s2",
-                       price_original=1, currency="EUR", price_jpy=8000, exchange_rate=1,
-                       scraped_at=datetime(2026, 5, 1)),
-        ])
+        db.session.add_all(
+            [
+                BrandPrice(
+                    brand="G",
+                    product_name="Bag",
+                    source_site="s1",
+                    price_original=1,
+                    currency="EUR",
+                    price_jpy=10000,
+                    exchange_rate=1,
+                    scraped_at=datetime(2026, 5, 1),
+                ),
+                BrandPrice(
+                    brand="G",
+                    product_name="Bag",
+                    source_site="s2",
+                    price_original=1,
+                    currency="EUR",
+                    price_jpy=8000,
+                    exchange_rate=1,
+                    scraped_at=datetime(2026, 5, 1),
+                ),
+            ]
+        )
         db.session.commit()
         result = brand_price_service.get_price_comparison("G")
         assert len(result) == 1

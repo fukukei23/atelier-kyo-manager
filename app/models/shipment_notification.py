@@ -15,7 +15,12 @@ class ShipmentNotification(db.Model):
     tracking_number = db.Column(db.String(128), nullable=True, comment="追跡番号")
     warehouse = db.Column(db.String(64), nullable=True, comment="転送倉庫: stackry/shipito/buyandship")
     carrier = db.Column(db.String(64), nullable=True, comment="配送業者: fedex/dhl/ups等")
-    status = db.Column(db.String(32), default=ShipmentNotificationStatus.PENDING, index=True, comment="pending/notified/confirmed/error")
+    status = db.Column(
+        db.String(32),
+        default=ShipmentNotificationStatus.PENDING,
+        index=True,
+        comment="pending/notified/confirmed/error",
+    )
     notification_method = db.Column(db.String(32), default="manual", comment="manual/api/rpa")
     error_message = db.Column(db.Text, nullable=True, comment="エラーメッセージ")
     notified_at = db.Column(db.DateTime, nullable=True, comment="BUYMA通知日時")
