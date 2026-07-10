@@ -16,6 +16,7 @@ from app.config.constants import (
     TRANSFER_FEE,
 )
 from app.core.pricing import PricingInput, calculate_pricing
+from app.core.pricing.schemas import PriceSource
 from app.core.pricing.schemas import nz
 from app.core.timezone import _utcnow
 from app.extensions import db
@@ -167,6 +168,8 @@ class Product(db.Model):
             exchange_rate=nz(self.exchange_rate) or 1.0,
             item_category=self.item_category or "",
             item_material=self.material or "",
+            purchase_price_source=PriceSource.MANUAL_INPUT,  # Product のDB登録済み価格は信頼データ扱い
+            selling_price_source=PriceSource.MANUAL_INPUT,
         )
         return calculate_pricing(inp, source_type=self.source_type or "domestic")
 

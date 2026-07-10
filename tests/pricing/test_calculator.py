@@ -23,7 +23,7 @@ def test_calculate_pricing_basic():
         procurement_fee=500,
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # commission = 30000 * 0.10 = 3000
     # additional = 30000 * 0.02 = 600
@@ -51,7 +51,7 @@ def test_calculate_pricing_zero_selling_price():
         procurement_fee=500,
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # selling_price が 0 なので revenue は 0, commission も 0
     # total_cost = 20000 + 2000 + 1000 + 500 + 0 + 0 + 0 + 0 = 23500
@@ -74,7 +74,7 @@ def test_calculate_pricing_default_config():
         procurement_fee=300,
     )
 
-    res = calculate_pricing(inp)  # config は None → デフォルト使用
+    res = calculate_pricing(inp, skip_source_validation=True)  # config は None → デフォルト使用
 
     # commission = 20000 * 0.077 = 1540
     # additional = 0
@@ -104,7 +104,7 @@ def test_calculate_pricing_no_fees():
         procurement_fee=0,
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # customs_duty=0 → 自動計算, でも category/material 空 → default 10%
     # auto_customs_duty = (5000 + 0) * 0.10 = 500
@@ -132,7 +132,7 @@ def test_calculate_pricing_negative_profit():
         procurement_fee=1000,
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # commission = 20000 * 0.15 = 3000
     # additional = 20000 * 0.03 = 600
@@ -160,7 +160,7 @@ def test_calculate_pricing_rounding():
         procurement_fee=300.222,
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     assert isinstance(res.revenue, float)
     assert isinstance(res.total_cost, float)
@@ -191,7 +191,7 @@ def test_exchange_rate_conversion():
         item_category="accessory",  # 10%
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # purchase_price_jpy = 100 * 150 = 15000
     # auto_customs_duty = (15000 + 0) * 0.10 = 1500
@@ -216,7 +216,7 @@ def test_warehouse_shipping_cost():
         warehouse_shipping_cost=3000,  # 転送倉庫送料
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # total_shipping_cost = 1500 + 3000 = 4500
     # total_cost = 10000 + 4500 + 1000 + 0 + 0 + 0 + 0 + 0 = 15500
@@ -239,7 +239,7 @@ def test_auto_customs_bag():
         item_category="bag",
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # customs_rate = 0.11 (bag)
     # auto_customs_duty = (50000 + 0) * 0.11 = 5500
@@ -264,7 +264,7 @@ def test_manual_customs_override():
         item_category="bag",  # 自動なら11%だが手動が優先
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # customs_duty = 3000 (手動優先)
     # customs_rate_used = 0 (手動時は記録しない)
@@ -291,7 +291,7 @@ def test_overseas_source_type():
         item_material="leather",
     )
 
-    res = calculate_pricing(inp, cfg, source_type="overseas")
+    res = calculate_pricing(inp, cfg, source_type="overseas", skip_source_validation=True)
 
     # purchase_price_jpy = 100 * 150 = 15000
     # auto_customs_duty = (15000 + 0) * 0.12 = 1800  (material=leather → 12%)
@@ -331,7 +331,7 @@ def test_backward_compatible_jpy():
         exchange_rate=150.0,  # JPY なので為替適用なし
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # purchase_price_jpy = 10000 (JPY の場合は為替適用なし)
     # total_cost = 10000 + 0 + 1000 + 0 + 0 + 0 + 0 + 0 = 11000
@@ -357,7 +357,7 @@ def test_exchange_rate_zero_skips_conversion():
         exchange_rate=0.0,  # レート0 → 為替適用なし
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # exchange_rate > 0 が false → purchase_price_jpy = 100 (そのまま)
     assert res.purchase_price_jpy == 100.0
@@ -380,7 +380,7 @@ def test_customs_auto_includes_warehouse_shipping():
         item_category="bag",  # 11%
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # auto_customs_duty = (50000 + 3000) * 0.11 = 5830
     # total_shipping = 0 + 3000 = 3000
@@ -404,8 +404,8 @@ def test_domestic_vs_overseas_commission():
         customs_duty=2000,
     )
 
-    domestic = calculate_pricing(inp, cfg, source_type="domestic")
-    overseas = calculate_pricing(inp, cfg, source_type="overseas")
+    domestic = calculate_pricing(inp, cfg, source_type="domestic", skip_source_validation=True)
+    overseas = calculate_pricing(inp, cfg, source_type="overseas", skip_source_validation=True)
 
     # domestic commission = 50000 * 0.077 = 3850
     # overseas commission = 50000 * 0.055 = 2750
@@ -432,7 +432,7 @@ def test_profit_near_zero_boundary():
         shipping_cost=500,
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # auto_customs = (9500 + 0) * 0.10 = 950
     # total_cost = 9500 + 500 + 950 + 0 + 0 + 0 + 0 + 0 = 10950
@@ -457,7 +457,7 @@ def test_profit_exactly_zero():
         shipping_cost=1000,
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # total_cost = 8000 + 1000 + 1000 + 0 + 0 + 0 + 0 + 0 = 10000
     assert res.total_cost == 10000.0
@@ -480,7 +480,7 @@ def test_material_overrides_category_for_customs():
         item_material="leather",  # 12%が優先
     )
 
-    res = calculate_pricing(inp, cfg)
+    res = calculate_pricing(inp, cfg, skip_source_validation=True)
 
     # leather優先 → 12%
     # auto_customs = (50000 + 0) * 0.12 = 6000
