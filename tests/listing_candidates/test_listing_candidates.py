@@ -61,6 +61,8 @@ def test_listing_candidates_filters_listed(app):
             selling_price=1500,
             stock_status=True,
             listing_status="draft",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         p2 = Product(
             name="出品済",
@@ -68,6 +70,8 @@ def test_listing_candidates_filters_listed(app):
             selling_price=1500,
             stock_status=True,
             listing_status="listed",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         db.session.add_all([p1, p2])
         db.session.commit()
@@ -87,6 +91,8 @@ def test_listing_candidates_filters_no_stock(app):
             selling_price=1500,
             stock_status=True,
             listing_status="draft",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         p2 = Product(
             name="在庫なし",
@@ -94,6 +100,8 @@ def test_listing_candidates_filters_no_stock(app):
             selling_price=1500,
             stock_status=False,
             listing_status="draft",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         db.session.add_all([p1, p2])
         db.session.commit()
@@ -114,6 +122,8 @@ def test_listing_candidates_filters_by_profit_rate(app):
             selling_price=2000,
             stock_status=True,
             listing_status="draft",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         # purchase=1000, selling=1050 → rate=マイナス
         p2 = Product(
@@ -122,6 +132,8 @@ def test_listing_candidates_filters_by_profit_rate(app):
             selling_price=1050,
             stock_status=True,
             listing_status="draft",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         db.session.add_all([p1, p2])
         db.session.commit()
@@ -143,6 +155,8 @@ def test_listing_candidates_sort_by_tier(app):
             stock_status=True,
             listing_status="draft",
             brand_tier="low",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         p_high = Product(
             name="ハイ",
@@ -151,6 +165,8 @@ def test_listing_candidates_sort_by_tier(app):
             stock_status=True,
             listing_status="draft",
             brand_tier="high",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         p_med = Product(
             name="ミドル",
@@ -159,6 +175,8 @@ def test_listing_candidates_sort_by_tier(app):
             stock_status=True,
             listing_status="draft",
             brand_tier="medium",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         db.session.add_all([p_low, p_high, p_med])
         db.session.commit()
@@ -178,6 +196,8 @@ def test_listing_candidates_default_min_rate(app):
             selling_price=1500,
             stock_status=True,
             listing_status="draft",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         db.session.add(p1)
         db.session.commit()
@@ -205,6 +225,8 @@ def test_listing_candidates_route(auth_client, app):
             selling_price=2000,
             stock_status=True,
             listing_status="draft",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         db.session.add(p)
         db.session.commit()
@@ -222,6 +244,8 @@ def test_export_listing_candidates_csv(auth_client, app):
             selling_price=2000,
             stock_status=True,
             listing_status="draft",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         db.session.add(p)
         db.session.commit()
@@ -241,6 +265,8 @@ def test_listing_candidates_route_with_filter(auth_client, app):
             selling_price=2000,
             stock_status=True,
             listing_status="draft",
+            purchase_price_source="manual_input",
+            selling_price_source="manual_input",
         )
         db.session.add(p)
         db.session.commit()

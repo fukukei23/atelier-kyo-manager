@@ -16,7 +16,7 @@ from app.config.constants import (
     TRANSFER_FEE,
 )
 from app.core.pricing import PricingInput, calculate_pricing
-from app.core.pricing.schemas import nz
+from app.core.pricing.schemas import PriceSource, nz
 from app.core.timezone import _utcnow
 from app.extensions import db
 from app.models.enums import ListingStatus, PipelineStatus
@@ -93,6 +93,8 @@ class Product(db.Model):
     original_currency = db.Column(String(8), default="JPY")  # 仕入れ通貨
     exchange_rate = db.Column(Float, default=1.0)  # 適用為替レート
     item_category = db.Column(String(64), nullable=True)  # 品目カテゴリ（関税率自動決定用）
+    purchase_price_source = db.Column(String(32), nullable=True, default="unknown")  # 価格ソース（CLAUDE.md価格調査鉄則）
+    selling_price_source = db.Column(String(32), nullable=True, default="unknown")  # 価格ソース
 
     # --- FR-002/003 パイプライン ---
     pipeline_status = db.Column(
@@ -167,6 +169,8 @@ class Product(db.Model):
             exchange_rate=nz(self.exchange_rate) or 1.0,
             item_category=self.item_category or "",
             item_material=self.material or "",
+            purchase_price_source=PriceSource(self.purchase_price_source or "unknown"),
+            selling_price_source=PriceSource(self.selling_price_source or "unknown"),
         )
         return calculate_pricing(inp, source_type=self.source_type or "domestic")
 
