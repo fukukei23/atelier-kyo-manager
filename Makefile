@@ -58,7 +58,7 @@ install-dev: install
 # ==== test / lint / format ============================================
 
 .PHONY: test
-test: venv
+test: install
 	@echo ">>> Run pytest..."
 	@if [ -d "tests" ]; then \
 		$(PYTHON) -m pytest -q; \
