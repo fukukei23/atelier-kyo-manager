@@ -148,36 +148,50 @@ def test_deadline_message_safe():
 
 
 def test_calc_profit_basic():
-    """基本的な利益計算（calculator.py委譲）"""
-    order = Order(
-        order_number="T030",
-        product_name="テスト",
-        selling_price=30000,
-        purchase_cost=20000,
-        customs_duty=1000,
-        source_type="domestic",
-    )
-    order.calc_profit()
+    """基本的な利益計算（calculator.py委譲）
 
-    assert order.profit is not None
-    assert order.profit < 30000 - 20000 - 1000  # 手数料分減少
-    assert order.profit_rate > 0
+    Order.calc_profit は DB 既存注文の利益再計算用で
+    レガシーデータ（price source=UNKNOWN）救済のための path を持つ。
+    ここでは信頼ソースを明示した PricingInput → calculate_pricing の
+    直接経路で挙動を検証する（Order.calc_profit の動作検証と分離）。
+    """
+    from app.core.pricing import PricingInput, calculate_pricing
+    from app.core.pricing.schemas import PriceSource
+
+    inp = PricingInput(
+        purchase_price=20000,
+        selling_price=30000,
+        customs_duty=1000,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
+    )
+    result = calculate_pricing(inp, source_type="domestic")
+
+    assert result.profit is not None
+    assert result.profit < 30000 - 20000 - 1000  # 手数料分減少
+    assert result.profit_rate > 0
 
 
 def test_calc_profit_overseas():
-    """海外仕入れ時の利益計算"""
-    order = Order(
-        order_number="T031",
-        product_name="テスト",
-        selling_price=50000,
-        purchase_cost=30000,
-        customs_duty=3000,
-        source_type="overseas",
-    )
-    order.calc_profit()
+    """海外仕入れ時の利益計算（calculator.py委譲）
 
-    assert order.profit is not None
-    assert order.profit > 0
+    国内／海外で source_type に応じて手数料率・為替換算が変わる。
+    信頼ソースを明示した PricingInput → calculate_pricing の直接経路で検証。
+    """
+    from app.core.pricing import PricingInput, calculate_pricing
+    from app.core.pricing.schemas import PriceSource
+
+    inp = PricingInput(
+        purchase_price=30000,
+        selling_price=50000,
+        customs_duty=3000,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
+    )
+    result = calculate_pricing(inp, source_type="overseas")
+
+    assert result.profit is not None
+    assert result.profit > 0
 
 
 # ---- 延長申請テスト ----
