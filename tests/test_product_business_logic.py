@@ -210,23 +210,37 @@ class TestRecommendedSellingPrice:
 
 class TestCalculateProfit:
     def test_profit_calculation(self):
-        p = Product(
+        # Product モデル内の calculate_profit は内部で PricingInput(price source=UNKNOWN)
+        # を構築して calculator.py に委譲する Thin Wrapper 構造のため、
+        # 信頼ソース不明のデフォルト経路は PriceIntegrityError で raise される。
+        # ここは「PricingInput に信頼ソースを明示して calculate_pricing を直接たたく経路」で
+        # 利益計算ロジックそのものを検証する（利益計算の網羅検証は
+        # tests/pricing/test_calculator.py 側で既完了）。
+        from app.core.pricing import PricingInput, calculate_pricing
+        from app.core.pricing.schemas import PriceSource
+
+        inp = PricingInput(
             purchase_price=50000,
             selling_price=80000,
             transaction_fee=0,
             shipping_cost=2000,
             customs_duty=5000,
             procurement_fee=0,
-            source_type="domestic",
+            purchase_price_source=PriceSource.MANUAL_INPUT,
+            selling_price_source=PriceSource.MANUAL_INPUT,
         )
-        profit = p.calculate_profit()
-        assert isinstance(profit, float)
+        result = calculate_pricing(inp, source_type="domestic")
+        assert isinstance(result.profit, float)
 
     def test_profit_rate(self):
-        p = Product(
+        from app.core.pricing import PricingInput, calculate_pricing
+        from app.core.pricing.schemas import PriceSource
+
+        inp = PricingInput(
             purchase_price=50000,
             selling_price=80000,
-            source_type="domestic",
+            purchase_price_source=PriceSource.MANUAL_INPUT,
+            selling_price_source=PriceSource.MANUAL_INPUT,
         )
-        rate = p.profit_rate()
-        assert isinstance(rate, float)
+        result = calculate_pricing(inp, source_type="domestic")
+        assert isinstance(result.profit_rate * 100, float)
