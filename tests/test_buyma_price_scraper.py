@@ -37,10 +37,8 @@ class TestConstants:
         assert _BRAND_ALIASES["VALENTINO GARAVANI"] == "VALENTINO"
 
     def test_unavailable_brands(self):
-        assert "Gucci" in BUYMA_UNAVAILABLE_BRANDS
-        assert "Ferragamo" in BUYMA_UNAVAILABLE_BRANDS
-        assert "Valentino" in BUYMA_UNAVAILABLE_BRANDS
-        assert "Chloe" in BUYMA_UNAVAILABLE_BRANDS
+        """2026-06: 全ブランド検索可能化によりブロックリストは空（経営者判断.md Tier2でGucci等は狙いブランド）"""
+        assert not BUYMA_UNAVAILABLE_BRANDS
 
     def test_default_threshold(self):
         assert 0.0 < DEFAULT_THRESHOLD <= 1.0
@@ -444,9 +442,10 @@ class TestBuymaPriceSearcher:
         assert searcher._pw is None
 
     def test_search_single_skips_unavailable_brand(self):
-        """利用不可ブランドは None を返す"""
+        """利用不可ブランドは None を返す（現行ブロックリストは空のため一時的にブランドを注入して機構を検証）"""
         searcher = BuymaPriceSearcher()
-        result = searcher.search_single("Gucci Bag", "Gucci")
+        with patch("app.services.buyma_price_scraper.BUYMA_UNAVAILABLE_BRANDS", {"Gucci"}):
+            result = searcher.search_single("Gucci Bag", "Gucci")
         assert result is None
 
     def test_search_batch_skips_empty_name(self):
@@ -458,9 +457,12 @@ class TestBuymaPriceSearcher:
         assert results == {}
 
     def test_search_batch_skips_unavailable_brand(self):
-        """利用不可ブランドはスキップ"""
+        """利用不可ブランドはスキップ（現行ブロックリストは空のため一時的にブランドを注入して機構を検証）"""
         searcher = BuymaPriceSearcher()
-        with patch.object(searcher, "search_single", return_value=None) as mock_s:
+        with (
+            patch("app.services.buyma_price_scraper.BUYMA_UNAVAILABLE_BRANDS", {"Gucci"}),
+            patch.object(searcher, "search_single", return_value=None) as mock_s,
+        ):
             results = searcher.search_batch([{"product_name": "Bag", "brand": "Gucci"}])
             mock_s.assert_not_called()
         assert results == {}

@@ -375,9 +375,9 @@ class TestSaveChatHistory:
 
             save_chat_history("hello", result)
 
-    @patch("app.utils.chat_history_saver.datetime")
-    def test_saves_user_and_assistant_messages(self, mock_dt):
-        mock_dt.utcnow.return_value = "2026-05-10T00:00:00"
+    @patch("app.utils.chat_history_saver._utcnow")
+    def test_saves_user_and_assistant_messages(self, mock_utcnow):
+        mock_utcnow.return_value = "2026-05-10T00:00:00"
         mock_db = MagicMock()
         mock_chat_history = MagicMock()
 
@@ -402,9 +402,9 @@ class TestSaveChatHistory:
         assert mock_db.session.add.call_count == 2
         mock_db.session.commit.assert_called_once()
 
-    @patch("app.utils.chat_history_saver.datetime")
-    def test_db_error_rolls_back(self, mock_dt):
-        mock_dt.utcnow.return_value = "2026-05-10T00:00:00"
+    @patch("app.utils.chat_history_saver._utcnow")
+    def test_db_error_rolls_back(self, mock_utcnow):
+        mock_utcnow.return_value = "2026-05-10T00:00:00"
         mock_db = MagicMock()
         mock_db.session.commit.side_effect = RuntimeError("DB error")
 
