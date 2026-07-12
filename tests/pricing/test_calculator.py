@@ -4,7 +4,7 @@
 
 from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.rules import PricingConfig, resolve_customs_rate
-from app.core.pricing.schemas import PricingInput
+from app.core.pricing.schemas import PricingInput, PriceSource
 
 
 def test_calculate_pricing_basic():
@@ -21,6 +21,8 @@ def test_calculate_pricing_basic():
         shipping_cost=2000,
         customs_duty=1000,
         procurement_fee=500,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -49,6 +51,8 @@ def test_calculate_pricing_zero_selling_price():
         shipping_cost=2000,
         customs_duty=1000,
         procurement_fee=500,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -72,6 +76,8 @@ def test_calculate_pricing_default_config():
         shipping_cost=1500,
         customs_duty=800,
         procurement_fee=300,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp)  # config は None → デフォルト使用
@@ -102,6 +108,8 @@ def test_calculate_pricing_no_fees():
         shipping_cost=0,
         customs_duty=0,
         procurement_fee=0,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -130,6 +138,8 @@ def test_calculate_pricing_negative_profit():
         shipping_cost=3000,
         customs_duty=2000,
         procurement_fee=1000,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -158,6 +168,8 @@ def test_calculate_pricing_rounding():
         shipping_cost=1500.111,
         customs_duty=800.999,
         procurement_fee=300.222,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -189,6 +201,8 @@ def test_exchange_rate_conversion():
         exchange_rate=150.0,  # 1 USD = 150 JPY
         original_currency="USD",
         item_category="accessory",  # 10%
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -214,6 +228,8 @@ def test_warehouse_shipping_cost():
         customs_duty=1000,
         shipping_cost=1500,  # 国内送料
         warehouse_shipping_cost=3000,  # 転送倉庫送料
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -237,6 +253,8 @@ def test_auto_customs_bag():
         selling_price=80000,
         customs_duty=0,  # 0 → 自動計算
         item_category="bag",
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -262,6 +280,8 @@ def test_manual_customs_override():
         selling_price=80000,
         customs_duty=3000,  # 手動入力 → 自動計算を上書き
         item_category="bag",  # 自動なら11%だが手動が優先
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -289,6 +309,8 @@ def test_overseas_source_type():
         original_currency="EUR",
         item_category="bag",
         item_material="leather",
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg, source_type="overseas")
@@ -329,6 +351,8 @@ def test_backward_compatible_jpy():
         customs_duty=1000,
         original_currency="JPY",
         exchange_rate=150.0,  # JPY なので為替適用なし
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -355,6 +379,8 @@ def test_exchange_rate_zero_skips_conversion():
         customs_duty=1000,
         original_currency="USD",
         exchange_rate=0.0,  # レート0 → 為替適用なし
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -378,6 +404,8 @@ def test_customs_auto_includes_warehouse_shipping():
         customs_duty=0,  # 自動計算
         warehouse_shipping_cost=3000,
         item_category="bag",  # 11%
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -402,6 +430,8 @@ def test_domestic_vs_overseas_commission():
         purchase_price=30000,
         selling_price=50000,
         customs_duty=2000,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     domestic = calculate_pricing(inp, cfg, source_type="domestic")
@@ -430,6 +460,8 @@ def test_profit_near_zero_boundary():
         selling_price=10000,
         customs_duty=0,  # 自動計算: (9500+0)*0.10 = 950
         shipping_cost=500,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -455,6 +487,8 @@ def test_profit_exactly_zero():
         selling_price=10000,
         customs_duty=1000,  # 手動
         shipping_cost=1000,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
@@ -478,6 +512,8 @@ def test_material_overrides_category_for_customs():
         customs_duty=0,
         item_category="bag",  # 通常は11%
         item_material="leather",  # 12%が優先
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
 
     res = calculate_pricing(inp, cfg)
