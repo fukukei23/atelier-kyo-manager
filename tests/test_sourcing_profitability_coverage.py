@@ -1,7 +1,7 @@
 """Tests for app/utils/sourcing_profitability.py - Issue #92 カバレッジ向上"""
 
 from unittest.mock import MagicMock, patch
-from app.core.pricing.schemas import PriceSource
+
 from app.utils.sourcing_profitability import calculate_profitability
 
 

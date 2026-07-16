@@ -4,7 +4,7 @@
 
 from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.rules import PricingConfig, resolve_customs_rate
-from app.core.pricing.schemas import PricingInput, PriceSource
+from app.core.pricing.schemas import PriceSource, PricingInput
 
 
 def test_calculate_pricing_basic():

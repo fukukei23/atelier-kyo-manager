@@ -93,7 +93,9 @@ class Product(db.Model):
     original_currency = db.Column(String(8), default="JPY")  # 仕入れ通貨
     exchange_rate = db.Column(Float, default=1.0)  # 適用為替レート
     item_category = db.Column(String(64), nullable=True)  # 品目カテゴリ（関税率自動決定用）
-    purchase_price_source = db.Column(String(32), nullable=True, default="unknown")  # 価格ソース（CLAUDE.md価格調査鉄則）
+    purchase_price_source = db.Column(
+        String(32), nullable=True, default="unknown"
+    )  # 価格ソース（CLAUDE.md価格調査鉄則）
     selling_price_source = db.Column(String(32), nullable=True, default="unknown")  # 価格ソース
 
     # --- FR-002/003 パイプライン ---

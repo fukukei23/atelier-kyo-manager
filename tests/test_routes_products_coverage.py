@@ -94,7 +94,6 @@ class TestEditProduct:
         assert r.status_code in (302, 404)
 
     def test_get_edit_existing(self, routes_auth_client, routes_app):
-        from unittest.mock import MagicMock
         from app.core.pricing.schemas import PricingResult
 
         with routes_app.app_context():
