@@ -4,8 +4,9 @@ A personal resale management system for BUYMA x Buyandship. Automates product li
 
 BUYMA x Buyandshipを利用した転売管理システム（個人用）。出品パイプライン、注文ステートマシン、顧客対応AIチャットボット、LLMルーティングを統合したFlaskアプリケーション。
 
+[![CI](https://github.com/fukukei23/atelier-kyo-manager/actions/workflows/ci.yml/badge.svg)](https://github.com/fukukei23/atelier-kyo-manager/actions/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.10+-blue)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/tests-2%2C155-green)]()
+[![Tests](https://img.shields.io/badge/tests-2%2C149%20passed%20%7C%206%20skipped-green)]()
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ---
