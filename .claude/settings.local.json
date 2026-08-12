@@ -3,7 +3,8 @@
     "allow": [
       "Bash(git init:*)",
       "Bash(python:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "mcp__Claude_Code_Remote__send_later"
     ],
     "deny": []
   }
