@@ -21,6 +21,9 @@ def make_celery(app=None):
         app.import_name if app else "atelier_kyo",
         broker=broker_url,
         backend=result_backend,
+        # app/tasks/*.py を worker 起動時に import してタスクレジストリへ登録。
+        # autodiscover_tasks は app/tasks.py を想定する規約で本構造(<name>_tasks.py 複数)では動かないため include 明示。
+        include=["app.tasks.scrape_tasks", "app.tasks.monitor_tasks"],
     )
     celery.conf.update(
         result_expires=3600,

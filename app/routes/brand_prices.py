@@ -653,12 +653,11 @@ def price_comparison_scrape_and_compare():
     try:
         from flask import current_app
 
+        from app.tasks.scrape_tasks import scrape_brand_prices
+
         celery_app = getattr(current_app, "celery", None)
         if celery_app:
-            task = celery_app.send_task(
-                "app.tasks.scrape_brand_prices",
-                args=[brand],
-            )
+            task = scrape_brand_prices.delay(brand)
             flash(f"スクレイプ開始: {brand}（タスクID: {task.id}）", "info")
             time.sleep(3)
         else:

@@ -30,6 +30,35 @@ class TestCeleryApp:
         assert c is not None
         assert c.main == "atelier_kyo"
 
+    def test_all_app_tasks_registered(self):
+        """worker 起動相当: include 指定モジュールが import され 5 タスク全て登録される.
+
+        新規タスクモジュール追加時は celery_app.py の include にも追記すること
+        （autodiscover は本プロジェクト構造 app/tasks/<name>_tasks.py では動かない）。
+        """
+        from app.core.celery_app import celery
+
+        celery.loader.import_default_modules()
+        expected = {
+            "scrape_brand_prices",
+            "scrape_sale_prices",
+            "run_ssense_buyma_pipeline",
+            "monitor_prices_periodic",
+            "monitor_prices_single",
+        }
+        registered = {t for t in celery.tasks if not t.startswith("celery.")}
+        assert expected <= registered, f"未登録タスク: {expected - registered}"
+
+    def test_beat_schedule_tasks_registered(self):
+        """beat_schedule の全 task 名が celery.tasks に実在する（孤儿タスク名の再発防止）."""
+        from app.core.celery_app import celery
+
+        celery.loader.import_default_modules()
+        beat_names = {v["task"] for v in celery.conf.beat_schedule.values()}
+        registered = set(celery.tasks)
+        missing = beat_names - registered
+        assert not missing, f"beat が送出するタスクが未登録: {missing}"
+
 
 class TestScrapeTasks:
     """スクレイピングタスクのテスト."""
