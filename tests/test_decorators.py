@@ -3,7 +3,9 @@ from unittest.mock import patch
 import pytest
 from flask import Flask
 
+from app.core.pricing.schemas import PriceIntegrityError
 from app.decorators import admin_required, handle_db
+from app.utils.decorators import handle_db_error
 
 
 def create_test_app():
@@ -25,6 +27,16 @@ def create_test_app():
     @handle_db()
     def test_error_no_endpoint():
         raise Exception("想定外のエラー")
+
+    @app.route("/test_price_integrity_propagates")
+    @handle_db_error()
+    def test_price_integrity_route():
+        raise PriceIntegrityError("信頼性エラー")
+
+    @app.route("/test_db_error_caught")
+    @handle_db_error("index")
+    def test_db_error_route():
+        raise RuntimeError("DB操作失敗")
 
     @app.route("/test_admin")
     @admin_required
@@ -81,6 +93,27 @@ class TestHandleDbDecorator:
                 assert len(flashes) == 1
                 category, message = flashes[0]
                 assert message == "カスタムエラー"
+
+
+class TestHandleDbErrorDecorator:
+    """ISSUE-102: handle_db_error は PriceIntegrityError を握りつぶさず伝播。"""
+
+    @patch("app.utils.decorators.db")
+    def test_price_integrity_error_propagates(self, mock_db, app, client):
+        """PriceIntegrityError は伝播し redirect(302) で握りつぶされない。"""
+        with app.test_request_context():
+            # TESTING=True なので伝播した例外は raise される
+            with pytest.raises(PriceIntegrityError):
+                client.get("/test_price_integrity_propagates")
+            mock_db.session.rollback.assert_called_once()
+
+    @patch("app.utils.decorators.db")
+    def test_db_error_caught_redirected(self, mock_db, app, client):
+        """通常のDB例外(Exception) は従来通り flash+redirect(302) で処理（回帰維持）。"""
+        with app.test_request_context():
+            response = client.get("/test_db_error_caught")
+            assert response.status_code == 302
+            mock_db.session.rollback.assert_called_once()
 
 
 class TestAdminRequiredDecorator:
