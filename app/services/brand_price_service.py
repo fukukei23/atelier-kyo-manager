@@ -7,7 +7,7 @@ from sqlalchemy import func
 
 from app.config.cost_table import DEFAULT_MARKUP_RATE, get_buyandship_shipping
 from app.core.pricing.calculator import calculate_pricing
-from app.core.pricing.schemas import PricingInput
+from app.core.pricing.schemas import PriceSource, PricingInput, price_source_from_method
 from app.core.timezone import _utcnow
 from app.extensions import db
 from app.models.brand_price import BrandPrice
@@ -220,14 +220,34 @@ def add_profit_calculation(
         shipping = get_buyandship_shipping(category)
         buyma_price = item.get("buyma_price") or round(cheapest * markup_rate)
 
+        # 出所（T8・spec 3.6）:
+        #   仕入 = actual_purchase_jpy（人手入力の実仕入値）なら MANUAL_INPUT、
+        #          それ以外は各サイト実スクレイプ値（cheapest_jpy）なので BROWSER_VERIFIED
+        #   販売 = buyma_price の取得方法（buyma_price_method）を機械変換・
+        #          マークアップフォールバックは MARKUP → ESTIMATED
+        purchase_source = PriceSource.MANUAL_INPUT if item.get("actual_purchase_jpy") else PriceSource.BROWSER_VERIFIED
+        if item.get("buyma_price"):
+            raw_method = str(item.get("buyma_price_method") or "").lower()
+            if raw_method.startswith("buyma_search"):
+                method = "BROWSER"
+            elif raw_method == "manual":
+                method = "MANUAL"
+            else:
+                method = "MARKUP"  # auto_calculated 等・安全側は推定
+            selling_source = price_source_from_method(method)
+        else:
+            selling_source = PriceSource.ESTIMATED  # cheapest × markup_rate 推定
+
         inp = PricingInput(
             purchase_price=cheapest,
             selling_price=buyma_price,
             shipping_cost=shipping,
             original_currency="JPY",
             item_category=category or "",
+            purchase_price_source=purchase_source,
+            selling_price_source=selling_source,
         )
-        result = calculate_pricing(inp)
+        result = calculate_pricing(inp, allow_estimated=True)
 
         item["buyma_suggested_price"] = buyma_price
         item["shipping_cost"] = shipping
@@ -237,5 +257,6 @@ def add_profit_calculation(
         item["profit"] = round(result.profit, 2)
         item["profit_rate"] = round(result.profit_rate, 4)
         item["is_profitable"] = result.profit > max(10_000, result.total_cost * 0.05)
+        item["profit_status"] = "estimated" if result.estimate_mark else "confirmed"
 
     return comparison

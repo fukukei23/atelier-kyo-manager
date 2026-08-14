@@ -148,28 +148,23 @@ def test_deadline_message_safe():
 
 
 def test_calc_profit_basic():
-    """基本的な利益計算（calculator.py委譲）
-
-    Order.calc_profit は DB 既存注文の利益再計算用で
-    レガシーデータ（price source=UNKNOWN）救済のための path を持つ。
-    ここでは信頼ソースを明示した PricingInput → calculate_pricing の
-    直接経路で挙動を検証する（Order.calc_profit の動作検証と分離）。
-    """
-    from app.core.pricing import PricingInput, calculate_pricing
-    from app.core.pricing.schemas import PriceSource
-
-    inp = PricingInput(
-        purchase_price=20000,
+    """基本的な利益計算（Order.calc_profit 実経路・モックなし・ISSUE-102改修済み）"""
+    order = Order(
+        order_number="ORD-CALC-1",
+        product_name="Test",
         selling_price=30000,
+        purchase_cost=20000,
         customs_duty=1000,
-        purchase_price_source=PriceSource.MANUAL_INPUT,
-        selling_price_source=PriceSource.MANUAL_INPUT,
+        source_type="domestic",
+        purchase_price_source="manual_input",
+        selling_price_source="manual_input",
     )
-    result = calculate_pricing(inp, source_type="domestic")
+    order.calc_profit()
 
-    assert result.profit is not None
-    assert result.profit < 30000 - 20000 - 1000  # 手数料分減少
-    assert result.profit_rate > 0
+    assert order.profit is not None
+    assert order.profit < 30000 - 20000 - 1000  # 手数料分減少
+    assert order.profit_rate > 0
+    assert order.profit_status == "confirmed"
 
 
 def test_calc_profit_overseas():

@@ -58,9 +58,9 @@
 - **検証**: `./venv/bin/mypy app/core/pricing/ --strict`（pricing 層から strict 適用）
 
 ### CP1: Phase1 完了チェックポイント
-- [ ] 6経路が skip で従来通り動作（2149件 green）
-- [ ] handle_db_error 改修（例外伝播）
-- [ ] AST テスト・mypy strict 導入
+- [x] 6経路が skip で従来通り動作（2149件 green）
+- [x] handle_db_error 改修（例外伝播）
+- [x] AST テスト・mypy strict 導入
 - [ ] **commit**: `feat(pricing): Phase1 必須化+検出+handle_db_error（skipで動作維持）`
 - **検証**: `./venv/bin/python -m pytest tests/ -q && ./venv/bin/mypy app/core/pricing/ --strict`
 
@@ -111,12 +111,12 @@
 - **検証**: `./venv/bin/python -m pytest tests/test_smoke_pricing_paths.py tests/test_sourcing_profitability_coverage.py tests/order/test_order_model.py -v`
 
 ### CP2: Phase2 完了チェックポイント（= 完了条件）
-- [ ] smoke 6経路6本 green
-- [ ] AST grep（source 未設定=0）
-- [ ] 既存2149件回帰ゼロ（ISSUE-102 モック撤去分は置換）
-- [ ] mypy strict green
-- [ ] ruff clean
-- [ ] ESTIMATED 発注ブロック機能
+- [x] smoke 6経路6本 green
+- [x] AST grep（source 未設定=0）
+- [x] 既存2149件回帰ゼロ（ISSUE-102 モック撤去分は置換・最終2192 passed/6 skipped）
+- [x] mypy strict green
+- [x] ruff clean
+- [x] ESTIMATED 発注ブロック機能
 - [ ] **commit**: `feat(pricing): Phase2 source明示+ESTIMATED発注ブロック（ISSUE-101/102完全修復）`
 - **最終検証**: `./venv/bin/python -m pytest tests/ -q && ./venv/bin/mypy app/ --strict && ./venv/bin/ruff check .`
 

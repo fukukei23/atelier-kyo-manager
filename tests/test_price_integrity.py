@@ -84,10 +84,14 @@ class TestValidateSources:
         assert "仕入価格" in msg
         assert "販売価格" in msg
 
-    def test_default_sources_are_unknown(self):
+    def test_default_sources_are_unset_none(self):
+        """Phase1(ISSUE-101/102): デフォルトは None（未設定）→ validate で UNKNOWN 扱い（例外）。"""
         inp = PricingInput(purchase_price=100.0, selling_price=200.0)
-        assert inp.purchase_price_source == PriceSource.UNKNOWN
-        assert inp.selling_price_source == PriceSource.UNKNOWN
+        assert inp.purchase_price_source is None
+        assert inp.selling_price_source is None
+        # None（未設定）は validate_sources で UNKNOWN 扱い→信頼できない→例外
+        with pytest.raises(PriceIntegrityError):
+            inp.validate_sources()
 
 
 # =====================================================================

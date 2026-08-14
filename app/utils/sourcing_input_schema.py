@@ -117,6 +117,12 @@ def validate_sourcing_input(data: dict[str, Any]) -> dict[str, Any]:
     else:
         status = "complete"
 
+    # 価格出所カラム（任意・ISSUE-101/102 Phase2 T7）: 既知値のみ通過・未指定は計算側既定(manual_input)
+    for src_field in ("purchase_price_source", "selling_price_source"):
+        raw = str(data.get(src_field, "")).strip().lower()
+        if raw in ("manual_input", "estimated", "browser_verified", "api_verified"):
+            normalized[src_field] = raw
+
     return {
         "valid": True,
         "status": status,

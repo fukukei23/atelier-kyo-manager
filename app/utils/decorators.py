@@ -5,6 +5,7 @@ import logging
 
 from flask import flash, jsonify, redirect, request, url_for
 
+from app.core.pricing.schemas import PriceIntegrityError
 from app.extensions import db
 
 logger = logging.getLogger(__name__)
@@ -23,6 +24,11 @@ def handle_db_error(fallback_endpoint: str | None = None):
         def wrapper(*args, **kwargs):
             try:
                 return func(*args, **kwargs)
+            except PriceIntegrityError:
+                # ISSUE-102: 価格信頼性エラーは握りつぶさず伝播
+                # （DB未保存で隠蔽されるのを防止・calc_profit 等6経路の根）
+                db.session.rollback()
+                raise
             except Exception as e:
                 db.session.rollback()
                 logger.warning("DB operation failed in %s: %s", func.__name__, e)

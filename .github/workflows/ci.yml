@@ -25,6 +25,19 @@ jobs:
       - name: ruff format (check)
         run: ruff format --check app/ tests/ scripts/ dev_tools/
 
+  typecheck:
+    name: Type Check (mypy strict: pricing)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install mypy
+      # mypy.ini が app/core/pricing のみ strict 検査（ISSUE-101/102 Phase1 T4・段階的拡大）
+      - name: Run mypy
+        run: python -m mypy
+
   test:
     name: Test
     runs-on: ubuntu-latest

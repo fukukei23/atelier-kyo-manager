@@ -15,6 +15,7 @@ class PriceSource(str, Enum):
     BROWSER_VERIFIED = "browser_verified"  # ブラウザ/スクレイパで実際のページから取得
     MANUAL_INPUT = "manual_input"  # 人間が手動入力
     API_VERIFIED = "api_verified"  # 公式API等から取得
+    ESTIMATED = "estimated"  # 推定（計算は可だが結果は estimate_mark・本番発注不可）
     KEYWORD_GUESS = "keyword_guess"  # キーワードマッチングによる推測（禁止）
     UNKNOWN = "unknown"  # 出所不明（禁止）
 
@@ -40,6 +41,21 @@ class PriceIntegrityError(ValueError):
     """推測/未確認データでの利益計算を防止する例外。"""
 
 
+def price_source_from_method(method: str) -> PriceSource:
+    """BUYMA価格の取得方法（spec 3.6）を PriceSource へ機械変換。
+
+    BROWSER=スクレイパ実ページ取得 / MANUAL=人間入力 / API=公式API /
+    MARKUP=cheapest×markup_rate 推定。未知の値は UNKNOWN（安全側・計算で拒否）。
+    実装者が「これは推定でない」と水増しする余地を排除するための中央変換。
+    """
+    return {
+        "BROWSER": PriceSource.BROWSER_VERIFIED,
+        "MANUAL": PriceSource.MANUAL_INPUT,
+        "API": PriceSource.API_VERIFIED,
+        "MARKUP": PriceSource.ESTIMATED,
+    }.get(method.strip().upper(), PriceSource.UNKNOWN)
+
+
 @dataclass
 class PricingInput:
     """
@@ -59,24 +75,51 @@ class PricingInput:
     item_material: str = ""  # 素材（関税率自動決定用）
 
     # --- データ信頼性チェック ---
-    purchase_price_source: PriceSource = PriceSource.UNKNOWN
-    selling_price_source: PriceSource = PriceSource.UNKNOWN
+    # ISSUE-101/102: デフォルト UNKNOWN を廃止し None 許容（未設定は例外で検出）。
+    # 全6経路は Phase2 で source 明示済み・未設定構築は AST テストが機械検出する。
+    purchase_price_source: PriceSource | None = None
+    selling_price_source: PriceSource | None = None
 
-    def validate_sources(self) -> None:
-        """推測/未確認データで計算しようとしたら例外を投げる。"""
+    def validate_sources(self, *, allow_estimated: bool = False) -> bool:
+        """推測/未確認データで計算しようとしたら例外を投げる。
+
+        None（未設定）は UNKNOWN 扱い（信頼できない→例外）。
+        ESTIMATED は allow_estimated=True の呼び出し側のみ許容し、
+        推定を含むか否かを戻り値で返す（estimate_mark / profit_status に使う）。
+        KEYWORD_GUESS / UNKNOWN は常に拒否（鉄則）。
+        """
         errors: list[str] = []
-        if not PriceData(self.purchase_price, self.purchase_price_source).is_reliable():
+        estimated = False
+        psrc = self.purchase_price_source or PriceSource.UNKNOWN
+        ssrc = self.selling_price_source or PriceSource.UNKNOWN
+        if psrc is PriceSource.ESTIMATED:
+            if allow_estimated:
+                estimated = True
+            else:
+                errors.append(
+                    "仕入価格は推定（ESTIMATED）です。実価格確認後に再計算するか、"
+                    "allow_estimated を明示してください（結果は推定扱い・発注不可）。"
+                )
+        elif not PriceData(self.purchase_price, psrc).is_reliable():
             errors.append(
-                f"仕入価格のデータソースが信頼できません: {self.purchase_price_source.value}。"
+                f"仕入価格のデータソースが信頼できません: {psrc.value}。"
                 "ブラウザ/スクレイパで実際の価格を確認してください。"
             )
-        if not PriceData(self.selling_price, self.selling_price_source).is_reliable():
+        if ssrc is PriceSource.ESTIMATED:
+            if allow_estimated:
+                estimated = True
+            else:
+                errors.append(
+                    "販売価格は推定（ESTIMATED）です。実価格確認後に再計算するか、"
+                    "allow_estimated を明示してください（結果は推定扱い・発注不可）。"
+                )
+        elif not PriceData(self.selling_price, ssrc).is_reliable():
             errors.append(
-                f"販売価格のデータソースが信頼できません: {self.selling_price_source.value}。"
-                "BUYMAで実際の出品価格を確認してください。"
+                f"販売価格のデータソースが信頼できません: {ssrc.value}。BUYMAで実際の出品価格を確認してください。"
             )
         if errors:
             raise PriceIntegrityError("\n".join(errors))
+        return estimated
 
 
 @dataclass
@@ -93,3 +136,4 @@ class PricingResult:
     total_shipping_cost: float = 0.0  # 送料合計（国内+転送倉庫）
     auto_customs_duty: float = 0.0  # 自動計算された関税
     customs_rate_used: float = 0.0  # 適用された関税率
+    estimate_mark: bool = False  # 推定 source を含む計算か（profit_status=ESTIMATED に使用）

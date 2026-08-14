@@ -14,7 +14,7 @@ from app.config.constants import (
     PAYMENT_METHOD_EXTENSION_DAYS,
 )
 from app.core.pricing import PricingInput, calculate_pricing
-from app.core.pricing.schemas import nz
+from app.core.pricing.schemas import PriceSource, nz
 from app.core.timezone import _utcnow
 from app.extensions import db
 from app.models.enums import OrderStatus
@@ -51,6 +51,33 @@ class Order(db.Model):
         String(32), default=OrderStatus.PENDING, index=True, comment="pending/shipped/completed/cancelled"
     )
 
+    # 価格出所（ISSUE-101/102 Phase2 T5: α source select + β 参照URL）
+    # 値は PriceSource 値（manual_input/browser_verified/api_verified）+ 推定は "estimated"
+    purchase_price_source = db.Column(
+        String(32),
+        nullable=False,
+        default="manual_input",
+        server_default="manual_input",
+        comment="仕入価格の出所（manual_input/browser_verified/api_verified/estimated）",
+    )
+    selling_price_source = db.Column(
+        String(32),
+        nullable=False,
+        default="manual_input",
+        server_default="manual_input",
+        comment="販売価格の出所（manual_input/browser_verified/api_verified/estimated）",
+    )
+    purchase_price_ref_url = db.Column(String(512), nullable=True, comment="仕入価格の参照URL（β・客観証拠）")
+    selling_price_ref_url = db.Column(String(512), nullable=True, comment="販売価格の参照URL（β・客観証拠）")
+    profit_status = db.Column(
+        String(16),
+        nullable=False,
+        default="confirmed",
+        server_default="confirmed",
+        index=True,
+        comment="利益計算の確度（confirmed/estimated・estimated は発注ブロック）",
+    )
+
     # 紐付け
     product_id = db.Column(Integer, db.ForeignKey("product.id"), nullable=True)
     partner_id = db.Column(Integer, db.ForeignKey("partner.id"), nullable=True, comment="担当パートナーID")
@@ -81,17 +108,36 @@ class Order(db.Model):
         self.expected_payment_date = self.order_date + timedelta(days=pay_days)
 
     def calc_profit(self) -> None:
-        """利益・手数料を自動計算"""
+        """利益・手数料を自動計算（出所は source カラムから明示・ISSUE-101/102 Phase2 T6）"""
 
         inp = PricingInput(
             purchase_price=nz(self.purchase_cost),
             selling_price=nz(self.selling_price),
             customs_duty=nz(self.customs_duty),
+            purchase_price_source=PriceSource(self.purchase_price_source or "manual_input"),
+            selling_price_source=PriceSource(self.selling_price_source or "manual_input"),
         )
-        result = calculate_pricing(inp, source_type=self.source_type or "domestic")
+        # 推定（estimated）は計算するが profit_status=estimated で記録（T9 で発注ブロック）
+        result = calculate_pricing(
+            inp,
+            source_type=self.source_type or "domestic",
+            allow_estimated=True,
+        )
         self.fees = result.total_cost - nz(self.purchase_cost) - nz(self.customs_duty)
         self.profit = result.profit
         self.profit_rate = result.profit_rate * 100
+        self.profit_status = "estimated" if result.estimate_mark else "confirmed"
+
+    # 発注確定以降の状態（推定注文はここへの遷移をブロック・T9）
+    FULFILLMENT_STATUSES = ("shipped", "completed")
+
+    def can_advance_to(self, new_status: str) -> bool:
+        """ステータス遷移可否（T9: ESTIMATED 注文は発注確定以降へ遷移不可）。
+
+        推定で計算された注文はドラフト保持。実価格 source へ更新して
+        calc_profit() を再実行すれば confirmed となり遷移可能になる。
+        """
+        return not (self.profit_status == "estimated" and new_status in self.FULFILLMENT_STATUSES)
 
     def remaining_days(self) -> int | None:
         """18日ルールの残日数"""
