@@ -29,7 +29,7 @@ from typing import Any
 from pydantic import BaseModel, Field, ValidationError
 
 from app.core.pricing.calculator import calculate_pricing
-from app.core.pricing.schemas import PricingInput
+from app.core.pricing.schemas import PriceSource, PricingInput
 from app.utils.ai_llm_controller import AILlmController
 from app.utils.fx_utils import get_fx_table_jpy
 from app.utils.shipping_agent import ShippingAgent
@@ -104,6 +104,8 @@ class ProfitabilityAgent:
         shipping_cost = self._get_dynamic_shipping_cost(supplier.currency)
 
         # calculator.py に委譲
+        # 出所（T7）: エージェント/LLM 分析のシミュレーション値で provenance 未追跡 → ESTIMATED
+        # （"profit_estimate" の名の通り推定値・実取引計算は Product._calculate_pricing 経由）
         inp = PricingInput(
             purchase_price=supplier.price,
             selling_price=market.buyma_price,
@@ -112,11 +114,13 @@ class ProfitabilityAgent:
             exchange_rate=exchange_rate,
             item_category=supplier.category or "",
             item_material=supplier.material or "",
+            purchase_price_source=PriceSource.ESTIMATED,
+            selling_price_source=PriceSource.ESTIMATED,
         )
-        # Phase1(ISSUE-101/102): 一時skip・Phase2 でsource明示後に撤去
-        result = calculate_pricing(inp, source_type="overseas", skip_source_validation=True)
+        result = calculate_pricing(inp, source_type="overseas", allow_estimated=True)
 
         return {
+            "profit_status": "estimated",
             "profit_estimate": int(round(result.profit)),
             "profit_rate": round(result.profit_rate * 100, 2),
             "total_cost_jpy": int(round(result.total_cost)),

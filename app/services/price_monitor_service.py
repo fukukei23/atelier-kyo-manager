@@ -10,7 +10,7 @@ import logging
 
 from app.config.cost_table import get_buyandship_shipping
 from app.core.pricing.calculator import calculate_pricing
-from app.core.pricing.schemas import PricingInput
+from app.core.pricing.schemas import PriceSource, PricingInput
 from app.core.timezone import _utcnow
 from app.extensions import db
 from app.models.price_monitor import PriceMonitor
@@ -367,9 +367,11 @@ def _update_profitability(monitor: PriceMonitor, source_price_jpy: float, exchan
         original_currency="JPY",
         exchange_rate=1.0,
         item_category=monitor.category,
+        # 出所（T7）: 仕入=PriceScraper.fetch で実ページから取得 / 販売=フォームから人手入力
+        purchase_price_source=PriceSource.BROWSER_VERIFIED,
+        selling_price_source=PriceSource.MANUAL_INPUT,
     )
-    # Phase1(ISSUE-101/102): 一時skip・Phase2 でsource明示後に撤去
-    result = calculate_pricing(inp, source_type="overseas", skip_source_validation=True)
+    result = calculate_pricing(inp, source_type="overseas")
 
     monitor.is_profitable = result.profit > 0
     monitor.latest_profit = result.profit

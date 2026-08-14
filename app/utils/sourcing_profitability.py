@@ -10,7 +10,7 @@ from typing import Any
 
 from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.rules import load_pricing_config
-from app.core.pricing.schemas import PricingInput
+from app.core.pricing.schemas import PriceSource, PricingInput
 
 
 def calculate_profitability(normalized_data: dict[str, Any] | None) -> dict[str, Any]:
@@ -112,6 +112,7 @@ def calculate_profitability(normalized_data: dict[str, Any] | None) -> dict[str,
         }
 
     # complete の場合、通常計算
+    # 出所: 入力JSON/CSVの source カラム（任意）・未指定は人手提供扱い manual_input（T7）
     inp = PricingInput(
         purchase_price=normalized_data.get("purchase_price", 0.0),
         selling_price=normalized_data.get("selling_price", 0.0),
@@ -124,10 +125,12 @@ def calculate_profitability(normalized_data: dict[str, Any] | None) -> dict[str,
         exchange_rate=normalized_data.get("exchange_rate", 1.0),
         item_category=normalized_data.get("item_category", ""),
         item_material=normalized_data.get("item_material", ""),
+        purchase_price_source=PriceSource(normalized_data.get("purchase_price_source", "manual_input")),
+        selling_price_source=PriceSource(normalized_data.get("selling_price_source", "manual_input")),
     )
 
-    # Phase1(ISSUE-101/102): 一時skip・Phase2 でsource明示後に撤去
-    result = calculate_pricing(inp, skip_source_validation=True)
+    # 推定（estimated）宣言は計算するが profit_status で区別（T9 以降の発注ブロック用）
+    result = calculate_pricing(inp, allow_estimated=True)
 
     return {
         "status": "complete",
@@ -139,4 +142,5 @@ def calculate_profitability(normalized_data: dict[str, Any] | None) -> dict[str,
         "profit_upper_bound": None,
         "missing_fields": None,
         "errors": [],
+        "profit_status": "estimated" if result.estimate_mark else "confirmed",
     }
