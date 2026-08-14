@@ -51,6 +51,23 @@ class Order(db.Model):
         String(32), default=OrderStatus.PENDING, index=True, comment="pending/shipped/completed/cancelled"
     )
 
+    # 価格出所（ISSUE-101/102 Phase2 T5: α source select + β 参照URL）
+    # 値は PriceSource 値（manual_input/browser_verified/api_verified）+ 推定は "estimated"
+    purchase_price_source = db.Column(
+        String(32), nullable=False, default="manual_input", server_default="manual_input",
+        comment="仕入価格の出所（manual_input/browser_verified/api_verified/estimated）",
+    )
+    selling_price_source = db.Column(
+        String(32), nullable=False, default="manual_input", server_default="manual_input",
+        comment="販売価格の出所（manual_input/browser_verified/api_verified/estimated）",
+    )
+    purchase_price_ref_url = db.Column(String(512), nullable=True, comment="仕入価格の参照URL（β・客観証拠）")
+    selling_price_ref_url = db.Column(String(512), nullable=True, comment="販売価格の参照URL（β・客観証拠）")
+    profit_status = db.Column(
+        String(16), nullable=False, default="confirmed", server_default="confirmed", index=True,
+        comment="利益計算の確度（confirmed/estimated・estimated は発注ブロック）",
+    )
+
     # 紐付け
     product_id = db.Column(Integer, db.ForeignKey("product.id"), nullable=True)
     partner_id = db.Column(Integer, db.ForeignKey("partner.id"), nullable=True, comment="担当パートナーID")
