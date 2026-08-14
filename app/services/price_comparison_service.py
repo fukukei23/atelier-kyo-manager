@@ -307,7 +307,8 @@ def calculate_comparison_profit(
             original_currency="JPY",
             item_category=category or "",
         )
-        result = calculate_pricing(inp)
+        # Phase1(ISSUE-101/102): 一時skip・Phase2 でsource明示後に撤去
+        result = calculate_pricing(inp, skip_source_validation=True)
         per_source[quote.source_site] = {
             "cost_jpy": cost,
             "sell_jpy": estimated_buyma,

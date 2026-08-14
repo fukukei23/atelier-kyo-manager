@@ -59,20 +59,28 @@ class PricingInput:
     item_material: str = ""  # 素材（関税率自動決定用）
 
     # --- データ信頼性チェック ---
-    purchase_price_source: PriceSource = PriceSource.UNKNOWN
-    selling_price_source: PriceSource = PriceSource.UNKNOWN
+    # Phase1(ISSUE-101/102): デフォルト UNKNOWN を廃止し None 許容に変更。
+    # None は「未設定」を意味し、validate_sources で UNKNOWN 扱い（信頼できない→例外）。
+    # 6経路は Phase1 で一時的に skip_source_validation=True で動作維持→Phase2 で source 明示。
+    purchase_price_source: PriceSource | None = None
+    selling_price_source: PriceSource | None = None
 
     def validate_sources(self) -> None:
-        """推測/未確認データで計算しようとしたら例外を投げる。"""
+        """推測/未確認データで計算しようとしたら例外を投げる。
+
+        None（未設定）は UNKNOWN 扱い（信頼できない→例外）。
+        """
         errors: list[str] = []
-        if not PriceData(self.purchase_price, self.purchase_price_source).is_reliable():
+        psrc = self.purchase_price_source or PriceSource.UNKNOWN
+        ssrc = self.selling_price_source or PriceSource.UNKNOWN
+        if not PriceData(self.purchase_price, psrc).is_reliable():
             errors.append(
-                f"仕入価格のデータソースが信頼できません: {self.purchase_price_source.value}。"
+                f"仕入価格のデータソースが信頼できません: {psrc.value}。"
                 "ブラウザ/スクレイパで実際の価格を確認してください。"
             )
-        if not PriceData(self.selling_price, self.selling_price_source).is_reliable():
+        if not PriceData(self.selling_price, ssrc).is_reliable():
             errors.append(
-                f"販売価格のデータソースが信頼できません: {self.selling_price_source.value}。"
+                f"販売価格のデータソースが信頼できません: {ssrc.value}。"
                 "BUYMAで実際の出品価格を確認してください。"
             )
         if errors:

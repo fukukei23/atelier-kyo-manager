@@ -227,7 +227,8 @@ def add_profit_calculation(
             original_currency="JPY",
             item_category=category or "",
         )
-        result = calculate_pricing(inp)
+        # Phase1(ISSUE-101/102): 一時skip・Phase2 でsource明示後に撤去
+        result = calculate_pricing(inp, skip_source_validation=True)
 
         item["buyma_suggested_price"] = buyma_price
         item["shipping_cost"] = shipping

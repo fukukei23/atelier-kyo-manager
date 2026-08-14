@@ -368,7 +368,8 @@ def _update_profitability(monitor: PriceMonitor, source_price_jpy: float, exchan
         exchange_rate=1.0,
         item_category=monitor.category,
     )
-    result = calculate_pricing(inp, source_type="overseas")
+    # Phase1(ISSUE-101/102): 一時skip・Phase2 でsource明示後に撤去
+    result = calculate_pricing(inp, source_type="overseas", skip_source_validation=True)
 
     monitor.is_profitable = result.profit > 0
     monitor.latest_profit = result.profit

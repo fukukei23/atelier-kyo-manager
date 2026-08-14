@@ -88,7 +88,12 @@ class Order(db.Model):
             selling_price=nz(self.selling_price),
             customs_duty=nz(self.customs_duty),
         )
-        result = calculate_pricing(inp, source_type=self.source_type or "domestic")
+        # Phase1(ISSUE-101/102): 一時skip・Phase2 でsource明示後に撤去
+        result = calculate_pricing(
+            inp,
+            source_type=self.source_type or "domestic",
+            skip_source_validation=True,
+        )
         self.fees = result.total_cost - nz(self.purchase_cost) - nz(self.customs_duty)
         self.profit = result.profit
         self.profit_rate = result.profit_rate * 100

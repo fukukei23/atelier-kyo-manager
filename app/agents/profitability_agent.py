@@ -113,7 +113,8 @@ class ProfitabilityAgent:
             item_category=supplier.category or "",
             item_material=supplier.material or "",
         )
-        result = calculate_pricing(inp, source_type="overseas")
+        # Phase1(ISSUE-101/102): 一時skip・Phase2 でsource明示後に撤去
+        result = calculate_pricing(inp, source_type="overseas", skip_source_validation=True)
 
         return {
             "profit_estimate": int(round(result.profit)),
