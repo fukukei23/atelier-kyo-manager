@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from .rules import PricingConfig, load_pricing_config, resolve_customs_rate
-from .schemas import PricingInput, PricingResult
+from .schemas import PriceIntegrityError, PricingInput, PricingResult
 
 
 def calculate_pricing(
@@ -28,7 +28,14 @@ def calculate_pricing(
     cfg = config or load_pricing_config()
 
     # 1. 為替変換: original_currency != "JPY" の場合に purchase_price を JPY 換算
-    if inp.original_currency != "JPY" and inp.exchange_rate > 0:
+    # ISSUE-111: 外貨建てでレート0以下のとき従来は外貨額を円額として無警告流用
+    # （€500→¥500）していた silent fallback を廃止し例外で拒否する
+    if inp.original_currency != "JPY":
+        if inp.exchange_rate <= 0:
+            raise PriceIntegrityError(
+                f"為替レートが不正です: {inp.original_currency} 建てに対して "
+                f"exchange_rate={inp.exchange_rate}。有効なレートを設定してください。"
+            )
         purchase_price_jpy = inp.purchase_price * inp.exchange_rate
     else:
         purchase_price_jpy = inp.purchase_price

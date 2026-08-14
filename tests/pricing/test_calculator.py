@@ -1,10 +1,12 @@
+import pytest
+
 """
 利益計算ロジックのテスト
 """
 
 from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.rules import PricingConfig, resolve_customs_rate
-from app.core.pricing.schemas import PriceSource, PricingInput
+from app.core.pricing.schemas import PriceIntegrityError, PriceSource, PricingInput
 
 
 def test_calculate_pricing_basic():
@@ -364,31 +366,9 @@ def test_backward_compatible_jpy():
 
 
 # --- 境界値・エッジケーステスト ---
-
-
-def test_exchange_rate_zero_skips_conversion():
-    """exchange_rate=0 の場合、USDでも為替変換されずそのまま使われる"""
-    cfg = PricingConfig(
-        domestic_commission_rate=0.0,
-        additional_fee_rate=0.0,
-        transfer_fee=0.0,
-    )
-    inp = PricingInput(
-        purchase_price=100,  # 100 USD
-        selling_price=20000,
-        customs_duty=1000,
-        original_currency="USD",
-        exchange_rate=0.0,  # レート0 → 為替適用なし
-        purchase_price_source=PriceSource.MANUAL_INPUT,
-        selling_price_source=PriceSource.MANUAL_INPUT,
-    )
-
-    res = calculate_pricing(inp, cfg)
-
-    # exchange_rate > 0 が false → purchase_price_jpy = 100 (そのまま)
-    assert res.purchase_price_jpy == 100.0
-    # total_cost = 100 + 0 + 1000 + 0 + 0 + 0 + 0 + 0 = 1100
-    assert res.profit == 18900.0
+# （旧 test_exchange_rate_zero_skips_conversion は削除: 「レート0でUSDをそのまま円扱い」
+#  する silent fallback を仕様として固定化していた ISSUE-111 のバグ擁護テスト。
+#  新仕様は下方の ISSUE-111 テスト群が検証する）
 
 
 def test_customs_auto_includes_warehouse_shipping():
@@ -522,3 +502,67 @@ def test_material_overrides_category_for_customs():
     # auto_customs = (50000 + 0) * 0.12 = 6000
     assert res.customs_rate_used == 0.12
     assert res.auto_customs_duty == 6000.0
+
+
+# ---- ISSUE-111: 為替レート0のサイレントフォールバック防止 ----
+
+
+def test_zero_exchange_rate_foreign_currency_raises():
+    """ISSUE-111: 外貨建て+exchange_rate<=0 → PriceIntegrityError（€500→¥500事故防止）"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=500,
+        selling_price=100000,
+        original_currency="EUR",
+        exchange_rate=0.0,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
+    )
+
+    with pytest.raises(PriceIntegrityError, match="為替"):
+        calculate_pricing(inp, cfg)
+
+
+def test_negative_exchange_rate_foreign_currency_raises():
+    """ISSUE-111: 負の為替レートも同様に拒否"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=500,
+        selling_price=100000,
+        original_currency="USD",
+        exchange_rate=-1.0,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
+    )
+
+    with pytest.raises(PriceIntegrityError, match="為替"):
+        calculate_pricing(inp, cfg)
+
+
+def test_zero_exchange_rate_jpy_is_fine():
+    """JPY建ての場合は為替レート0でも問題なし（換算しないため）"""
+    cfg = PricingConfig(
+        domestic_commission_rate=0.0,
+        additional_fee_rate=0.0,
+        transfer_fee=0.0,
+    )
+    inp = PricingInput(
+        purchase_price=10000,
+        selling_price=20000,
+        customs_duty=1000,
+        original_currency="JPY",
+        exchange_rate=0.0,
+        purchase_price_source=PriceSource.MANUAL_INPUT,
+        selling_price_source=PriceSource.MANUAL_INPUT,
+    )
+
+    res = calculate_pricing(inp, cfg)
+    assert res.purchase_price_jpy == 10000
