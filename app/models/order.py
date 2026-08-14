@@ -128,6 +128,17 @@ class Order(db.Model):
         self.profit_rate = result.profit_rate * 100
         self.profit_status = "estimated" if result.estimate_mark else "confirmed"
 
+    # 発注確定以降の状態（推定注文はここへの遷移をブロック・T9）
+    FULFILLMENT_STATUSES = ("shipped", "completed")
+
+    def can_advance_to(self, new_status: str) -> bool:
+        """ステータス遷移可否（T9: ESTIMATED 注文は発注確定以降へ遷移不可）。
+
+        推定で計算された注文はドラフト保持。実価格 source へ更新して
+        calc_profit() を再実行すれば confirmed となり遷移可能になる。
+        """
+        return not (self.profit_status == "estimated" and new_status in self.FULFILLMENT_STATUSES)
+
     def remaining_days(self) -> int | None:
         """18日ルールの残日数"""
         if not self.deadline_18:

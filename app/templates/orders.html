@@ -80,6 +80,10 @@
                 <td class="px-4 py-3 text-sm {% if (order.profit or 0) >= 0 %}text-green-600{% else %}text-red-600{% endif %}">
                     ¥{{ "%.0f"|format(order.profit or 0) }}
                     <span class="text-xs">({{ "%.1f"|format(order.profit_rate or 0) }}%)</span>
+                    {% if order.profit_status == 'estimated' %}
+                    <span class="ml-1 inline-block bg-yellow-100 text-yellow-800 text-xs rounded px-1.5 py-0.5"
+                          title="推定価格で計算中・実価格確定まで発注不可">推定・要実価格確定</span>
+                    {% endif %}
                 </td>
                 <td class="px-4 py-3">
                     <span class="px-2 py-1 rounded text-xs

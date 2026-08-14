@@ -57,6 +57,11 @@ class AutoOrderService:
         if status not in allowed:
             return False
 
+        # T9: 推定価格（profit_status=estimated）の注文は発注確定以降へ遷移させない
+        if not self.order.can_advance_to(status):
+            self._log(from_status, status, "blocked: estimated profit_status")
+            return False
+
         self._log(from_status, status, note)
         self.order.status = status
 

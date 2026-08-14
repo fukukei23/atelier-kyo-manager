@@ -123,7 +123,7 @@ def edit_order(oid: int):
             )
         order.payment_method = request.form.get("payment_method", order.payment_method)
         order.source_type = request.form.get("source_type", "domestic")
-        order.status = request.form.get("status", order.status)
+        new_status = request.form.get("status", order.status)
         order.notes = request.form.get("notes", order.notes)
         order.purchase_price_source = _form_price_source(request, "purchase_price_source")
         order.selling_price_source = _form_price_source(request, "selling_price_source")
@@ -131,8 +131,18 @@ def edit_order(oid: int):
         order.selling_price_ref_url = _form_ref_url(request, "selling_price_ref_url")
         order.calc_deadlines()
         order.calc_profit()
+        # T9: 推定価格の注文は発注確定以降へ遷移不可（source更新→再計算で confirmed なら通す）
+        if order.can_advance_to(new_status):
+            order.status = new_status
+            flash("注文を更新しました。", "success")
+        else:
+            order.status = "pending"  # ドラフト保持
+            flash(
+                "推定価格で計算された注文は発注確定できません。実価格を確認し、"
+                "確度を「実価格確認済み」に更新して再保存してください。",
+                "error",
+            )
         db.session.commit()
-        flash("注文を更新しました。", "success")
         return redirect(url_for("main.order_list"))
 
     return render_template("order_form.html", order=order, payment_methods=list(PAYMENT_METHOD_EXTENSION_DAYS.keys()))
