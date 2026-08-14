@@ -60,25 +60,23 @@ class TestOrderModel:
             assert order.deadline_18 is None
 
     def test_calc_profit_fallback(self, app):
+        # Order.calc_profit 実経路で検証（モックなし・ISSUE-102改修済み）。
         # 利益計算ロジック正しさは tests/pricing/test_calculator.py 側で網羅検証済み。
-        # ここでは「信頼ソースを明示すれば Order.calc_profit が利益を再計算できる」ことを
-        # PricingInput + calculate_pricing を直接たたく経路で確認する。
-        # (Order.calc_profit 本体は DB 保存値の既存注文の利益再計算用であり、
-        # 信頼ソースを持たない過去データはレガシー path として扱う。
-        # その動作検証は tests/order/test_order_model.py で行う。)
-        from app.core.pricing import PricingInput, calculate_pricing
-        from app.core.pricing.schemas import PriceSource
-
-        inp = PricingInput(
-            purchase_price=20000,
-            selling_price=30000,
-            customs_duty=1000,
-            purchase_price_source=PriceSource.MANUAL_INPUT,
-            selling_price_source=PriceSource.MANUAL_INPUT,
-        )
-        result = calculate_pricing(inp, source_type="domestic")
-        assert result.profit is not None
-        assert isinstance(result.profit_rate, float)
+        with app.app_context():
+            order = Order(
+                order_number="B-CALC-1",
+                product_name="Test",
+                selling_price=30000,
+                purchase_cost=20000,
+                customs_duty=1000,
+                source_type="domestic",
+                purchase_price_source="manual_input",
+                selling_price_source="manual_input",
+            )
+            order.calc_profit()
+            assert order.profit is not None
+            assert isinstance(order.profit_rate, float)
+            assert order.profit_status == "confirmed"
 
     def test_get_extension_days(self):
         assert Order.get_extension_days("credit_card") == 45

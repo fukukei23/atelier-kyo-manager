@@ -1,7 +1,5 @@
 """Tests for app/utils/sourcing_profitability.py - Issue #92 カバレッジ向上"""
 
-from unittest.mock import MagicMock, patch
-
 from app.utils.sourcing_profitability import calculate_profitability
 
 
@@ -162,63 +160,26 @@ class TestCompletePath:
 
     def test_complete_returns_complete_status(self):
         """全フィールドあり → status=complete"""
-        # calculate_profitability 内部で PricingInput(price_source=UNKNOWN) を
-        # 構築して PriceIntegrityError を raise するため、テストではモック化。
-        fake_result = MagicMock(
-            revenue=50000.0,
-            total_cost=35000.0,
-            profit=15000.0,
-            profit_rate=0.3,
-        )
-        with patch("app.utils.sourcing_profitability.calculate_pricing", return_value=fake_result):
-            result = calculate_profitability(self._complete_data())
+        result = calculate_profitability(self._complete_data())  # 実経路（モックなし・ISSUE-102改修済み）
         assert result["status"] == "complete"
 
     def test_complete_has_profit(self):
         """complete パスでは profit が計算される"""
-        fake_result = MagicMock(
-            revenue=50000.0,
-            total_cost=35000.0,
-            profit=15000.0,
-            profit_rate=0.3,
-        )
-        with patch("app.utils.sourcing_profitability.calculate_pricing", return_value=fake_result):
-            result = calculate_profitability(self._complete_data())
+        result = calculate_profitability(self._complete_data())  # 実経路（モックなし・ISSUE-102改修済み）
         assert result["profit"] is not None
 
     def test_complete_has_revenue_and_cost(self):
         """complete パスでは revenue と total_cost が設定される"""
-        fake_result = MagicMock(
-            revenue=50000.0,
-            total_cost=35000.0,
-            profit=15000.0,
-            profit_rate=0.3,
-        )
-        with patch("app.utils.sourcing_profitability.calculate_pricing", return_value=fake_result):
-            result = calculate_profitability(self._complete_data())
+        result = calculate_profitability(self._complete_data())  # 実経路（モックなし・ISSUE-102改修済み）
         assert result["revenue"] is not None
         assert result["total_cost"] is not None
 
     def test_complete_has_no_errors(self):
         """complete パスでは errors が空"""
-        fake_result = MagicMock(
-            revenue=50000.0,
-            total_cost=35000.0,
-            profit=15000.0,
-            profit_rate=0.3,
-        )
-        with patch("app.utils.sourcing_profitability.calculate_pricing", return_value=fake_result):
-            result = calculate_profitability(self._complete_data())
+        result = calculate_profitability(self._complete_data())  # 実経路（モックなし・ISSUE-102改修済み）
         assert result["errors"] == []
 
     def test_complete_missing_fields_is_none(self):
         """complete パスでは missing_fields が None"""
-        fake_result = MagicMock(
-            revenue=50000.0,
-            total_cost=35000.0,
-            profit=15000.0,
-            profit_rate=0.3,
-        )
-        with patch("app.utils.sourcing_profitability.calculate_pricing", return_value=fake_result):
-            result = calculate_profitability(self._complete_data())
+        result = calculate_profitability(self._complete_data())  # 実経路（モックなし・ISSUE-102改修済み）
         assert result["missing_fields"] is None

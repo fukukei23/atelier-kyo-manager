@@ -225,9 +225,7 @@ def add_profit_calculation(
         #          それ以外は各サイト実スクレイプ値（cheapest_jpy）なので BROWSER_VERIFIED
         #   販売 = buyma_price の取得方法（buyma_price_method）を機械変換・
         #          マークアップフォールバックは MARKUP → ESTIMATED
-        purchase_source = (
-            PriceSource.MANUAL_INPUT if item.get("actual_purchase_jpy") else PriceSource.BROWSER_VERIFIED
-        )
+        purchase_source = PriceSource.MANUAL_INPUT if item.get("actual_purchase_jpy") else PriceSource.BROWSER_VERIFIED
         if item.get("buyma_price"):
             raw_method = str(item.get("buyma_price_method") or "").lower()
             if raw_method.startswith("buyma_search"):
