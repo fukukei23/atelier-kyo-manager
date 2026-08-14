@@ -15,12 +15,9 @@ from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 
-# Phase1 許容リスト: ISSUE-101 の6経路（Phase2 T5-T9 で source 明示 → T10 で清算）
-# ① order.py(T6)・② sourcing・⑤ monitor・⑥ agent は T7 で source 明示済み（skip撤去・除外済み）
-PHASE1_ALLOWLIST = {
-    "services/price_comparison_service.py",  # ③
-    "services/brand_price_service.py",  # ④
-}
+# 許容リスト（T10 で清算済み・空）: ISSUE-101 の6経路は Phase2 T6-T8 で全て source 明示済み。
+# 以後、source 未設定の PricingInput 構築は無条件で CI 失敗（再発防止の構造的保証）。
+PHASE1_ALLOWLIST: set[str] = set()
 
 SOURCE_KEYS = ("purchase_price_source", "selling_price_source")
 

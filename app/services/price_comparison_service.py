@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 
 from app import db
 from app.core.pricing.calculator import calculate_pricing
-from app.core.pricing.schemas import PricingInput
+from app.core.pricing.schemas import PriceSource, PricingInput, price_source_from_method
 from app.models.brand_price import BrandPrice
 from app.utils.product_matching import cross_site_match_score
 
@@ -70,6 +70,8 @@ class ProductComparison:
     category: str | None = None
     quotes: list[SourceQuote] = field(default_factory=list)
     buyma_price: float | None = None
+    # BUYMA価格の取得方法（spec 3.6: BROWSER/MANUAL/API/MARKUP・未設定は推定扱い）
+    buyma_price_method: str | None = None
     buyma_matched_name: str | None = None
     buyma_match_score: float | None = None
     buyma_item_url: str | None = None
@@ -189,6 +191,14 @@ def compare_product(
             comparison.buyma_price = bp.buyma_price
             comparison.buyma_matched_name = bp.buyma_matched_name
             comparison.buyma_match_score = bp.buyma_match_score
+            # spec 3.6: BrandPrice.buyma_price_source（manual/buyma_search(x)/auto_calculated）を method へ
+            raw = (bp.buyma_price_source or "").lower()
+            if raw.startswith("buyma_search"):
+                comparison.buyma_price_method = "BROWSER"
+            elif raw == "manual":
+                comparison.buyma_price_method = "MANUAL"
+            else:
+                comparison.buyma_price_method = "MARKUP"
 
         scored.append((score, quote))
 
@@ -266,6 +276,7 @@ def enrich_with_buyma(comparison: ProductComparison) -> ProductComparison:
             comparison.buyma_matched_name = best.get("name")
             comparison.buyma_match_score = best.get("score")
             comparison.buyma_item_url = best.get("url")
+            comparison.buyma_price_method = "BROWSER"  # BuymaPriceSearcher 実検索
     except Exception as e:
         logger.warning(f"BUYMA enrichment failed: {e}")
 
@@ -294,8 +305,12 @@ def calculate_comparison_profit(
         if cheapest is None:
             return {"error": "No price data available"}
         estimated_buyma = round(cheapest * markup_rate)
+        # マークアップ推定（spec 3.6: MARKUP → ESTIMATED）
+        selling_source = PriceSource.ESTIMATED
     else:
         estimated_buyma = comparison.buyma_price
+        # method 未設定は安全側（推定）扱い・BROWSER/MANUAL/API は機械変換
+        selling_source = price_source_from_method(comparison.buyma_price_method or "MARKUP")
 
     per_source = {}
     for quote in comparison.quotes:
@@ -306,9 +321,11 @@ def calculate_comparison_profit(
             shipping_cost=DEFAULT_SHIPPING_JPY,
             original_currency="JPY",
             item_category=category or "",
+            # 出所（T8）: 仕入=各サイト実スクレイプ値 / 販売=method機械変換
+            purchase_price_source=PriceSource.BROWSER_VERIFIED,
+            selling_price_source=selling_source,
         )
-        # Phase1(ISSUE-101/102): 一時skip・Phase2 でsource明示後に撤去
-        result = calculate_pricing(inp, skip_source_validation=True)
+        result = calculate_pricing(inp, allow_estimated=True)
         per_source[quote.source_site] = {
             "cost_jpy": cost,
             "sell_jpy": estimated_buyma,
@@ -317,6 +334,7 @@ def calculate_comparison_profit(
             "total_cost": round(result.total_cost, 2),
             "customs_duty": round(result.auto_customs_duty, 2),
             "is_profitable": result.profit > max(10_000, result.total_cost * 0.05),
+            "profit_status": "estimated" if result.estimate_mark else "confirmed",
             "in_stock": quote.in_stock,
         }
 

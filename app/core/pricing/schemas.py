@@ -41,6 +41,21 @@ class PriceIntegrityError(ValueError):
     """推測/未確認データでの利益計算を防止する例外。"""
 
 
+def price_source_from_method(method: str) -> PriceSource:
+    """BUYMA価格の取得方法（spec 3.6）を PriceSource へ機械変換。
+
+    BROWSER=スクレイパ実ページ取得 / MANUAL=人間入力 / API=公式API /
+    MARKUP=cheapest×markup_rate 推定。未知の値は UNKNOWN（安全側・計算で拒否）。
+    実装者が「これは推定でない」と水増しする余地を排除するための中央変換。
+    """
+    return {
+        "BROWSER": PriceSource.BROWSER_VERIFIED,
+        "MANUAL": PriceSource.MANUAL_INPUT,
+        "API": PriceSource.API_VERIFIED,
+        "MARKUP": PriceSource.ESTIMATED,
+    }.get(method.strip().upper(), PriceSource.UNKNOWN)
+
+
 @dataclass
 class PricingInput:
     """
@@ -60,9 +75,8 @@ class PricingInput:
     item_material: str = ""  # 素材（関税率自動決定用）
 
     # --- データ信頼性チェック ---
-    # Phase1(ISSUE-101/102): デフォルト UNKNOWN を廃止し None 許容に変更。
-    # None は「未設定」を意味し、validate_sources で UNKNOWN 扱い（信頼できない→例外）。
-    # 6経路は Phase1 で一時的に skip_source_validation=True で動作維持→Phase2 で source 明示。
+    # ISSUE-101/102: デフォルト UNKNOWN を廃止し None 許容（未設定は例外で検出）。
+    # 全6経路は Phase2 で source 明示済み・未設定構築は AST テストが機械検出する。
     purchase_price_source: PriceSource | None = None
     selling_price_source: PriceSource | None = None
 
