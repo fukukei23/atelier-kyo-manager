@@ -56,6 +56,37 @@
             </div>
         </div>
 
+        <!-- 価格の出所（ISSUE-101/102: α 確度select + β 参照URL） -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">仕入価格の確度 <span class="text-red-500">*</span></label>
+                <select name="purchase_price_source" class="w-full border rounded px-3 py-2">
+                    <option value="manual_input" {% if not order or order.purchase_price_source in (none, 'manual_input') %}selected{% endif %}>実価格確認済み</option>
+                    <option value="estimated" {% if order and order.purchase_price_source == 'estimated' %}selected{% endif %}>推定（発注不可）</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">仕入価格の参照URL <span class="text-gray-400 text-xs">（任意・客観証拠）</span></label>
+                <input type="url" name="purchase_price_ref_url" placeholder="https://..."
+                       value="{{ order.purchase_price_ref_url if order and order.purchase_price_ref_url else '' }}"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">販売価格の確度 <span class="text-red-500">*</span></label>
+                <select name="selling_price_source" class="w-full border rounded px-3 py-2">
+                    <option value="manual_input" {% if not order or order.selling_price_source in (none, 'manual_input') %}selected{% endif %}>実価格確認済み</option>
+                    <option value="estimated" {% if order and order.selling_price_source == 'estimated' %}selected{% endif %}>推定（発注不可）</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">販売価格の参照URL <span class="text-gray-400 text-xs">（任意・客観証拠）</span></label>
+                <input type="url" name="selling_price_ref_url" placeholder="https://..."
+                       value="{{ order.selling_price_ref_url if order and order.selling_price_ref_url else '' }}"
+                       class="w-full border rounded px-3 py-2">
+            </div>
+        </div>
+        <p class="text-xs text-gray-500 mt-1">「推定」で計算した注文は <strong>推定扱い（発注確定不可）</strong> になります。実価格確認後に確度を「実価格確認済み」へ更新し再計算してください。</p>
+
         <hr class="my-4">
         <h3 class="font-medium text-gray-700 mb-3">区分</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-4">

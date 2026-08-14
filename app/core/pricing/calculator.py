@@ -10,6 +10,7 @@ def calculate_pricing(
     source_type: str = "domestic",
     *,
     skip_source_validation: bool = False,
+    allow_estimated: bool = False,
 ) -> PricingResult:
     """
     利益計算のコアロジック。
@@ -17,10 +18,12 @@ def calculate_pricing(
 
     source_type: "domestic" or "overseas" — 成約手数料率の判定に使用
     skip_source_validation: True の場合、データソース検証をスキップ（後方互換用）
+    allow_estimated: True の場合のみ ESTIMATED source を許容（結果は estimate_mark=True）
     """
     # 0. データソース信頼性チェック — 推測データでの計算を防止
+    estimate_mark = False
     if not skip_source_validation:
-        inp.validate_sources()
+        estimate_mark = inp.validate_sources(allow_estimated=allow_estimated)
 
     cfg = config or load_pricing_config()
 
@@ -80,4 +83,5 @@ def calculate_pricing(
         total_shipping_cost=round(total_shipping_cost, 2),
         auto_customs_duty=round(auto_customs_duty, 2),
         customs_rate_used=round(customs_rate_used, 4),
+        estimate_mark=estimate_mark,
     )

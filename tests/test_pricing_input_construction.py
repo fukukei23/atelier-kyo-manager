@@ -16,8 +16,8 @@ from pathlib import Path
 APP_DIR = Path(__file__).resolve().parents[1] / "app"
 
 # Phase1 許容リスト: ISSUE-101 の6経路（Phase2 T5-T9 で source 明示 → T10 で清算）
+# ① models/order.py は T6 で source 明示済み（skip撤去・許容リストから除外）
 PHASE1_ALLOWLIST = {
-    "models/order.py",  # ① Order.calc_profit
     "utils/sourcing_profitability.py",  # ② sourcing パイプライン
     "services/price_comparison_service.py",  # ③
     "services/brand_price_service.py",  # ④

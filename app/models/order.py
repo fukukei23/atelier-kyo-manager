@@ -14,7 +14,7 @@ from app.config.constants import (
     PAYMENT_METHOD_EXTENSION_DAYS,
 )
 from app.core.pricing import PricingInput, calculate_pricing
-from app.core.pricing.schemas import nz
+from app.core.pricing.schemas import PriceSource, nz
 from app.core.timezone import _utcnow
 from app.extensions import db
 from app.models.enums import OrderStatus
@@ -54,17 +54,27 @@ class Order(db.Model):
     # 価格出所（ISSUE-101/102 Phase2 T5: α source select + β 参照URL）
     # 値は PriceSource 値（manual_input/browser_verified/api_verified）+ 推定は "estimated"
     purchase_price_source = db.Column(
-        String(32), nullable=False, default="manual_input", server_default="manual_input",
+        String(32),
+        nullable=False,
+        default="manual_input",
+        server_default="manual_input",
         comment="仕入価格の出所（manual_input/browser_verified/api_verified/estimated）",
     )
     selling_price_source = db.Column(
-        String(32), nullable=False, default="manual_input", server_default="manual_input",
+        String(32),
+        nullable=False,
+        default="manual_input",
+        server_default="manual_input",
         comment="販売価格の出所（manual_input/browser_verified/api_verified/estimated）",
     )
     purchase_price_ref_url = db.Column(String(512), nullable=True, comment="仕入価格の参照URL（β・客観証拠）")
     selling_price_ref_url = db.Column(String(512), nullable=True, comment="販売価格の参照URL（β・客観証拠）")
     profit_status = db.Column(
-        String(16), nullable=False, default="confirmed", server_default="confirmed", index=True,
+        String(16),
+        nullable=False,
+        default="confirmed",
+        server_default="confirmed",
+        index=True,
         comment="利益計算の確度（confirmed/estimated・estimated は発注ブロック）",
     )
 
@@ -98,22 +108,25 @@ class Order(db.Model):
         self.expected_payment_date = self.order_date + timedelta(days=pay_days)
 
     def calc_profit(self) -> None:
-        """利益・手数料を自動計算"""
+        """利益・手数料を自動計算（出所は source カラムから明示・ISSUE-101/102 Phase2 T6）"""
 
         inp = PricingInput(
             purchase_price=nz(self.purchase_cost),
             selling_price=nz(self.selling_price),
             customs_duty=nz(self.customs_duty),
+            purchase_price_source=PriceSource(self.purchase_price_source or "manual_input"),
+            selling_price_source=PriceSource(self.selling_price_source or "manual_input"),
         )
-        # Phase1(ISSUE-101/102): 一時skip・Phase2 でsource明示後に撤去
+        # 推定（estimated）は計算するが profit_status=estimated で記録（T9 で発注ブロック）
         result = calculate_pricing(
             inp,
             source_type=self.source_type or "domestic",
-            skip_source_validation=True,
+            allow_estimated=True,
         )
         self.fees = result.total_cost - nz(self.purchase_cost) - nz(self.customs_duty)
         self.profit = result.profit
         self.profit_rate = result.profit_rate * 100
+        self.profit_status = "estimated" if result.estimate_mark else "confirmed"
 
     def remaining_days(self) -> int | None:
         """18日ルールの残日数"""

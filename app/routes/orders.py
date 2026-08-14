@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from flask import flash, jsonify, redirect, render_template, request, url_for
+from flask import Request, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import login_required
 from sqlalchemy import desc, func
 
@@ -16,6 +16,31 @@ from app.utils.decorators import handle_db_error
 from app.utils.presentation import deadline_color, deadline_message
 
 from . import bp
+
+# フォームの価格確度 select が取り得る値（ISSUE-101/102 Phase2 T6: α）
+# browser_verified / api_verified はスクレイパ等システム側のみ設定可
+_FORM_PRICE_SOURCES = ("manual_input", "estimated")
+
+
+def _form_price_source(req: Request, field: str) -> str:
+    """フォームの確度 select を検証して返す（不正値は manual_input に落とさず 400 相当へ）。
+
+    鉄則: 出所の水増し（estimated を manual_input へ勝手変換等）はしない。
+    """
+    value = req.form.get(field, "manual_input")
+    if value not in _FORM_PRICE_SOURCES:
+        raise ValueError(f"不正な価格確度です: {value}")
+    return value
+
+
+def _form_ref_url(req: Request, field: str) -> str | None:
+    """フォームの参照URL（β・optional）を検証して返す。"""
+    url = (req.form.get(field, "") or "").strip()
+    if not url:
+        return None
+    if not (url.startswith("http://") or url.startswith("https://")):
+        raise ValueError("参照URLは http:// または https:// で始めてください。")
+    return url
 
 
 # ---- F05: 注文管理 ------------------------------------------------------
@@ -56,6 +81,10 @@ def create_order():
             selling_price=selling_price,
             purchase_cost=purchase_cost,
             customs_duty=customs_duty,
+            purchase_price_source=_form_price_source(request, "purchase_price_source"),
+            selling_price_source=_form_price_source(request, "selling_price_source"),
+            purchase_price_ref_url=_form_ref_url(request, "purchase_price_ref_url"),
+            selling_price_ref_url=_form_ref_url(request, "selling_price_ref_url"),
             payment_method=request.form.get("payment_method", ""),
             source_type=request.form.get("source_type", "domestic"),
             status=request.form.get("status", "pending"),
@@ -96,6 +125,10 @@ def edit_order(oid: int):
         order.source_type = request.form.get("source_type", "domestic")
         order.status = request.form.get("status", order.status)
         order.notes = request.form.get("notes", order.notes)
+        order.purchase_price_source = _form_price_source(request, "purchase_price_source")
+        order.selling_price_source = _form_price_source(request, "selling_price_source")
+        order.purchase_price_ref_url = _form_ref_url(request, "purchase_price_ref_url")
+        order.selling_price_ref_url = _form_ref_url(request, "selling_price_ref_url")
         order.calc_deadlines()
         order.calc_profit()
         db.session.commit()
