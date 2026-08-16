@@ -46,7 +46,5 @@ class TestHardcodeEliminated:
             src = inspect.getsource(mod)
             assert "min_acceptable_profit" in src, f"{mod.__name__} がヘルパー未使用"
             # 10_000リテラルの直接比較が残っていないこと（import行以外）
-            body = "\n".join(
-                ln for ln in src.splitlines() if "10_000" in ln and "import" not in ln
-            )
+            body = "\n".join(ln for ln in src.splitlines() if "10_000" in ln and "import" not in ln)
             assert body.strip() == "", f"{mod.__name__} に10_000リテラル残存: {body}"
