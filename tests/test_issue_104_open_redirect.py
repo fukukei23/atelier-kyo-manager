@@ -54,9 +54,7 @@ LOGIN = {"username": "testuser", "password": "testpass"}
 
 
 def _login(client, next_value):
-    return client.post(
-        f"/auth/login?next={next_value}", data=LOGIN, follow_redirects=False
-    )
+    return client.post(f"/auth/login?next={next_value}", data=LOGIN, follow_redirects=False)
 
 
 class TestSafeNextRedirect:
@@ -81,12 +79,12 @@ class TestOpenRedirectBlocked:
     @pytest.mark.parametrize(
         "evil",
         [
-            "https://evil.com",        # 絶対URL（https）
-            "http://evil.com",         # 絶対URL（http）
-            "//evil.com",              # プロトコル相対
-            "%2F%2Fevil.com",          # URLエンコード済みプロトコル相対
-            "/\\evil.com",             # バックスラッシュ（ブラウザ正規化で//化）
-            "https:evil.com",          # スキーム相対変形
+            "https://evil.com",  # 絶対URL（https）
+            "http://evil.com",  # 絶対URL（http）
+            "//evil.com",  # プロトコル相対
+            "%2F%2Fevil.com",  # URLエンコード済みプロトコル相対
+            "/\\evil.com",  # バックスラッシュ（ブラウザ正規化で//化）
+            "https:evil.com",  # スキーム相対変形
         ],
     )
     def test_evil_next_falls_back_to_index(self, client, create_user, evil):

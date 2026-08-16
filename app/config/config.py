@@ -87,9 +87,21 @@ class AppConfig:
     # ---- 環境設定 ----
     STAGE: Literal["test", "staging", "prod"] = os.getenv("AK_STAGE", "test")
 
-    # STAGE=prod時にSECRET_KEYがデフォルト値なら警告
-    if STAGE == "prod" and SECRET_KEY == "dev-secret-key-change-in-production":
-        raise RuntimeError("STAGE=prod requires SECRET_KEY environment variable to be set")
+    # デフォルトSECRET_KEYはtest以外（staging/prod）で起動拒否（ISSUE-105）
+    # 従来は STAGE==prod のみ判定で、AK_STAGE未設定のまま外部公開すると
+    # devキーのまま起動するガードの穴があった
+    if SECRET_KEY == "dev-secret-key-change-in-production" and STAGE != "test":
+        raise RuntimeError(f"STAGE={STAGE} requires SECRET_KEY environment variable to be set")
+
+    # ---- セッションCookie保護（ISSUE-105）----
+    # HttpOnly・SameSite=Lax は常時有効
+    SESSION_COOKIE_HTTPONLY: bool = True
+    SESSION_COOKIE_SAMESITE: str = "Lax"
+    REMEMBER_COOKIE_HTTPONLY: bool = True
+    REMEMBER_COOKIE_SAMESITE: str = "Lax"
+    # Secure はHTTPS環境（staging/prod）のみ有効化（ローカルhttp開発・テスト破壊回避）
+    SESSION_COOKIE_SECURE: bool = STAGE in {"staging", "prod"}
+    REMEMBER_COOKIE_SECURE: bool = STAGE in {"staging", "prod"}
 
     # Celery 本番設定
     CELERY_BROKER_URL: str = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
@@ -128,6 +140,13 @@ class AppConfig:
             "SLACK_WEBHOOK_URL": os.environ.get("SLACK_WEBHOOK_URL", ""),
             "CELERY_BROKER_URL": os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0"),
             "CELERY_RESULT_BACKEND": os.environ.get("CELERY_RESULT_BACKEND", "redis://localhost:6379/0"),
+            # セッションCookie保護（ISSUE-105）
+            "SESSION_COOKIE_HTTPONLY": cls.SESSION_COOKIE_HTTPONLY,
+            "SESSION_COOKIE_SAMESITE": cls.SESSION_COOKIE_SAMESITE,
+            "SESSION_COOKIE_SECURE": cls.SESSION_COOKIE_SECURE,
+            "REMEMBER_COOKIE_HTTPONLY": cls.REMEMBER_COOKIE_HTTPONLY,
+            "REMEMBER_COOKIE_SAMESITE": cls.REMEMBER_COOKIE_SAMESITE,
+            "REMEMBER_COOKIE_SECURE": cls.REMEMBER_COOKIE_SECURE,
         }
 
 
