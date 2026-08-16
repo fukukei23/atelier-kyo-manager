@@ -56,3 +56,12 @@ LLM_LOCAL_TEMPERATURE: float = 0.3
 LLM_CACHE_TTL_SECONDS: int = 2_592_000  # 30日
 LLM_CACHE_SIZE_LIMIT: int = 500_000_000  # 500MB
 CHAT_HISTORY_RETENTION_DAYS: int = 7
+
+# 利益判定閾値（ISSUE-109: 3箇所のハードコード一元化）
+MIN_PROFIT_JPY: int = 10_000  # 安全判定の最低利益（円）
+MIN_PROFIT_MARGIN_RATIO: float = 0.05  # 原価に対する最低利益率（5%)
+
+
+def min_acceptable_profit(total_cost: float) -> float:
+    """利益安全判定の閾値: max(¥10,000, 原価×5%) を返す。"""
+    return max(MIN_PROFIT_JPY, total_cost * MIN_PROFIT_MARGIN_RATIO)

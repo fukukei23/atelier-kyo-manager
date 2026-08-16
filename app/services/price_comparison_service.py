@@ -16,6 +16,7 @@ import logging
 from dataclasses import dataclass, field
 
 from app import db
+from app.config.constants import min_acceptable_profit
 from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.schemas import PriceSource, PricingInput, price_source_from_method
 from app.models.brand_price import BrandPrice
@@ -110,7 +111,7 @@ class ProductComparison:
         c = self.cheapest_cost_jpy
         if p is None or c is None:
             return False
-        return p >= max(10_000, c * 0.05)
+        return p >= min_acceptable_profit(c)
 
 
 # ---------------------------------------------------------------------------
@@ -333,7 +334,7 @@ def calculate_comparison_profit(
             "profit_rate": round(result.profit_rate, 4),
             "total_cost": round(result.total_cost, 2),
             "customs_duty": round(result.auto_customs_duty, 2),
-            "is_profitable": result.profit > max(10_000, result.total_cost * 0.05),
+            "is_profitable": result.profit > min_acceptable_profit(result.total_cost),
             "profit_status": "estimated" if result.estimate_mark else "confirmed",
             "in_stock": quote.in_stock,
         }

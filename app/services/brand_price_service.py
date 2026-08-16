@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 from sqlalchemy import func
 
+from app.config.constants import min_acceptable_profit
 from app.config.cost_table import DEFAULT_MARKUP_RATE, get_buyandship_shipping
 from app.core.pricing.calculator import calculate_pricing
 from app.core.pricing.schemas import PriceSource, PricingInput, price_source_from_method
@@ -256,7 +257,7 @@ def add_profit_calculation(
         item["customs_rate"] = round(result.customs_rate_used, 4)
         item["profit"] = round(result.profit, 2)
         item["profit_rate"] = round(result.profit_rate, 4)
-        item["is_profitable"] = result.profit > max(10_000, result.total_cost * 0.05)
+        item["is_profitable"] = result.profit > min_acceptable_profit(result.total_cost)
         item["profit_status"] = "estimated" if result.estimate_mark else "confirmed"
 
     return comparison
