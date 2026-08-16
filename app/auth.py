@@ -19,8 +19,14 @@ def _is_safe_next(target: str | None) -> bool:
 
     - "/"で始まる相対パス（netloc・schemeを持たない）のみ True
     - 絶対URL・プロトコル相対（//evil.com）・バックスラッシュ変形（/\\evil.com）は False
+    - タブ/改行等の制御文字は事前に除去（WHATWG URL仕様でブラウザがURL解析時に
+      これらを除去するため、除去前提でチェックしないと "/\t/evil.com" が
+      ブラウザ側で実質 "//evil.com" として解釈されるバイパスを許してしまう）
     """
-    if not target or not target.startswith("/"):
+    if not target:
+        return False
+    target = "".join(c for c in target if c not in "\t\r\n")
+    if not target.startswith("/"):
         return False
     if target.startswith("//") or "\\" in target:
         return False

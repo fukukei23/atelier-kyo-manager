@@ -2,7 +2,8 @@
 
 app/auth.py login() の next パラメータ無検証 redirect を封じる:
 - 相対パス（/ で始まり netloc/scheme を持たない）のみ許可
-- 絶対URL・プロトコル相対（//evil.com）・バックスラッシュ（/\\evil.com）は
+- 絶対URL・プロトコル相対（//evil.com）・バックスラッシュ（/\\evil.com）・
+  制御文字混入（/\t/evil.com 等、ブラウザのURL正規化で//化されうる）は
   トップページへフォールバック
 """
 
@@ -85,6 +86,9 @@ class TestOpenRedirectBlocked:
             "%2F%2Fevil.com",  # URLエンコード済みプロトコル相対
             "/\\evil.com",  # バックスラッシュ（ブラウザ正規化で//化）
             "https:evil.com",  # スキーム相対変形
+            "/%09/evil.com",  # タブ文字（WHATWG URL仕様でブラウザ側が除去→//化）
+            "/%0d/evil.com",  # CR（同上）
+            "/%0a/evil.com",  # LF（同上）
         ],
     )
     def test_evil_next_falls_back_to_index(self, client, create_user, evil):
