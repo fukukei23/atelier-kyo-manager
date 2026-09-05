@@ -60,9 +60,11 @@ class PricingConfig:
       → calculator.py で使用
 
     - additional_fee_rate: その他の追加手数料（オプション）
+      → ISSUE-103 修正後は計算で未使用（実効手数料に含まれるため二重計上防止）
 
     - domestic_commission_rate: 国内仕入れ時の成約手数料率
-    - overseas_commission_rate: 海外仕入れ時の成約手数料率
+      → ISSUE-103 修正後は計算で未使用（後方互換用に保持）
+    - overseas_commission_rate: 海外仕入れ時の成約手数料率（同上）
     - transfer_fee: 振込手数料（固定）
     """
 

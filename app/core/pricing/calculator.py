@@ -16,7 +16,8 @@ def calculate_pricing(
     利益計算のコアロジック。
     Flask/CLI/API からはこの関数だけを呼ぶ。
 
-    source_type: "domestic" or "overseas" — 成約手数料率の判定に使用
+    source_type: "domestic" or "overseas" — ISSUE-103 修正後は計算で未使用
+    （実効総手数料14.2%が共通適用）。後方互換のため引数は保持
     skip_source_validation: True の場合、データソース検証をスキップ（後方互換用）
     allow_estimated: True の場合のみ ESTIMATED source を許容（結果は estimate_mark=True）
     """
@@ -55,14 +56,14 @@ def calculate_pricing(
         auto_customs_duty = (purchase_price_jpy + inp.warehouse_shipping_cost) * customs_rate_used
         customs_duty = auto_customs_duty
 
-    # 4. 成約手数料（source_type で国内/海外を切替）
-    if source_type == "overseas":
-        commission_fee = inp.selling_price * cfg.overseas_commission_rate
-    else:
-        commission_fee = inp.selling_price * cfg.domestic_commission_rate
-
-    # 5. その他手数料
-    additional_fee = inp.selling_price * cfg.additional_fee_rate
+    # 4. 手数料（実効総手数料一括・ISSUE-103）
+    # 経営者判断「実効総手数料14.2%」= 販売手数料+決済手数料+その他を含む総負担率。
+    # 修正前は source_type 別の成約手数料(domestic 7.7%/overseas 5.5%)+additional(0%)
+    # のみで、海外仕入れ時に利益を約8.7pt過大評価していた。
+    # additional_fee_rate は実効手数料に含まれるため二重計上防止として使用しない。
+    # domestic/overseas_commission_rate・additional_fee_rate は後方互換のため
+    # PricingConfig に残すが計算では未使用（source_type 引数も同様）。
+    commission_fee = inp.selling_price * cfg.buyma_effective_fee_rate
 
     # 6. 総コスト
     total_cost = (
@@ -72,7 +73,6 @@ def calculate_pricing(
         + inp.procurement_fee
         + inp.transaction_fee
         + commission_fee
-        + additional_fee
         + cfg.transfer_fee
     )
 

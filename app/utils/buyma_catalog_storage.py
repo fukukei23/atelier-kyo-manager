@@ -10,11 +10,8 @@ import hashlib
 import os
 import zipfile
 from datetime import datetime
-from pathlib import Path
 
-import gspread
 import requests
-from google.oauth2.service_account import Credentials
 
 CONFIG = {
     "profile_path": r"C:/Users/USER/AppData/Local/Google/Chrome/SeleniumProfile",
@@ -49,6 +46,11 @@ class CatalogStorage:
             os.makedirs(directory, exist_ok=True)
 
     def _init_google_sheets(self) -> None:
+        # gspread/google-auth は requirements 未宣言の重い実行時依存のため
+        # ここで遅延 import（未インストール環境では既存の try/except で fail-open）
+        import gspread
+        from google.oauth2.service_account import Credentials
+
         try:
             scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
             creds = Credentials.from_service_account_file(CONFIG["google_credentials"], scopes=scope)

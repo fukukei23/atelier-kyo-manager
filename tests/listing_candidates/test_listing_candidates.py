@@ -53,12 +53,12 @@ def auth_client(client, test_user):
 def test_listing_candidates_filters_listed(app):
     """listing_status='listed' は除外される"""
     with app.app_context():
-        # purchase=1000, selling=1500 → rate=4.3% (手数料引後)
+        # purchase=1000, selling=2000 → rate=19.8% (実効手数料14.2%・transfer_fee 220円引後)
         # min_profit_rate=0 で全件取得
         p1 = Product(
             name="候補A",
             purchase_price=1000,
-            selling_price=1500,
+            selling_price=2000,
             stock_status=True,
             listing_status="draft",
             purchase_price_source="manual_input",
@@ -67,7 +67,7 @@ def test_listing_candidates_filters_listed(app):
         p2 = Product(
             name="出品済",
             purchase_price=1000,
-            selling_price=1500,
+            selling_price=2000,
             stock_status=True,
             listing_status="listed",
             purchase_price_source="manual_input",
@@ -88,7 +88,7 @@ def test_listing_candidates_filters_no_stock(app):
         p1 = Product(
             name="在庫あり",
             purchase_price=1000,
-            selling_price=1500,
+            selling_price=2000,
             stock_status=True,
             listing_status="draft",
             purchase_price_source="manual_input",
@@ -97,7 +97,7 @@ def test_listing_candidates_filters_no_stock(app):
         p2 = Product(
             name="在庫なし",
             purchase_price=1000,
-            selling_price=1500,
+            selling_price=2000,
             stock_status=False,
             listing_status="draft",
             purchase_price_source="manual_input",
@@ -115,11 +115,11 @@ def test_listing_candidates_filters_no_stock(app):
 def test_listing_candidates_filters_by_profit_rate(app):
     """利益率フィルタが機能する"""
     with app.app_context():
-        # purchase=1000, selling=2000 → rate=26.3%
+        # purchase=1000, selling=3000 → rate=41.8% (実効手数料14.2%適用後)
         p1 = Product(
             name="高利益",
             purchase_price=1000,
-            selling_price=2000,
+            selling_price=3000,
             stock_status=True,
             listing_status="draft",
             purchase_price_source="manual_input",
@@ -189,7 +189,7 @@ def test_listing_candidates_sort_by_tier(app):
 def test_listing_candidates_default_min_rate(app):
     """デフォルト最低利益率(10%)が適用される"""
     with app.app_context():
-        # purchase=1000, selling=1500 → rate=4.3% < 10%
+        # purchase=1000, selling=1500 → rate=-2.2% (実効手数料14.2%適用後) < 10%
         p1 = Product(
             name="低利益",
             purchase_price=1000,
