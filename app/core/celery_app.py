@@ -38,16 +38,39 @@ def make_celery(app=None):
         },
     )
 
-    if app:
-
-        class ContextTask(celery.Task):
-            def __call__(self, *args, **kwargs):
-                with app.app_context():
-                    return self.run(*args, **kwargs)
-
-        celery.Task = ContextTask
-
     return celery
 
 
+_flask_app = None
+
+
+def _get_flask_app():
+    """タスク実行時まで create_app() の生成を遅延する（singleton）.
+
+    celery_app は app/__init__.py → extensions.py:34 から import されるため、
+    import 時に create_app() を呼ぶと循環 import になる（実測 ImportError）。
+    ContextTask.__call__（=ワーカーのタスク実行時）まで生成を遅延することで、
+    worker 起動対象インスタンスにも Flask app_context を提供する
+    （2026-09-05 差分レビュー N1: app=None だと ContextTask が適用されず
+    DB に触るタスクが無音失敗していた）。
+    """
+    global _flask_app
+    if _flask_app is None:
+        from app import create_app
+
+        _flask_app = create_app()
+    return _flask_app
+
+
 celery = make_celery()
+
+
+class ContextTask(celery.Task):
+    """各タスク実行を Flask app_context 内で行う."""
+
+    def __call__(self, *args, **kwargs):
+        with _get_flask_app().app_context():
+            return self.run(*args, **kwargs)
+
+
+celery.Task = ContextTask

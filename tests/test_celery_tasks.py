@@ -59,6 +59,37 @@ class TestCeleryApp:
         missing = beat_names - registered
         assert not missing, f"beat が送出するタスクが未登録: {missing}"
 
+    def test_worker_instance_task_class_wraps_app_context(self):
+        """worker 起動対象インスタンスの Task クラスが app_context をラップすること.
+
+        celery = make_celery()（app=None）だと ContextTask が適用されず、
+        celery -A app.core.celery_app worker で起動したワーカーが
+        'Working outside of application context' で無音失敗した
+        （2026-09-05 差分レビュー N1 の回帰防止）。
+        """
+        from app.core.celery_app import celery
+
+        celery.loader.import_default_modules()
+        task_cls = type(celery.tasks["monitor_prices_single"])
+        mro_names = [c.__name__ for c in task_cls.__mro__]
+        assert "ContextTask" in mro_names, (
+            f"ContextTask が適用されていない（worker が app_context 無しで動く）: {mro_names}"
+        )
+
+    def test_monitor_task_runs_inside_app_context(self):
+        """worker と同一の __call__ 経路で DB に触っても context エラーにならないこと.
+
+        登録名の検証では見抜けなかった「登録は正しいが実行文脈が無い」状態の
+        回帰防止。存在しない monitor_id を渡すため DB は読み取りのみで書込無し。
+        """
+        from app.core.celery_app import celery
+
+        celery.loader.import_default_modules()
+        result = celery.tasks["monitor_prices_single"](999999)
+        assert "Working outside of application context" not in str(result), (
+            f"タスクが app_context 無しで実行された: {result}"
+        )
+
 
 class TestScrapeTasks:
     """スクレイピングタスクのテスト."""
