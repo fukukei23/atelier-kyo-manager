@@ -33,8 +33,15 @@ logger = logging.getLogger(__name__)
 # ==========================
 # 定数
 # ==========================
-BACKUP_DIR = Path(".overrides_backups")
+# バックアップは対象ファイルと同じ階層に置く。
+# CWD 直下に固定すると、起動ディレクトリ次第で保存先が散らばり
+# _rotate_backups() が別ディレクトリを見てローテーションが機能しなくなる。
+BACKUP_DIR_NAME = ".overrides_backups"
 MAX_BACKUPS = 50
+
+
+def _backup_dir_for(path: Path) -> Path:
+    return path.resolve().parent / BACKUP_DIR_NAME
 
 
 # ==========================
@@ -89,9 +96,9 @@ def _deep_merge_safe(a: dict[str, Any], b: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def _rotate_backups(basename: str):
+def _rotate_backups(backup_dir: Path, basename: str):
     try:
-        backups = sorted(BACKUP_DIR.glob(f"{basename}.*.bak"), key=os.path.getmtime, reverse=True)
+        backups = sorted(backup_dir.glob(f"{basename}.*.bak"), key=os.path.getmtime, reverse=True)
         if len(backups) > MAX_BACKUPS:
             for old_backup in backups[MAX_BACKUPS:]:
                 old_backup.unlink()
@@ -104,10 +111,11 @@ def _backup_overrides_file(path: Path, reason: str = "update") -> None:
     try:
         if not path.exists():
             return
-        BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+        backup_dir = _backup_dir_for(path)
+        backup_dir.mkdir(parents=True, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
         bak_name = f"{path.name}.{reason}.{ts}.bak"
-        bak = BACKUP_DIR / bak_name
+        bak = backup_dir / bak_name
 
         if reason == "corrupted":
             os.rename(path, bak)
@@ -116,7 +124,7 @@ def _backup_overrides_file(path: Path, reason: str = "update") -> None:
             shutil.copy2(path, bak)
             logger.info(f"Backed up '{path.name}' to '{bak_name}' (reason: {reason}).")
 
-        _rotate_backups(path.name)
+        _rotate_backups(backup_dir, path.name)
     except Exception as e:
         logger.warning(f"バックアップ作成に失敗しました: {e}")
 

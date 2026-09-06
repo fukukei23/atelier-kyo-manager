@@ -362,3 +362,27 @@ class TestUpdateSiteSelectors:
         # .tmp ファイルが残っていないことを確認
         tmp_files = list(tmp_path.glob("*.tmp"))
         assert len(tmp_files) == 0
+
+    def test_backup_created_next_to_target_file(self, tmp_path, monkeypatch):
+        """バックアップは対象ファイルと同じ階層に作られる（CWD依存の解消）"""
+        cwd = tmp_path / "launch_dir"
+        cwd.mkdir()
+        monkeypatch.chdir(cwd)
+        nested = tmp_path / "app" / "config" / "sites"
+        nested.mkdir(parents=True)
+        overrides = nested / "overrides.local.json"
+        overrides.write_text("{}", encoding="utf-8")
+
+        success, diff = update_site_selectors(
+            site="gucci",
+            new_selectors={"x": ["1"]},
+            overrides_path=overrides,
+        )
+
+        assert success is True
+        # 対象ファイルと同じ階層の .overrides_backups/ に .bak が1件できる
+        backup_dir = nested / ".overrides_backups"
+        backups = list(backup_dir.glob("*.bak"))
+        assert len(backups) == 1
+        # 起動ディレクトリ（CWD）直下には散らばらない
+        assert not (cwd / ".overrides_backups").exists()
