@@ -154,6 +154,8 @@ flask run              # 開発サーバー起動
 過去の一時期、画像・zip・一部ソースが Git LFS で管理されていた。**新規の LFS 追加は停止済み**（`.gitattributes` の `filter=lfs` ルールは削除・新規ファイルは通常の git 管理）。
 
 - **clone / checkout には `git-lfs` クライアントが必要**（過去履歴に LFS ポインタが残存するため）
+- 過去コミット（例: `3dba6e5b`）を閲覧・checkout すると LFS ポインタ（130B テキスト）が現れるが**既知の挙動**（fail ではない・実データは親コミットの履歴と LFS オブジェクトに存続）
+- `.git` は約 149MB で縮まない（履歴保持のため）・GitHub LFS ストレージ/帯域を少量継続消費する（将来削除する場合は git-filter-repo + LFS prune のセット手順が必要・単独実行は恒久禁止）
 - ⛔ **恒久禁止**: `git lfs uninstall` / GitHub 上の LFS オブジェクト削除 / `.git/lfs/objects` の手動削除 — 実行すると過去コミットをチェックアウトした時点で該当ファイルが 130 バイトのポインタテキストになり復元不能
 - `docs/demo/frames/`（gif生成の中間フレーム・再生成出力）と `catalog_images/` は管理対象外（`.gitignore` 済み）
 
