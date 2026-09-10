@@ -149,6 +149,16 @@ flask run              # 開発サーバー起動
 
 ---
 
+## LFS運用方針（2026-09-10 確定）
+
+過去の一時期、画像・zip・一部ソースが Git LFS で管理されていた。**新規の LFS 追加は停止済み**（`.gitattributes` の `filter=lfs` ルールは削除・新規ファイルは通常の git 管理）。
+
+- **clone / checkout には `git-lfs` クライアントが必要**（過去履歴に LFS ポインタが残存するため）
+- ⛔ **恒久禁止**: `git lfs uninstall` / GitHub 上の LFS オブジェクト削除 / `.git/lfs/objects` の手動削除 — 実行すると過去コミットをチェックアウトした時点で該当ファイルが 130 バイトのポインタテキストになり復元不能
+- `docs/demo/frames/`（gif生成の中間フレーム・再生成出力）と `catalog_images/` は管理対象外（`.gitignore` 済み）
+
+---
+
 ## プロジェクト状況
 
 | 指標 | 値 |
