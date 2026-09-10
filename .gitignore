@@ -193,3 +193,6 @@ data/imports/
 
 # Old project root configs
 project-root/
+
+# GIF生成の中間フレーム（scripts/record_demo.py の再生成出力・管理対象外・D案 Step 2）
+docs/demo/frames/
