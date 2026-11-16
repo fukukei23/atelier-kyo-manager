@@ -196,3 +196,6 @@ project-root/
 
 # GIF生成の中間フレーム（scripts/record_demo.py の再生成出力・管理対象外・D案 Step 2）
 docs/demo/frames/
+
+# Strix自動診断の成果物（2026-11-17・ローカルスキャン限定運用）
+strix_runs/
