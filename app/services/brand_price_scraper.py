@@ -291,8 +291,19 @@ def _fetch_with_cffi(url: str, timeout: int = 25, proxy: str | None = None) -> s
 
     proxy が明示的に渡された場合はそれを使用。
     渡されない場合は AppConfig.PROXY_URL（環境変数 PROXY_URL）にフォールバック。
+
+    取得先URLはスキーム検証を行う（Strix vuln-0016）。`file://` 等は
+    ローカルファイルの読み取りや内部ホストへの到達に使われるため拒否する。
     """
     from curl_cffi import requests as cffi_requests
+
+    from app.utils.validation import ValidationError, validate_fetch_url
+
+    try:
+        url = validate_fetch_url(url)
+    except ValidationError as e:
+        logger.warning(f"[cffi] Blocked URL: {e}")
+        return None
 
     proxy_url = proxy
     if not proxy_url:
@@ -323,20 +334,30 @@ def _fetch_with_cffi(url: str, timeout: int = 25, proxy: str | None = None) -> s
 
 def _make_item(
     brand: str, product_name: str, price: float, source_site: str, source_url: str, currency: str = "JPY"
-) -> dict:
+) -> dict | None:
+    """スクラップ結果を1件分のdictに変換する。
+
+    為替レートが取得できない場合は 1.0 での換算を **行わない**（Strix vuln-0008）。
+    1.0 換算は €890 を ¥890 として保存し、利益判定を約180倍過大評価させるため、
+    欠損時は当該項目のみ除外して返す（バッチ全体は継続する）。
+    """
     price_jpy = price
     exchange_rate = 1.0
 
     if currency != "JPY":
         from app.utils.fx_utils import get_fx_table_jpy
+        from app.utils.validation import validate_fx_rate
 
         fx_table, _ = get_fx_table_jpy()
-        rate = fx_table.get(currency)
-        if rate:
-            exchange_rate = rate
-            price_jpy = price * rate
-        else:
-            logger.warning(f"No FX rate for {currency}, using raw price as JPY")
+        rate = validate_fx_rate(fx_table.get(currency))
+        if rate is None:
+            logger.warning(
+                f"No valid FX rate for {currency} (brand={brand}, product={product_name!r}): "
+                "skip this item to avoid storing foreign price as JPY"
+            )
+            return None
+        exchange_rate = rate
+        price_jpy = price * rate
 
     return {
         "brand": brand,
@@ -465,16 +486,17 @@ class BrandPriceScraper:
             logger.info(f"[farfetch] Found {len(cards)} products for {brand}")
 
             for card in cards[:item_limit]:
-                results.append(
-                    _make_item(
+                item = _make_item(
                         brand,
                         card["name"],
                         float(card["price"]),
                         "farfetch",
                         card["url"],
                         currency="JPY",
-                    )
                 )
+                if item is not None:
+                    results.append(item)
+
 
             logger.info(f"[farfetch] Extracted {len(results)} products for {brand}")
         except Exception as e:
@@ -513,30 +535,33 @@ class BrandPriceScraper:
                     ctx = html[max(0, price_pos - 800) : price_pos]
                     name_match = re.findall(r"<h\d[^>]*>\s*([^<]+?)\s*</h\d>", ctx)
                     name = name_match[-1].strip() if name_match else f"Balenciaga Item {match}"
-                    results.append(
-                        _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
-                    )
+                    item = _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
+                    if item is not None:
+                        results.append(item)
                 elif brand == "Loewe":
                     name, price_str = match
                     price = float(price_str.replace(",", ""))
                     if len(name) > 60 or "css-" in name or "{" in name:
                         continue
-                    results.append(
-                        _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
-                    )
+                    item = _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
+                    if item is not None:
+                        results.append(item)
+
                 elif brand == "Valentino":
                     name, price_str = match
                     price = float(price_str)
-                    results.append(
-                        _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
-                    )
+                    item = _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
+                    if item is not None:
+                        results.append(item)
+
                 else:
                     name, price_str = match
                     # EUR uses dot as thousands separator (€ 2.450 = 2450)
                     price = float(price_str.replace(".", "").replace(",", ""))
-                    results.append(
-                        _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
-                    )
+                    item = _make_item(brand, name, price, site_key, url, currency=_CURRENCY_MAP.get(brand, "JPY"))
+                    if item is not None:
+                        results.append(item)
+
 
         except Exception as e:
             logger.error(f"[{site_key}] Extraction failed: {e}")
@@ -583,16 +608,17 @@ class BrandPriceScraper:
                 logger.info(f"[{site_key}] Found {len(products)} products for {brand}")
 
                 for product in products[:item_limit]:
-                    results.append(
-                        _make_item(
-                            brand,
-                            product["name"],
-                            float(product["price"]),
-                            site_key,
-                            url,
-                            currency=_CURRENCY_MAP.get(brand, "JPY"),
-                        )
+                    item = _make_item(
+                        brand,
+                        product["name"],
+                        float(product["price"]),
+                        site_key,
+                        url,
+                        currency=_CURRENCY_MAP.get(brand, "JPY"),
                     )
+                    if item is not None:
+                        results.append(item)
+
 
                 ctx.close()
                 browser.close()

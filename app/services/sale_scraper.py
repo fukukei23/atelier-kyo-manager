@@ -317,6 +317,14 @@ def _scrape_ssense(brand: str, item_limit: int = 10, category: str = "bags") -> 
 
 def _ssense_via_playwright(url: str) -> str | None:
     """Fallback: use playwright to render SSENSE SPA."""
+    from app.utils.validation import ValidationError, validate_fetch_url
+
+    try:
+        url = validate_fetch_url(url)
+    except ValidationError as e:
+        logger.warning(f"[ssense] Blocked URL: {e}")
+        return None
+
     try:
         scraper = _StealthScraper(headless=True)
         scraper._ensure_browser()

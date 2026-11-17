@@ -168,7 +168,10 @@ class Product(db.Model):
             procurement_fee=nz(self.procurement_fee),
             warehouse_shipping_cost=nz(self.warehouse_shipping_cost),
             original_currency=self.original_currency or "JPY",
-            exchange_rate=nz(self.exchange_rate) or 1.0,
+            # 0 や None を 1.0 へ化けると ISSUE-111 の整合性ガードを迂回する
+            # （外国通貨を円として扱うことになる）ため、欠損は 0.0 として渡し、
+            # ガード側で例外として弾く。
+            exchange_rate=nz(self.exchange_rate),
             item_category=self.item_category or "",
             item_material=self.material or "",
             purchase_price_source=PriceSource(self.purchase_price_source or "unknown"),

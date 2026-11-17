@@ -10,13 +10,14 @@ import logging
 
 from app.config.cost_table import get_buyandship_shipping
 from app.core.pricing.calculator import calculate_pricing
-from app.core.pricing.schemas import PriceSource, PricingInput
+from app.core.pricing.schemas import PriceIntegrityError, PriceSource, PricingInput
 from app.core.timezone import _utcnow
 from app.extensions import db
 from app.models.price_monitor import PriceMonitor
 from app.models.source_price_history import SourcePriceHistory
 from app.services.price_scraper import PriceScraper
 from app.utils.fx_utils import get_fx_table_jpy
+from app.utils.validation import validate_fx_rate
 
 logger = logging.getLogger(__name__)
 
@@ -59,7 +60,12 @@ def add_monitor(
     _validate_source_url(source_url)
 
     fx_table, _ = get_fx_table_jpy()
-    rate = fx_table.get(currency, 1.0)
+    rate = validate_fx_rate(fx_table.get(currency))
+    if rate is None:
+        raise PriceIntegrityError(
+            f"為替レートが取得できません: {currency} 建ての監視対象を追加できません。"
+            "為替テーブルを取得してから再実行してください。"
+        )
     price_jpy = (current_source_price or 0) * rate if current_source_price else 0
 
     monitor = PriceMonitor(
@@ -155,8 +161,13 @@ def check_single_price(monitor: PriceMonitor) -> dict:
         in_stock = fetch_result.get("in_stock", True)
 
         # 為替換算
+        # レート欠損時に 1.0 で換算すると外国価格が円として扱われ、
+        # 誤った黒字判定になる（Strix vuln-0011）。欠損時は判定を保留する。
         fx_table, _ = get_fx_table_jpy()
-        rate = fx_table.get(monitor.currency, 1.0)
+        rate = validate_fx_rate(fx_table.get(monitor.currency))
+        if rate is None:
+            result["error"] = f"no valid FX rate for {monitor.currency}: skip profit update"
+            return result
         price_jpy = price * rate
 
         # 価格変動検出

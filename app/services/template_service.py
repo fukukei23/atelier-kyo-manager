@@ -5,6 +5,7 @@ import io
 import json
 
 from app.models.listing_template import ListingTemplate
+from app.utils.validation import sanitize_csv_cell
 
 
 def generate_listing_text(product, template=None):
@@ -58,18 +59,18 @@ def generate_buyma_csv(products) -> tuple[str, int]:
 
         rows.append(
             [
-                p.name or "",
-                p.brand or "",
-                p.color or "",
-                p.size or "",
-                p.material or "",
+                sanitize_csv_cell(p.name or ""),
+                sanitize_csv_cell(p.brand or ""),
+                sanitize_csv_cell(p.color or ""),
+                sanitize_csv_cell(p.size or ""),
+                sanitize_csv_cell(p.material or ""),
                 int(p.retail_price or 0),
                 int(p.selling_price or 0),
-                p.source_region or "",
-                p.description or "",
-                p.item_category or "",
-                image_path,
-                p.pipeline_status or "",
+                sanitize_csv_cell(p.source_region or ""),
+                sanitize_csv_cell(p.description or ""),
+                sanitize_csv_cell(p.item_category or ""),
+                sanitize_csv_cell(image_path),
+                sanitize_csv_cell(p.pipeline_status or ""),
             ]
         )
 

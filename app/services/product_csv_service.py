@@ -6,6 +6,8 @@ import csv
 import io
 from typing import TYPE_CHECKING
 
+from app.utils.validation import sanitize_csv_cell
+
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
@@ -156,33 +158,33 @@ def _product_to_row(p: Product) -> dict[str, str | int | float]:
     """ProductインスタンスをCSV行dictに変換する."""
     return {
         "id": p.id,
-        "name": p.name,
-        "brand": p.brand,
+        "name": sanitize_csv_cell(p.name),
+        "brand": sanitize_csv_cell(p.brand),
         "purchase_price": p.purchase_price,
         "selling_price": p.selling_price,
         "transaction_fee": p.transaction_fee,
         "shipping_cost": p.shipping_cost,
         "customs_duty": p.customs_duty,
         "procurement_fee": p.procurement_fee,
-        "supplier_url": p.supplier_url,
-        "image_url": p.image_url,
+        "supplier_url": sanitize_csv_cell(p.supplier_url),
+        "image_url": sanitize_csv_cell(p.image_url),
         "stock_status": int(bool(p.stock_status)),
-        "brand_tier": p.brand_tier or "",
-        "source_type": p.source_type or "",
-        "source_region": p.source_region or "",
-        "color": p.color or "",
-        "size": p.size or "",
-        "material": p.material or "",
-        "description": p.description or "",
+        "brand_tier": sanitize_csv_cell(p.brand_tier or ""),
+        "source_type": sanitize_csv_cell(p.source_type or ""),
+        "source_region": sanitize_csv_cell(p.source_region or ""),
+        "color": sanitize_csv_cell(p.color or ""),
+        "size": sanitize_csv_cell(p.size or ""),
+        "material": sanitize_csv_cell(p.material or ""),
+        "description": sanitize_csv_cell(p.description or ""),
         "retail_price": p.retail_price or "",
         "target_profit_rate": round((p.target_profit_rate or 0) * 100, 1),
-        "listing_status": p.listing_status or "draft",
+        "listing_status": sanitize_csv_cell(p.listing_status or "draft"),
         "created_at": (p.created_at.isoformat(sep=" ", timespec="seconds") if p.created_at else ""),
         "updated_at": (p.updated_at.isoformat(sep=" ", timespec="seconds") if p.updated_at else ""),
         "warehouse_shipping_cost": p.warehouse_shipping_cost or 0,
         "original_currency": p.original_currency or "JPY",
         "exchange_rate": p.exchange_rate or 1.0,
-        "item_category": p.item_category or "",
+        "item_category": sanitize_csv_cell(p.item_category or ""),
     }
 
 
@@ -200,18 +202,18 @@ def _candidate_to_row(p: Product) -> dict[str, str | int | float]:
     """出品候補ProductをCSV行dictに変換する."""
     return {
         "id": p.id,
-        "name": p.name,
-        "brand": p.brand or "",
-        "brand_tier": p.brand_tier or "",
+        "name": sanitize_csv_cell(p.name),
+        "brand": sanitize_csv_cell(p.brand or ""),
+        "brand_tier": sanitize_csv_cell(p.brand_tier or ""),
         "purchase_price": p.purchase_price,
         "selling_price": p.selling_price,
         "profit": round(p.calculate_profit(), 0),
         "profit_rate": round(p.profit_rate(), 1),
         "stock_status": int(bool(p.stock_status)),
-        "listing_status": p.listing_status or "draft",
+        "listing_status": sanitize_csv_cell(p.listing_status or "draft"),
         "target_profit_rate": round((p.target_profit_rate or 0) * 100, 1),
-        "source_type": p.source_type or "",
-        "item_category": p.item_category or "",
+        "source_type": sanitize_csv_cell(p.source_type or ""),
+        "item_category": sanitize_csv_cell(p.item_category or ""),
     }
 
 

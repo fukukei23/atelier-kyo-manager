@@ -11,6 +11,7 @@ from flask_login import login_required
 from app.core.timezone import _utcnow
 from app.services import brand_price_service
 from app.services.brand_price_scraper import SUPPORTED_BRANDS, SUPPORTED_SITES, BrandPriceScraper
+from app.utils.validation import sanitize_csv_cell
 
 SUPPORTED_PIPELINE_CATEGORIES = frozenset(
     {
@@ -292,7 +293,7 @@ def brand_prices_export():
             continue
         writer.writerow(
             [
-                item["product_name"],
+                sanitize_csv_cell(item["product_name"]),
                 int(item.get("cheapest_jpy", 0)),
                 int(item.get("shipping_cost", 0)),
                 int(item.get("customs_duty", 0)),
@@ -301,9 +302,9 @@ def brand_prices_export():
                 int(item.get("profit", 0)),
                 f"{item.get('profit_rate', 0) * 100:.1f}%",
                 "OK" if item.get("is_profitable") else "NG",
-                item.get("buyma_matched_name", ""),
+                sanitize_csv_cell(item.get("buyma_matched_name", "")),
                 f"{item.get('buyma_match_score', 0) * 100:.0f}%" if item.get("buyma_match_score") else "",
-                item.get("buyma_status", ""),
+                sanitize_csv_cell(item.get("buyma_status", "")),
             ]
         )
 

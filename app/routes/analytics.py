@@ -13,6 +13,7 @@ from sqlalchemy import func
 
 from app.extensions import db
 from app.models import Product
+from app.utils.validation import sanitize_csv_cell
 
 from . import bp
 
@@ -81,14 +82,14 @@ def dashboard():
                 margin = f"{((p.selling_price - p.purchase_price) / p.purchase_price * 100):.1f}%"
             writer.writerow(
                 [
-                    p.name,
-                    p.brand,
+                    sanitize_csv_cell(p.name),
+                    sanitize_csv_cell(p.brand),
                     p.purchase_price,
                     p.selling_price,
                     margin,
-                    p.pipeline_status or "",
+                    sanitize_csv_cell(p.pipeline_status or ""),
                     "あり" if p.stock_status else "なし",
-                    p.listing_status or "",
+                    sanitize_csv_cell(p.listing_status or ""),
                 ]
             )
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")

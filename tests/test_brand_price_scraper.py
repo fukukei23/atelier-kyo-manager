@@ -42,11 +42,11 @@ class TestMakeItem:
             assert result["exchange_rate"] == 160.0
 
     def test_make_item_unknown_currency(self):
+        """FXレート欠損時は1.0黙示せず項目を除外する（Strix vuln-0008対策・2026-11-17）。"""
         with patch("app.utils.fx_utils.get_fx_table_jpy") as mock_fx:
             mock_fx.return_value = ({}, None)
             result = _make_item("Gucci", "Bag", 1000, "test", "https://test.com", currency="UNKNOWN")
-            assert result["price_jpy"] == 1000
-            assert result["exchange_rate"] == 1.0
+            assert result is None, "レート欠損時に1.0で返さないこと（旧仕様は€890→¥890の誤格納を生んだ）"
 
     def test_make_item_fields(self):
         result = _make_item("Prada", "Re-edition", 258000, "prada", "https://prada.com", currency="EUR")

@@ -14,9 +14,14 @@ from PIL import Image
 from rembg import remove
 
 from app.config.config import AppConfig
-from app.utils.validation import ValidationError, validate_url
+from app.utils.validation import ValidationError, validate_fetch_url
 
 logger = logging.getLogger(__name__)
+
+# 許可する画像形式。スクラップ先ECサイトの実運用で使われる形式のみに限定し、
+# メモリ破壊系CVEの温床になる PSD / EPS / FlashPix / XBM 等を弾く
+# （Strix vuln-0001/0002/0003/0004/0005）。
+ALLOWED_IMAGE_FORMATS = ["JPEG", "PNG", "WEBP"]
 
 
 class ImageService:
@@ -52,7 +57,7 @@ class ImageService:
     def _fetch_image(self, url: str, timeout: int = 20, max_bytes: int = 5_000_000) -> Image.Image | None:
         """URLから画像を取得（UA偽装・サイズ制限付き）"""
         try:
-            url = validate_url(url)
+            url = validate_fetch_url(url, allowed_schemes=("https",))
         except ValidationError:
             logger.warning("Blocked non-https URL: %s", url)
             return None
@@ -73,7 +78,7 @@ class ImageService:
             if buf.tell() > max_bytes:
                 logger.warning("Image too large: %s", url)
                 return None
-        return Image.open(buf).convert("RGB")
+        return Image.open(buf, formats=ALLOWED_IMAGE_FORMATS).convert("RGB")
 
     # ------------------------------------------------------------------
     # 背景除去
@@ -99,7 +104,7 @@ class ImageService:
     @staticmethod
     def _remove_bg_single(input_path: Path, output_path: Path) -> None:
         """1枚の画像の背景を除去して保存"""
-        img = Image.open(input_path).convert("RGB")
+        img = Image.open(input_path, formats=ALLOWED_IMAGE_FORMATS).convert("RGB")
         rgba = remove(img)
         if rgba.mode != "RGBA":
             rgba = rgba.convert("RGBA")

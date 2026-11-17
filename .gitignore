@@ -61,6 +61,7 @@ dist/
 # 開発用のローカルデータベースなど。
 instance/
 data/app.db
+data/*.db-journal
 
 
 # --- OS Generated Files (OSが自動生成するファイル) ---
